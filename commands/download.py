@@ -16,7 +16,11 @@ from rich.progress import (
 )
 
 from config import Services
-from database import get_empty_articles, update_article
+from database import (
+    get_empty_articles,
+    mark_article_download_failed,
+    update_article,
+)
 from helpers import fetch_url_content, get_base_url, get_byparr_solution
 from models import ByparrSolution
 
@@ -131,6 +135,7 @@ async def _download_article(
         except Exception as e:
             logger.exception("Failed to get solution for %s", domain)
             console.print(f"[red]Solution failed: {domain} - {e}[/red]")
+            mark_article_download_failed(db_path, article["id"], str(e))
             progress.advance(task_id)
             return False
 
@@ -150,6 +155,7 @@ async def _download_article(
         except Exception as e:
             logger.exception("Failed to download %s", url)
             console.print(f"[red]Failed: {url} - {e}[/red]")
+            mark_article_download_failed(db_path, article["id"], str(e))
             progress.advance(task_id)
             return False
 

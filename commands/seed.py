@@ -3,6 +3,7 @@
 import asyncio
 
 import typer
+from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from database import init_database, seed_feeds
 from helpers import load_urls
@@ -20,7 +21,15 @@ async def _seed(seed_file: str) -> None:
 
     init_database(db_path)
     urls = load_urls(seed_file)
-    count = seed_feeds(db_path, urls)
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        progress.add_task("Seeding feeds...", total=None)
+        count = seed_feeds(db_path, urls)
+
     console.print(f"Seeded {count} new feeds to database")
 
 

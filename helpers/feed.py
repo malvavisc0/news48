@@ -3,7 +3,7 @@
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
+from typing import Callable, List
 
 import dateparser
 import feedparser
@@ -92,7 +92,10 @@ def load_urls(filepath: str) -> List[str]:
 
 
 async def get_fetch_summary(
-    urls: List[str], delay: float, db_path: Path | None = None
+    urls: List[str],
+    delay: float,
+    db_path: Path | None = None,
+    on_feed_done: Callable[[FeedResult], None] | None = None,
 ) -> FeedSummary:
     """Fetch multiple feeds and return a summary of results.
 
@@ -100,6 +103,8 @@ async def get_fetch_summary(
         urls: List of feed URLs to fetch.
         delay: Delay between requests in seconds.
         db_path: Optional path to SQLite database for tracking.
+        on_feed_done: Optional callback invoked after each feed is
+            fetched, receiving the FeedResult.
 
     Returns:
         A FeedSummary containing successful and failed feed results.
@@ -116,6 +121,8 @@ async def get_fetch_summary(
                 await asyncio.sleep(delay)
             result = await _fetch_feed(url)
             summary.add_result(result)
+            if on_feed_done:
+                on_feed_done(result)
 
             if db_path and run_id and result.success:
                 feed = get_feed_by_url(db_path, url)

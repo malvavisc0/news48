@@ -155,6 +155,26 @@ class Article(BaseModel):
         default_factory=list,
         description="List of keywords/tags",
     )
+    countries: list[str] = Field(
+        default_factory=list,
+        description="List of countries mentioned in the article",
+    )
+    download_failed: bool = Field(
+        default=False,
+        description="Whether the article content download failed",
+    )
+    download_error: str | None = Field(
+        default=None,
+        description="Error message from failed download attempt",
+    )
+    parse_failed: bool = Field(
+        default=False,
+        description="Whether the article parsing failed",
+    )
+    parse_error: str | None = Field(
+        default=None,
+        description="Error message from failed parse attempt",
+    )
     created_at: datetime = Field(
         description="When the article was created in the database"
     )

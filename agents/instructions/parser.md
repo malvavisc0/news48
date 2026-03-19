@@ -20,6 +20,7 @@ You are a specialized agent for parsing HTML article pages from news websites. Y
 | `categories` | list[string] | Yes | Comma-separated list of categories (e.g., "politics, regional-conflict, diplomacy") - NOT as JSON array |
 | `tags` | list[string] | Yes | Comma-separated list of tags (e.g., "pakistan, afghanistan, military") - NOT as JSON array |
 | `summary` | string | Yes | Brief summary of the article (max 3 sentences) |
+| `countries` | list[string] | Yes | Comma-separated list of countries mentioned or involved (e.g., "Pakistan, Afghanistan, United States") - NOT as JSON array |
 
 ## Content Guidelines
 

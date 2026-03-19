@@ -6,7 +6,7 @@ and articles using sqlite3.
 
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -73,6 +73,11 @@ CREATE TABLE IF NOT EXISTS articles (
     sentiment TEXT,
     categories TEXT,
     tags TEXT,
+    download_failed INTEGER NOT NULL DEFAULT 0,
+    download_error TEXT,
+    parse_failed INTEGER NOT NULL DEFAULT 0,
+    parse_error TEXT,
+    countries TEXT,
     created_at DATETIME NOT NULL,
     FOREIGN KEY (run_id) REFERENCES runs(id),
     FOREIGN KEY (feed_id) REFERENCES feeds(id)
@@ -82,6 +87,14 @@ CREATE TABLE IF NOT EXISTS articles (
 CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_articles_feed_id ON articles(feed_id)",
     "CREATE INDEX IF NOT EXISTS idx_articles_run_id ON articles(run_id)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_articles_download_failed "
+        "ON articles(download_failed)"
+    ),
+    (
+        "CREATE INDEX IF NOT EXISTS idx_articles_parse_failed "
+        "ON articles(parse_failed)"
+    ),
 ]
 
 
@@ -433,6 +446,7 @@ def update_article(
     tags: str | None = None,
     summary: str | None = None,
     parsed_at: str | None = None,
+    countries: str | None = None,
 ) -> None:
     """Update an article with parsed content from the parser agent.
 
@@ -447,6 +461,7 @@ def update_article(
         categories: Comma-separated categories (e.g., "politics, sports")
         tags: Comma-separated tags (e.g., "pakistan, afghanistan")
         summary: Optionally update the brief summary (max 3 sentences).
+        countries: Comma-separated countries (e.g., "Pakistan, Afghanistan")
     """
 
     with get_connection(db_path) as db:
@@ -457,7 +472,8 @@ def update_article(
                    sentiment = COALESCE(?, sentiment),
                    categories = COALESCE(?, categories),
                    tags = COALESCE(?, tags), summary = COALESCE(?, summary),
-                   parsed_at = COALESCE(?, parsed_at)
+                   parsed_at = COALESCE(?, parsed_at),
+                   countries = COALESCE(?, countries)
                WHERE id = ?""",
             (
                 content,
@@ -468,6 +484,7 @@ def update_article(
                 tags,
                 summary,
                 parsed_at,
+                countries,
                 article_id,
             ),
         )
@@ -491,7 +508,9 @@ def get_unparsed_articles(db_path: Path, limit: int = 50) -> list[dict]:
             """SELECT a.*, f.url as feed_url
                FROM articles a
                JOIN feeds f ON a.feed_id = f.id
-               WHERE a.content IS NOT NULL AND parsed_at IS NULL
+               WHERE a.content IS NOT NULL
+                 AND parsed_at IS NULL
+                 AND a.parse_failed = 0
                ORDER BY a.created_at ASC
                LIMIT ?""",
             (limit,),
@@ -518,6 +537,7 @@ def get_empty_articles(db_path: Path, limit: int = 50) -> list[dict]:
                FROM articles a
                JOIN feeds f ON a.feed_id = f.id
                WHERE a.content IS NULL
+                 AND a.download_failed = 0
                ORDER BY a.created_at ASC
                LIMIT ?""",
             (limit,),
@@ -558,3 +578,192 @@ def get_article_by_url(db_path: Path, url: str) -> dict | None:
         cursor = db.execute("SELECT * FROM articles WHERE url = ?", (url,))
         row = cursor.fetchone()
         return dict(row) if row else None
+
+
+def mark_article_download_failed(
+    db_path: Path, article_id: int, error: str
+) -> None:
+    """Mark an article as having a failed download.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        article_id: The ID of the article to mark.
+        error: The error message describing the failure.
+    """
+    with get_connection(db_path) as db:
+        db.execute(
+            """UPDATE articles
+               SET download_failed = 1, download_error = ?
+               WHERE id = ?""",
+            (error, article_id),
+        )
+        db.commit()
+
+
+def mark_article_parse_failed(
+    db_path: Path, article_id: int, error: str
+) -> None:
+    """Mark an article as having a failed parse.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        article_id: The ID of the article to mark.
+        error: The error message describing the failure.
+    """
+    with get_connection(db_path) as db:
+        db.execute(
+            """UPDATE articles
+               SET parse_failed = 1, parse_error = ?
+               WHERE id = ?""",
+            (error, article_id),
+        )
+        db.commit()
+
+
+# Stats operations
+
+
+def get_article_stats(db_path: Path) -> dict:
+    """Get consolidated article statistics in a single query.
+
+    Args:
+        db_path: Path to the SQLite database file.
+
+    Returns:
+        A dict with keys: total, parsed, unparsed, no_content,
+        download_failed, parse_failed, download_backlog, parse_backlog,
+        sentiment_positive, sentiment_negative, sentiment_neutral,
+        oldest_unparsed_at, articles_today, articles_this_week.
+    """
+    with get_connection(db_path) as db:
+        cursor = db.execute(
+            """SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN parsed_at IS NOT NULL THEN 1 ELSE 0 END)
+                    AS parsed,
+                SUM(CASE WHEN parsed_at IS NULL THEN 1 ELSE 0 END)
+                    AS unparsed,
+                SUM(CASE WHEN content IS NULL OR content = ''
+                    THEN 1 ELSE 0 END)
+                    AS no_content,
+                SUM(CASE WHEN download_failed = 1 THEN 1 ELSE 0 END)
+                    AS download_failed,
+                SUM(CASE WHEN parse_failed = 1 THEN 1 ELSE 0 END)
+                    AS parse_failed,
+                SUM(CASE WHEN content IS NULL AND download_failed = 0
+                    THEN 1 ELSE 0 END) AS download_backlog,
+                SUM(CASE WHEN content IS NOT NULL AND parsed_at IS NULL
+                    AND parse_failed = 0 THEN 1 ELSE 0 END)
+                    AS parse_backlog,
+                SUM(CASE WHEN sentiment = 'positive' THEN 1 ELSE 0 END)
+                    AS sentiment_positive,
+                SUM(CASE WHEN sentiment = 'negative' THEN 1 ELSE 0 END)
+                    AS sentiment_negative,
+                SUM(CASE WHEN sentiment = 'neutral' THEN 1 ELSE 0 END)
+                    AS sentiment_neutral
+            FROM articles"""
+        )
+        row = dict(cursor.fetchone())
+
+        # Oldest unparsed article
+        cursor = db.execute(
+            """SELECT MIN(created_at) AS oldest_unparsed_at
+               FROM articles
+               WHERE content IS NOT NULL
+                 AND parsed_at IS NULL
+                 AND parse_failed = 0"""
+        )
+        oldest = cursor.fetchone()
+        row["oldest_unparsed_at"] = (
+            oldest["oldest_unparsed_at"] if oldest else None
+        )
+
+        # Articles created today (UTC)
+        cursor = db.execute(
+            """SELECT COUNT(*) AS cnt FROM articles
+               WHERE created_at >= date('now')"""
+        )
+        row["articles_today"] = cursor.fetchone()["cnt"]
+
+        # Articles created this week (UTC, Monday-based)
+        cursor = db.execute(
+            """SELECT COUNT(*) AS cnt FROM articles
+               WHERE created_at >= date('now', 'weekday 1', '-7 days')"""
+        )
+        row["articles_this_week"] = cursor.fetchone()["cnt"]
+
+        return row
+
+
+def get_feed_stats(db_path: Path, stale_days: int = 7) -> dict:
+    """Get consolidated feed statistics in a single query.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        stale_days: Number of days after which a feed is considered stale.
+
+    Returns:
+        A dict with keys: total, never_fetched, stale, top_feeds.
+        top_feeds is a list of dicts with title, url, article_count.
+    """
+    with get_connection(db_path) as db:
+        stale_threshold = (
+            datetime.now(timezone.utc) - timedelta(days=stale_days)
+        ).isoformat()
+
+        cursor = db.execute(
+            """SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN last_fetched_at IS NULL THEN 1 ELSE 0 END)
+                    AS never_fetched,
+                SUM(CASE WHEN last_fetched_at < ? THEN 1 ELSE 0 END)
+                    AS stale
+            FROM feeds""",
+            (stale_threshold,),
+        )
+        row = dict(cursor.fetchone())
+
+        # Top feeds by article count
+        cursor = db.execute(
+            """SELECT f.title, f.url, COUNT(a.id) AS article_count
+               FROM feeds f
+               LEFT JOIN articles a ON f.id = a.feed_id
+               GROUP BY f.id
+               ORDER BY article_count DESC
+               LIMIT 10"""
+        )
+        row["top_feeds"] = [dict(r) for r in cursor.fetchall()]
+
+        return row
+
+
+def get_run_stats(db_path: Path) -> dict:
+    """Get run statistics and recent run history.
+
+    Args:
+        db_path: Path to the SQLite database file.
+
+    Returns:
+        A dict with keys: total_runs, last_run_at, avg_articles_per_run,
+        recent_runs (list of dicts).
+    """
+    with get_connection(db_path) as db:
+        cursor = db.execute(
+            """SELECT
+                COUNT(*) AS total_runs,
+                MAX(started_at) AS last_run_at,
+                ROUND(AVG(articles_found), 1) AS avg_articles_per_run
+            FROM runs"""
+        )
+        row = dict(cursor.fetchone())
+
+        cursor = db.execute(
+            """SELECT id, started_at, completed_at, status,
+                      feeds_fetched, articles_found
+               FROM runs
+               ORDER BY started_at DESC
+               LIMIT 5"""
+        )
+        row["recent_runs"] = [dict(r) for r in cursor.fetchall()]
+
+        return row

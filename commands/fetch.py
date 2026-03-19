@@ -3,6 +3,14 @@
 import asyncio
 
 import typer
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 from rich.table import Table
 
 from database import get_all_feeds, init_database
@@ -28,7 +36,23 @@ async def _fetch(delay: float) -> None:
         return
 
     urls = [feed["url"] for feed in feeds]
-    summary = await get_fetch_summary(urls, delay, db_path)
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        task_id = progress.add_task("Fetching feeds", total=len(urls))
+
+        summary = await get_fetch_summary(
+            urls,
+            delay,
+            db_path,
+            on_feed_done=lambda _: progress.advance(task_id),
+        )
 
     table = Table(title="Feed Summary")
     table.add_column("Feed Title", style="cyan")

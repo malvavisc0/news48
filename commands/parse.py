@@ -14,7 +14,12 @@ from llama_index.core.agent.workflow import (
 from agents import get_news_parser_agent
 from agents.parser import NewsParsingResult
 from config import ParserAgent as ParserAgentConfig
-from database import get_unparsed_articles, init_database, update_article
+from database import (
+    get_unparsed_articles,
+    init_database,
+    mark_article_parse_failed,
+    update_article,
+)
 from helpers import get_llm
 from helpers.url import get_base_url
 
@@ -104,6 +109,11 @@ async def _parse(limit: int, delay: float) -> None:
                         if parsed_result.tags
                         else None
                     )
+                    countries_str = (
+                        ", ".join(parsed_result.countries)
+                        if parsed_result.countries
+                        else None
+                    )
                     update_article(
                         db_path=db_path,
                         article_id=article["id"],
@@ -115,6 +125,7 @@ async def _parse(limit: int, delay: float) -> None:
                         tags=tags_str,
                         summary=parsed_result.summary,
                         parsed_at=parsed_at,
+                        countries=countries_str,
                     )
                     title = parsed_result.title or "Article"
                     console.print(f"[green]✓ Parsed: {title}[/green]")
@@ -122,11 +133,15 @@ async def _parse(limit: int, delay: float) -> None:
                     console.print(
                         "[yellow]⚠ No structured result received[/yellow]"
                     )
+                    mark_article_parse_failed(
+                        db_path, article["id"], "No structured result received"
+                    )
 
                 parsed += 1
                 await asyncio.sleep(delay)
         except Exception as e:
             console.print(f"[red]Failed to parse {article['url']}: {e}[/red]")
+            mark_article_parse_failed(db_path, article["id"], str(e))
             failed += 1
 
     console.print(

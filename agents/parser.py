@@ -65,6 +65,13 @@ class NewsParsingResult(BaseModel):
         default=None,
         description="Brief summary of the article (max 3 sentences)",
     )
+    countries: list[str] = Field(
+        default_factory=list,
+        description=(
+            "List of countries mentioned or involved in the article "
+            "(e.g., Pakistan, Afghanistan, United States)"
+        ),
+    )
 
 
 def _resolve_template_variables(
