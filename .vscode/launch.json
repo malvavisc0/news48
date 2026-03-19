@@ -1,0 +1,88 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "CLI: Fetch",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "main",
+            "args": [
+                "fetch",
+                "newsfeeds.seed.txt"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            // Optional: add delay option
+            // "args": ["fetch", "newsfeeds.seed.txt", "--delay", "1.0"]
+        },
+        {
+            "name": "CLI: Parse",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "main",
+            "args": [
+                "parse",
+                // Replace with your HTML file path
+                "articles/article.html",
+                // Replace with the original article URL
+                "https://example.com/article"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "CLI: Fetch (Custom Args)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "main",
+            "args": [
+                "fetch",
+                // Replace with your seed file path
+                "${input:seedFile}",
+                "--delay",
+                "${input:delay}"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "CLI: Parse (Custom Args)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "main",
+            "args": [
+                "parse",
+                "${input:htmlFile}",
+                "${input:articleUrl}"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        }
+    ],
+    "inputs": [
+        {
+            "id": "seedFile",
+            "type": "promptString",
+            "description": "Path to the seed file containing feed URLs"
+        },
+        {
+            "id": "delay",
+            "type": "promptString",
+            "description": "Delay between requests in seconds",
+            "default": "0.5"
+        },
+        {
+            "id": "htmlFile",
+            "type": "promptString",
+            "description": "Path to the local HTML file"
+        },
+        {
+            "id": "articleUrl",
+            "type": "promptString",
+            "description": "Original URL of the article"
+        }
+    ]
+}
