@@ -30,18 +30,22 @@ DEFAULT_SCRIPT_DIR = str(Path(__file__).parent.parent / "parsers")
 
 
 class NewsParsingResult(BaseModel):
-    title: str = Field(description="Article headline/title")
+    title: str = Field(description="Original article headline/title")
+    new_title: str = Field(
+        description=(
+            "Improved headline/title that is factual, informative, "
+            "and not clickbait or sensationalist"
+        )
+    )
     content: str = Field(
         description=(
-            "Comprehensive summary of the article containing all important "
+            "Comprehensive text of the article containing all important "
             "information including names, references, key facts, and details"
         )
     )
-    author: Optional[str] = Field(default=None, description="Author name(s)")
     published_date: Optional[str] = Field(
         default=None, description="Publication date (ISO 8601 preferred)"
     )
-    url: str = Field(description="Canonical article URL")
     sentiment: Optional[str] = Field(
         default=None,
         description=(
@@ -62,7 +66,7 @@ class NewsParsingResult(BaseModel):
         ),
     )
     summary: Optional[str] = Field(
-        default=None,
+        default="",
         description="Brief summary of the article (max 3 sentences)",
     )
     countries: list[str] = Field(
@@ -71,6 +75,14 @@ class NewsParsingResult(BaseModel):
             "List of countries mentioned or involved in the article "
             "(e.g., Pakistan, Afghanistan, United States)"
         ),
+    )
+
+    success: bool = Field(
+        default=True, description="Whether the parsing was successful or not"
+    )
+    error: str = Field(
+        default="",
+        description="If there's an error, an explanation of what went wrong",
     )
 
 
@@ -205,6 +217,9 @@ def run_shell_command(
              - metadata: Dict with timestamp (ISO 8601 format)
              Returns error JSON if execution fails.
     """
+    logger.info(f"Tool call: run_shell_command | intent: {intent}")
+    logger.debug(f"  command: {command}")
+
     # Resolve template variables before execution
     resolved_command = _resolve_template_variables(command)
 
@@ -233,10 +248,18 @@ def run_shell_command(
             execution_time=elapsed,
         )
 
+        logger.info(
+            f"Tool result: run_shell_command | "
+            f"return_code={result.returncode} | elapsed={elapsed:.2f}s"
+        )
+
         return _safe_json(response)
 
     except subprocess.TimeoutExpired:
         elapsed = time.time() - start_time
+        logger.warning(
+            f"Tool result: run_shell_command | timed out after {elapsed:.2f}s"
+        )
 
         return _safe_json(
             _build_response(
@@ -248,6 +271,7 @@ def run_shell_command(
             )
         )
     except Exception as exc:
+        logger.error(f"Tool result: run_shell_command | error: {exc}")
         return _safe_json(
             _build_response(
                 "run_shell_command",
@@ -271,14 +295,25 @@ def read_file(intent: str, file_path: str) -> str:
         str: File contents (possibly summarized for HTML files),
              or an error message if reading fails.
     """
+    logger.info(f"Tool call: read_file | intent: {intent}")
+    logger.debug(f"  file_path: {file_path}")
+
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
+        logger.info(
+            f"Tool result: read_file | success | size={len(content)} bytes"
+        )
     except FileNotFoundError:
+        logger.warning(f"Tool result: read_file | file not found: {file_path}")
         return f"Error: File not found: {file_path}"
     except PermissionError:
+        logger.warning(
+            f"Tool result: read_file | permission denied: {file_path}"
+        )
         return f"Error: Permission denied: {file_path}"
     except Exception as exc:
+        logger.error(f"Tool result: read_file | error: {exc}")
         return f"Error reading file {file_path}: {str(exc)}"
 
     return content

@@ -447,6 +447,7 @@ def update_article(
     summary: str | None = None,
     parsed_at: str | None = None,
     countries: str | None = None,
+    title: str | None = None,
 ) -> None:
     """Update an article with parsed content from the parser agent.
 
@@ -462,8 +463,16 @@ def update_article(
         tags: Comma-separated tags (e.g., "pakistan, afghanistan")
         summary: Optionally update the brief summary (max 3 sentences).
         countries: Comma-separated countries (e.g., "Pakistan, Afghanistan")
+        title: Optionally update the title with improved version.
     """
-
+    if sentiment:
+        sentiment = sentiment.lower()
+    if categories:
+        categories = categories.lower()
+    if tags:
+        tags = tags.lower()
+    if countries:
+        countries = countries.lower()
     with get_connection(db_path) as db:
         db.execute(
             """UPDATE articles
@@ -473,7 +482,8 @@ def update_article(
                    categories = COALESCE(?, categories),
                    tags = COALESCE(?, tags), summary = COALESCE(?, summary),
                    parsed_at = COALESCE(?, parsed_at),
-                   countries = COALESCE(?, countries)
+                   countries = COALESCE(?, countries),
+                   title = COALESCE(?, title)
                WHERE id = ?""",
             (
                 content,
@@ -485,6 +495,7 @@ def update_article(
                 summary,
                 parsed_at,
                 countries,
+                title,
                 article_id,
             ),
         )
@@ -511,6 +522,32 @@ def get_unparsed_articles(db_path: Path, limit: int = 50) -> list[dict]:
                WHERE a.content IS NOT NULL
                  AND parsed_at IS NULL
                  AND a.parse_failed = 0
+               ORDER BY a.created_at ASC
+               LIMIT ?""",
+            (limit,),
+        )
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+def get_parse_failed_articles(db_path: Path, limit: int = 50) -> list[dict]:
+    """Get articles that have failed parsing.
+
+    Returns articles ordered by creation date, oldest first.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        limit: Maximum number of articles to return.
+
+    Returns:
+        A list of dicts with article data, including feed_url.
+    """
+    with get_connection(db_path) as db:
+        cursor = db.execute(
+            """SELECT a.*, f.url as feed_url
+               FROM articles a
+               JOIN feeds f ON a.feed_id = f.id
+               WHERE a.parse_failed = 1
                ORDER BY a.created_at ASC
                LIMIT ?""",
             (limit,),
@@ -620,6 +657,23 @@ def mark_article_parse_failed(
         db.commit()
 
 
+def reset_article_parse(db_path: Path, article_id: int) -> None:
+    """Reset parse_failed flag and clear parse_error for an article.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        article_id: The ID of the article to reset.
+    """
+    with get_connection(db_path) as db:
+        db.execute(
+            """UPDATE articles
+               SET parse_failed = 0, parse_error = NULL, parsed_at = NULL
+               WHERE id = ?""",
+            (article_id,),
+        )
+        db.commit()
+
+
 # Stats operations
 
 
@@ -636,8 +690,7 @@ def get_article_stats(db_path: Path) -> dict:
         oldest_unparsed_at, articles_today, articles_this_week.
     """
     with get_connection(db_path) as db:
-        cursor = db.execute(
-            """SELECT
+        cursor = db.execute("""SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN parsed_at IS NOT NULL THEN 1 ELSE 0 END)
                     AS parsed,
@@ -661,35 +714,28 @@ def get_article_stats(db_path: Path) -> dict:
                     AS sentiment_negative,
                 SUM(CASE WHEN sentiment = 'neutral' THEN 1 ELSE 0 END)
                     AS sentiment_neutral
-            FROM articles"""
-        )
+            FROM articles""")
         row = dict(cursor.fetchone())
 
         # Oldest unparsed article
-        cursor = db.execute(
-            """SELECT MIN(created_at) AS oldest_unparsed_at
+        cursor = db.execute("""SELECT MIN(created_at) AS oldest_unparsed_at
                FROM articles
                WHERE content IS NOT NULL
                  AND parsed_at IS NULL
-                 AND parse_failed = 0"""
-        )
+                 AND parse_failed = 0""")
         oldest = cursor.fetchone()
         row["oldest_unparsed_at"] = (
             oldest["oldest_unparsed_at"] if oldest else None
         )
 
         # Articles created today (UTC)
-        cursor = db.execute(
-            """SELECT COUNT(*) AS cnt FROM articles
-               WHERE created_at >= date('now')"""
-        )
+        cursor = db.execute("""SELECT COUNT(*) AS cnt FROM articles
+               WHERE created_at >= date('now')""")
         row["articles_today"] = cursor.fetchone()["cnt"]
 
         # Articles created this week (UTC, Monday-based)
-        cursor = db.execute(
-            """SELECT COUNT(*) AS cnt FROM articles
-               WHERE created_at >= date('now', 'weekday 1', '-7 days')"""
-        )
+        cursor = db.execute("""SELECT COUNT(*) AS cnt FROM articles
+               WHERE created_at >= date('now', 'weekday 1', '-7 days')""")
         row["articles_this_week"] = cursor.fetchone()["cnt"]
 
         return row
@@ -748,22 +794,18 @@ def get_run_stats(db_path: Path) -> dict:
         recent_runs (list of dicts).
     """
     with get_connection(db_path) as db:
-        cursor = db.execute(
-            """SELECT
+        cursor = db.execute("""SELECT
                 COUNT(*) AS total_runs,
                 MAX(started_at) AS last_run_at,
                 ROUND(AVG(articles_found), 1) AS avg_articles_per_run
-            FROM runs"""
-        )
+            FROM runs""")
         row = dict(cursor.fetchone())
 
-        cursor = db.execute(
-            """SELECT id, started_at, completed_at, status,
+        cursor = db.execute("""SELECT id, started_at, completed_at, status,
                       feeds_fetched, articles_found
                FROM runs
                ORDER BY started_at DESC
-               LIMIT 5"""
-        )
+               LIMIT 5""")
         row["recent_runs"] = [dict(r) for r in cursor.fetchall()]
 
         return row

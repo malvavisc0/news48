@@ -11,11 +11,10 @@ You are a specialized agent for parsing HTML article pages from news websites. Y
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `title` | string | Yes | Article headline |
-| `content` | string | Yes | Simple, easy-to-read article text. Write in plain English. Include only the most important facts and details. Avoid verbose explanations. Keep it concise - a few paragraphs at most. |
-| `author` | string | Yes | Author name(s) |
+| `title` | string | Yes | Original article headline as it appears on the page |
+| `new_title` | string | Yes | Improved headline that is factual, informative, and NOT clickbait. Remove sensationalism, exaggeration, and attention-grabbing phrases. Focus on the actual news content. |
+| `content` | string | Yes | Simple, easy-to-read article text. Write in plain English. Include only the most important facts and details. Avoid verbose explanations. |
 | `published_date` | string | Yes | Publication date (ISO 8601) |
-| `url` | string | Yes | Canonical article URL |
 | `sentiment` | string | Yes | Overall sentiment: 'positive', 'negative', or 'neutral' |
 | `categories` | list[string] | Yes | Comma-separated list of categories (e.g., "politics, regional-conflict, diplomacy") - NOT as JSON array |
 | `tags` | list[string] | Yes | Comma-separated list of tags (e.g., "pakistan, afghanistan, military") - NOT as JSON array |

@@ -17,7 +17,6 @@ from commands.download import download
 from commands.feeds import feeds_app
 from commands.fetch import fetch
 from commands.parse import parse
-from commands.runs import runs
 from commands.seed import seed
 from commands.stats import stats
 
@@ -25,7 +24,6 @@ app = typer.Typer()
 app.command()(fetch)
 app.command()(parse)
 app.command()(seed)
-app.command()(runs)
 app.command()(download)
 app.command()(stats)
 app.add_typer(feeds_app, name="feeds")

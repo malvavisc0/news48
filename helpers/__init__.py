@@ -10,7 +10,7 @@ This module provides utilities organized into submodules:
 from helpers.bypass import fetch_url_content, get_byparr_solution
 from helpers.feed import (
     get_fetch_summary,
-    is_article_from_current_month,
+    is_article_from_last_48_hours,
     load_urls,
 )
 from helpers.llm import get_llm
@@ -23,5 +23,5 @@ __all__ = [
     "get_base_url",
     "get_byparr_solution",
     "fetch_url_content",
-    "is_article_from_current_month",
+    "is_article_from_last_48_hours",
 ]

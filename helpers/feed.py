@@ -1,7 +1,7 @@
 """Feed fetching and date utilities."""
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, List
 
@@ -19,17 +19,16 @@ from database import (
 from models import FeedEntry, FeedResult, FeedSummary
 
 
-def is_article_from_current_month(published_at: str | None) -> bool:
-    """Check if an article was published in the current month or later.
+def is_article_from_last_48_hours(published_at: str | None) -> bool:
+    """Check if an article was published within the last 48 hours.
 
     Args:
         published_at: The publication date string from the feed entry.
                     Can be in various formats (ISO 8601, RFC 2822, etc.)
 
     Returns:
-        True if the article is from the current month or later,
-        False if the article is older than the current month or if
-        published_at is None/empty.
+        True if the article was published within the last 48 hours,
+        False if the article is older or if published_at is None/empty.
     """
     if not published_at:
         return False
@@ -43,16 +42,12 @@ def is_article_from_current_month(published_at: str | None) -> bool:
 
         # Get current date in UTC
         now = datetime.now(timezone.utc)
-        current_year = now.year
-        current_month = now.month
 
-        # Compare year and month
-        if article_date.year > current_year:
-            return True
-        if article_date.year < current_year:
-            return False
-        # Same year - compare month
-        return article_date.month >= current_month
+        # Calculate the difference
+        age = now - article_date
+
+        # Article must be published within the last 48 hours
+        return timedelta(hours=0) <= age <= timedelta(hours=48)  # noqa: E501
     except Exception:
         # If we can't parse the date, skip the article
         return False
@@ -134,7 +129,7 @@ async def get_fetch_summary(
                     articles = [
                         entry.model_dump()
                         for entry in result.entries
-                        if is_article_from_current_month(entry.published_at)
+                        if is_article_from_last_48_hours(entry.published_at)
                     ]
                     # Each function manages its own connection
                     insert_articles(db_path, run_id, feed["id"], articles)
@@ -206,7 +201,7 @@ def _process_feed(feed: feedparser.FeedParserDict, url: str) -> FeedResult:
 
     # Count valid articles (from current month or later)
     valid_count = sum(
-        1 for e in entries if is_article_from_current_month(e.published_at)
+        1 for e in entries if is_article_from_last_48_hours(e.published_at)
     )
 
     return FeedResult(
