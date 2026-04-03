@@ -15,6 +15,7 @@ from database import (
     get_feeds_paginated,
     init_database,
     seed_feeds,
+    update_feed_metadata,
 )
 
 from ._common import _fmt_date, emit_error, emit_json, require_db
@@ -303,3 +304,75 @@ def feed_info(
         print(f"Created:     {_fmt_date(data['created_at'])}")
         print(f"Updated:     {_fmt_date(data['updated_at'])}")
         print(f"Articles:    {data['article_count']}")
+
+
+@feeds_app.command(name="update")
+def update_feed_cmd(
+    identifier: str = typer.Argument(
+        ..., help="URL or ID of the feed to update"
+    ),
+    title: str = typer.Option(
+        None, "--title", "-t", help="New title for the feed"
+    ),
+    description: str = typer.Option(
+        None, "--description", "-d", help="New description for the feed"
+    ),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Update feed metadata (title and/or description)."""
+    db_path = require_db()
+    init_database(db_path)
+
+    # Validate that at least one field is specified
+    if not title and not description:
+        emit_error(
+            "Must specify at least one of --title or --description",
+            as_json=output_json,
+        )
+
+    # Try to interpret as ID first, then as URL
+    feed = None
+    try:
+        feed_id = int(identifier)
+        feed = get_feed_by_id(db_path, feed_id)
+    except ValueError:
+        feed = get_feed_by_url(db_path, identifier)
+
+    if not feed:
+        emit_error(
+            f"Feed not found: {identifier}",
+            as_json=output_json,
+        )
+
+    feed_id = feed["id"]
+
+    # Use existing values if not provided
+    new_title = title if title else feed["title"]
+    new_description = description if description else feed["description"]
+
+    # Update the feed
+    update_feed_metadata(db_path, feed_id, new_title, new_description)
+
+    # Get updated feed
+    updated_feed = get_feed_by_id(db_path, feed_id)
+    if not updated_feed:
+        emit_error(
+            "Failed to retrieve updated feed",
+            as_json=output_json,
+        )
+
+    data = {
+        "updated": True,
+        "id": feed_id,
+        "url": updated_feed["url"],
+        "title": updated_feed["title"],
+        "description": updated_feed["description"],
+    }
+
+    if output_json:
+        emit_json(data)
+    else:
+        print(f"Updated feed: {data['url']}")
+        print(f"  ID: {data['id']}")
+        print(f"  Title: {data['title'] or 'N/A'}")
+        print(f"  Description: {data['description'] or 'N/A'}")

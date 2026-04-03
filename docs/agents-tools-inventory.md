@@ -8,13 +8,13 @@ Tools are organized into the following modules:
 
 | Module | File |
 |--------|------|
-| [`bypass`](agents/tools/bypass.py) | Webpage content fetching with anti-bot bypass |
-| [`files`](agents/tools/files.py) | Unified file reading (content, metadata, chunks) |
-| [`planner`](agents/tools/planner.py) | Persistent execution plan management |
-| [`searxng`](agents/tools/searxng.py) | Web search via SearXNG |
-| [`shell`](agents/tools/shell.py) | Shell command execution |
-| [`system`](agents/tools/system.py) | System and news48 environment information |
-| [`_helpers`](agents/tools/_helpers.py) | Shared utility functions |
+| [`bypass`](../agents/tools/bypass.py) | Webpage content fetching with anti-bot bypass |
+| [`files`](../agents/tools/files.py) | Unified file reading (content, metadata, chunks) |
+| [`planner`](../agents/tools/planner.py) | Persistent execution plan management |
+| [`searxng`](../agents/tools/searxng.py) | Web search via SearXNG |
+| [`shell`](../agents/tools/shell.py) | Shell command execution |
+| [`system`](../agents/tools/system.py) | System and news48 environment information |
+| [`_helpers`](../agents/tools/_helpers.py) | Shared utility functions |
 
 ---
 
@@ -247,3 +247,24 @@ def get_system_info() -> str
 | System | `get_system_info` |
 | Planning | `create_plan`, `update_plan` |
 | **Total** | **7 tools** |
+
+---
+
+## Agent-Tool Assignments
+
+Each agent uses a specific subset of the available tools:
+
+| Agent | Tools | Purpose |
+|-------|-------|---------|
+| **Pipeline** | `run_shell_command`, `read_file`, `get_system_info`, `create_plan`, `update_plan` | Run pipeline stages, inspect results, enforce retention |
+| **Monitor** | `run_shell_command`, `get_system_info` | Gather metrics via CLI, check system health |
+| **Reporter** | `run_shell_command`, `read_file`, `get_system_info`, `create_plan`, `update_plan` | Gather data, read historical reports, write structured reports |
+| **Checker** | `run_shell_command`, `read_file`, `get_system_info`, `perform_web_search`, `fetch_webpage_content`, `create_plan`, `update_plan` | Verify article claims via web search and source fetching |
+| **Parser** *(sub-agent)* | `run_shell_command` (own), `read_file` (own) | Execute parser scripts, read HTML files |
+
+### Design Notes
+
+- **Monitor is intentionally tool-minimal**: it only needs `run_shell_command` (to run `news48 stats --json`, `cleanup health --json`, etc.) and `get_system_info`. No planner tools because monitoring is a straightforward gather-and-report task.
+- **Pipeline and Reporter use planners**: multi-step workflows benefit from explicit planning with `create_plan` / `update_plan`.
+- **Checker uses the full tool library**: it needs web search and page fetching for verification, plus planning for multi-article workflows and the CLI for reading/updating articles.
+- **Parser is a sub-agent, not a scheduled agent**: it is invoked internally by the `parse` command rather than running autonomously via the Orchestrator. It defines its own `run_shell_command` and `read_file` tools inline (in `agents/parser.py`) because it operates in a different context (temp files, template variable resolution).

@@ -1,3 +1,5 @@
+"""Pipeline agent for autonomous news48 pipeline execution."""
+
 import json
 from os import getenv
 
@@ -14,7 +16,8 @@ from loguru import logger
 from agents.instructions import load_agent_instructions
 
 
-async def main(user_prompt: str):
+def get_agent() -> FunctionAgent:
+    """Create and return the Pipeline Agent."""
     load_dotenv()
 
     api_base = getenv("API_BASE", "")
@@ -22,30 +25,21 @@ async def main(user_prompt: str):
         raise ValueError("Missing API_BASE env.")
 
     from agents.tools import (
-        add_plan_step,
-        create_execution_plan,
-        fetch_webpage_content,
-        get_execution_plan,
-        get_file_content,
-        get_file_info,
+        create_plan,
         get_system_info,
-        list_directory,
-        perform_web_search,
-        read_file_chunk,
-        remove_plan_step,
-        reorder_plan_steps,
-        replace_plan_step,
+        read_file,
         run_shell_command,
-        update_plan_step,
+        update_plan,
     )
 
-    agent = FunctionAgent(
-        name="Operator",
+    return FunctionAgent(
+        name="Pipeline",
         description=(
-            "A general-purpose Operator agent that can take arbitrary user "
-            "tasks, inspect available context, use tools to gather evidence, "
-            "execute actions, and maintain an explicit execution plan through "
-            "planner tools."
+            "Autonomous pipeline agent that runs the news48 pipeline: "
+            "fetch feeds, download articles, parse content, and purge "
+            "expired. Runs stages one at a time, inspects results between "
+            "stages, handles failures with retries, and enforces retention "
+            "policy."
         ),
         llm=OpenAILike(
             model="enfuse/smol-tools-4b-32k",
@@ -54,29 +48,32 @@ async def main(user_prompt: str):
             is_function_calling_model=True,
         ),
         tools=[
-            add_plan_step,
-            create_execution_plan,
-            fetch_webpage_content,
-            get_execution_plan,
-            get_file_content,
-            get_file_info,
-            get_system_info,
-            list_directory,
-            perform_web_search,
-            read_file_chunk,
-            remove_plan_step,
-            reorder_plan_steps,
-            replace_plan_step,
             run_shell_command,
-            update_plan_step,
+            read_file,
+            get_system_info,
+            create_plan,
+            update_plan,
         ],
-        system_prompt=load_agent_instructions("operator"),
+        system_prompt=load_agent_instructions("pipeline"),
         verbose=False,
         streaming=True,
     )
-    handler = agent.run(user_msg=user_prompt, max_iterations=500)
 
-    # handle streaming output
+
+async def run(task: str) -> str:
+    """Run the Pipeline Agent with a task prompt.
+
+    Args:
+        task: What to do, e.g., "Run a full pipeline cycle" or
+              "Fetch and download articles from arstechnica.com"
+
+    Returns:
+        The agent final response text.
+    """
+    agent = get_agent()
+    handler = agent.run(user_msg=task, max_iterations=500)
+
+    final_response = ""
     async for event in handler.stream_events():
         if isinstance(event, ToolCall):
             logger.info(
@@ -86,7 +83,7 @@ async def main(user_prompt: str):
         elif isinstance(event, ToolCallResult):
             if event.tool_output.is_error:
                 logger.info(
-                    f"System error while executing tool: {event.tool_name}.-"
+                    f"System error while executing tool: {event.tool_name}."
                 )
                 continue
             output: dict = json.loads(event.tool_output.raw_output)
@@ -99,10 +96,7 @@ async def main(user_prompt: str):
                 continue
             logger.info(f"Completed execution of tool: {event.tool_name}.")
         elif isinstance(event, AgentStream):
+            final_response += event.delta
             print(event.delta, end="", flush=True)
 
-
-if __name__ == "__main__":
-    import asyncio
-
-    asyncio.run(main(user_prompt=("Who is Elon Musk")))
+    return final_response

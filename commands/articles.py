@@ -1,12 +1,18 @@
 """Articles sub-app - manage articles in the database (list, info)."""
 
+import sys
+
 import typer
 
 from database import (
+    delete_article,
     get_article_by_id,
     get_article_by_url,
     get_articles_paginated,
     init_database,
+    reset_article_download,
+    reset_article_parse,
+    update_article_fact_check,
 )
 
 from ._common import _fmt_date, emit_error, emit_json, require_db
@@ -30,6 +36,8 @@ def _resolve_status(status: str, as_json: bool = False) -> str:
         "parsed",
         "download-failed",
         "parse-failed",
+        "fact-checked",
+        "fact-unchecked",
     }
     if status not in valid:
         emit_error(
@@ -54,6 +62,8 @@ def _article_status(row: dict) -> str:
     if row.get("parse_failed"):
         return "parse-failed"
     if row.get("is_parsed"):
+        if row.get("fact_check_status"):
+            return "fact-checked"
         return "parsed"
     if row.get("has_content"):
         return "downloaded"
@@ -189,6 +199,11 @@ def article_info(
         "categories": article.get("categories"),
         "tags": article.get("tags"),
         "countries": article.get("countries"),
+        "fact_check": {
+            "status": article.get("fact_check_status"),
+            "result": article.get("fact_check_result"),
+            "checked_at": article.get("fact_checked_at"),
+        },
         "errors": {
             "download_error": article.get("download_error"),
             "parse_error": article.get("parse_error"),
@@ -214,7 +229,273 @@ def article_info(
             print(f"Tags:          {data['tags']}")
         if data["countries"]:
             print(f"Countries:     {data['countries']}")
+        fc = data["fact_check"]
+        if fc["status"]:
+            print(f"Fact check:    {fc['status']}")
+            if fc["result"]:
+                print(f"  Result:      {fc['result']}")
+            print(f"  Checked at:  {_fmt_date(fc['checked_at'])}")
         if data["errors"]["download_error"]:
             print(f"Download error: {data['errors']['download_error']}")
         if data["errors"]["parse_error"]:
             print(f"Parse error:    {data['errors']['parse_error']}")
+
+
+@articles_app.command(name="delete")
+def delete_article_cmd(
+    identifier: str = typer.Argument(..., help="Article ID or URL to delete"),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Skip confirmation prompt"
+    ),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Delete an article by ID or URL."""
+    db_path = require_db()
+    init_database(db_path)
+
+    # Try to interpret as ID first, then as URL
+    article = None
+    try:
+        article_id = int(identifier)
+        article = get_article_by_id(db_path, article_id)
+    except ValueError:
+        article = get_article_by_url(db_path, identifier)
+
+    if not article:
+        err = {"deleted": False, "reason": f"Article not found: {identifier}"}
+        if output_json:
+            emit_json(err)
+        else:
+            print(f"Error: {err['reason']}", file=sys.stderr)
+        raise typer.Exit(code=1)
+
+    article_id = article["id"]
+
+    # Ask for confirmation when not forced (human mode)
+    if not force and not output_json:
+        title = article["title"] or "Untitled"
+        confirm = typer.confirm(
+            f"Delete article '{title}' (ID: {article_id})?"
+        )
+        if not confirm:
+            print("Deletion cancelled")
+            return
+
+    deleted = delete_article(db_path, article_id)
+    data = {
+        "deleted": deleted,
+        "id": article_id,
+        "url": article["url"],
+        "title": article["title"],
+    }
+
+    if output_json:
+        emit_json(data)
+    else:
+        if deleted:
+            print(f"Deleted article: {article['title'] or 'Untitled'}")
+            print(f"  ID: {article_id}")
+            print(f"  URL: {article['url']}")
+        else:
+            print("Error: Failed to delete article", file=sys.stderr)
+            raise typer.Exit(code=1)
+
+
+@articles_app.command(name="reset")
+def reset_article_cmd(
+    identifier: str = typer.Argument(..., help="Article ID or URL to reset"),
+    download: bool = typer.Option(
+        False, "--download", help="Reset download failure flag"
+    ),
+    parse: bool = typer.Option(
+        False, "--parse", help="Reset parse failure flag"
+    ),
+    all_flags: bool = typer.Option(
+        False, "--all", help="Reset both download and parse failure flags"
+    ),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Reset article failure flags for retry."""
+    db_path = require_db()
+    init_database(db_path)
+
+    # Validate that at least one flag is specified
+    if not download and not parse and not all_flags:
+        emit_error(
+            "Must specify --download, --parse, or --all",
+            as_json=output_json,
+        )
+
+    # Try to interpret as ID first, then as URL
+    article = None
+    try:
+        article_id = int(identifier)
+        article = get_article_by_id(db_path, article_id)
+    except ValueError:
+        article = get_article_by_url(db_path, identifier)
+
+    if not article:
+        emit_error(
+            f"Article not found: {identifier}",
+            as_json=output_json,
+        )
+
+    article_id = article["id"]
+    reset_download = download or all_flags
+    reset_parse = parse or all_flags
+
+    # Perform resets
+    if reset_download:
+        reset_article_download(db_path, article_id)
+    if reset_parse:
+        reset_article_parse(db_path, article_id)
+
+    data = {
+        "reset": True,
+        "id": article_id,
+        "url": article["url"],
+        "title": article["title"],
+        "reset_download": reset_download,
+        "reset_parse": reset_parse,
+    }
+
+    if output_json:
+        emit_json(data)
+    else:
+        title = article["title"] or "Untitled"
+        print(f"Reset article: {title}")
+        print(f"  ID: {article_id}")
+        flags = []
+        if reset_download:
+            flags.append("download")
+        if reset_parse:
+            flags.append("parse")
+        print(f"  Reset flags: {', '.join(flags)}")
+
+
+@articles_app.command(name="content")
+def article_content(
+    identifier: str = typer.Argument(..., help="Article ID or URL"),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Show article content."""
+    db_path = require_db()
+    init_database(db_path)
+
+    # Try to interpret as ID first, then as URL
+    article = None
+    try:
+        article_id = int(identifier)
+        article = get_article_by_id(db_path, article_id)
+    except ValueError:
+        article = get_article_by_url(db_path, identifier)
+
+    if not article:
+        emit_error(
+            f"Article not found: {identifier}",
+            as_json=output_json,
+        )
+
+    content = article.get("content") or ""
+    data = {
+        "id": article["id"],
+        "title": article["title"],
+        "url": article["url"],
+        "content": content,
+        "content_length": len(content),
+    }
+
+    if output_json:
+        emit_json(data)
+    else:
+        title = article["title"] or "Untitled"
+        print(f"Article: {title}")
+        print(f"  ID: {article['id']}")
+        print(f"  URL: {article['url']}")
+        print(f"  Content length: {len(content):,} chars")
+        print()
+        if content:
+            print(content)
+        else:
+            print("(No content)")
+
+
+@articles_app.command(name="check")
+def check_article(
+    identifier: str = typer.Argument(..., help="Article ID or URL"),
+    status: str = typer.Option(
+        ...,
+        "--status",
+        "-s",
+        help="Fact-check verdict: verified|disputed|unverifiable|mixed",
+    ),
+    result: str = typer.Option(
+        None,
+        "--result",
+        "-r",
+        help="Free-text summary of the fact-check assessment",
+    ),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Set the fact-check status and result for an article."""
+    db_path = require_db()
+    init_database(db_path)
+
+    valid_statuses = {"verified", "disputed", "unverifiable", "mixed"}
+    if status.lower() not in valid_statuses:
+        emit_error(
+            f"Invalid fact-check status '{status}'. "
+            f"Valid: {', '.join(sorted(valid_statuses))}",
+            as_json=output_json,
+        )
+
+    # Resolve article
+    article = None
+    try:
+        article_id = int(identifier)
+        article = get_article_by_id(db_path, article_id)
+    except ValueError:
+        article = get_article_by_url(db_path, identifier)
+
+    if not article:
+        emit_error(
+            f"Article not found: {identifier}",
+            as_json=output_json,
+        )
+
+    # Require article to be parsed before fact-checking
+    if not article.get("parsed_at"):
+        emit_error(
+            f"Article {article['id']} has not been parsed yet. "
+            "Parse it first before fact-checking.",
+            as_json=output_json,
+        )
+
+    updated = update_article_fact_check(
+        db_path,
+        article["id"],
+        status=status.lower(),
+        result=result,
+    )
+
+    data = {
+        "checked": updated,
+        "id": article["id"],
+        "url": article["url"],
+        "title": article["title"],
+        "fact_check_status": status.lower(),
+        "fact_check_result": result,
+    }
+
+    if output_json:
+        emit_json(data)
+    else:
+        title = article["title"] or "Untitled"
+        if updated:
+            print(f"Fact-checked article: {title}")
+            print(f"  ID: {article['id']}")
+            print(f"  Status: {status.lower()}")
+            if result:
+                print(f"  Result: {result}")
+        else:
+            print(f"Error: Failed to update article {article['id']}")

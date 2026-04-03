@@ -117,6 +117,36 @@ uv run news48 feeds delete https://example.com/temp.xml --force --json
 ```
 Expected: `{"deleted": true, "url": "...", "articles_removed": 0}`
 
+### 2.13 Feeds update -- text output
+```bash
+uv run news48 feeds update 1 --title "Updated Feed Title"
+```
+Expected: `Updated feed: ...` with new title
+
+### 2.14 Feeds update -- description only
+```bash
+uv run news48 feeds update 1 --description "New description"
+```
+Expected: `Updated feed: ...` with new description
+
+### 2.15 Feeds update -- JSON output
+```bash
+uv run news48 feeds update 1 --title "Test" --json
+```
+Expected: `{"updated": true, "id": 1, "url": "...", "title": "Test", ...}`
+
+### 2.16 Feeds update -- no fields specified
+```bash
+uv run news48 feeds update 1 --json
+```
+Expected: `{"error": "Must specify at least one of --title or --description"}`, exit code 1
+
+### 2.17 Feeds update -- not found
+```bash
+uv run news48 feeds update 99999 --title "Test" --json
+```
+Expected: `{"error": "Feed not found: 99999"}`, exit code 1
+
 ---
 
 ## 3. Fetch
@@ -225,6 +255,18 @@ uv run news48 download --feed nonexistent-domain.com --json
 ```
 Expected: `{"downloaded": 0, "failed": 0, "total": 0, ...}`
 
+### 5.6 Download -- specific article
+```bash
+uv run news48 download --article 1
+```
+Expected: `Downloaded 1 of 1 articles, 0 failed` or error if article not found
+
+### 5.7 Download -- specific article JSON
+```bash
+uv run news48 download --article 1 --json
+```
+Expected: `{"downloaded": 1, "failed": 0, "total": 1, ...}` or `{"error": "Article not found: 1"}`
+
 ---
 
 ## 6. Articles Info
@@ -310,15 +352,139 @@ Expected: more feeds marked as stale
 
 ---
 
-## 9. Error Handling
+## 9. Fetches
 
-### 9.1 No database configured
+### 9.1 Fetches list -- text output
+```bash
+uv run news48 fetches list
+```
+Expected: list of recent fetch runs with ID, status, timestamps, and counts
+
+### 9.2 Fetches list -- JSON output
+```bash
+uv run news48 fetches list --json
+```
+Expected: `{"total": N, "limit": 20, "fetches": [...]}`
+
+### 9.3 Fetches list -- with limit
+```bash
+uv run news48 fetches list --limit 5 --json
+```
+Expected: up to 5 fetch runs
+
+---
+
+## 10. Articles Delete
+
+### 10.1 Articles delete -- with confirmation (text)
+```bash
+uv run news48 articles delete 1
+```
+Expected: confirmation prompt, then deletion message
+
+### 10.2 Articles delete -- with --force
+```bash
+uv run news48 articles delete 1 --force
+```
+Expected: `Deleted article: ...`
+
+### 10.3 Articles delete -- JSON output
+```bash
+uv run news48 articles delete 1 --force --json
+```
+Expected: `{"deleted": true, "id": 1, "url": "...", "title": "..."}`
+
+### 10.4 Articles delete -- by URL
+```bash
+uv run news48 articles delete "https://example.com/article" --force --json
+```
+Expected: `{"deleted": true, ...}` or `{"deleted": false, "reason": "Article not found: ..."}`
+
+### 10.5 Articles delete -- not found
+```bash
+uv run news48 articles delete 99999 --force --json
+```
+Expected: `{"deleted": false, "reason": "Article not found: 99999"}`, exit code 1
+
+---
+
+## 11. Articles Reset
+
+### 11.1 Articles reset -- download flag
+```bash
+uv run news48 articles reset 1 --download
+```
+Expected: `Reset article: ...` with reset flags: download
+
+### 11.2 Articles reset -- parse flag
+```bash
+uv run news48 articles reset 1 --parse
+```
+Expected: `Reset article: ...` with reset flags: parse
+
+### 11.3 Articles reset -- all flags
+```bash
+uv run news48 articles reset 1 --all
+```
+Expected: `Reset article: ...` with reset flags: download, parse
+
+### 11.4 Articles reset -- JSON output
+```bash
+uv run news48 articles reset 1 --all --json
+```
+Expected: `{"reset": true, "id": 1, "reset_download": true, "reset_parse": true}`
+
+### 11.5 Articles reset -- no flags specified
+```bash
+uv run news48 articles reset 1 --json
+```
+Expected: `{"error": "Must specify --download, --parse, or --all"}`, exit code 1
+
+### 11.6 Articles reset -- not found
+```bash
+uv run news48 articles reset 99999 --download --json
+```
+Expected: `{"error": "Article not found: 99999"}`, exit code 1
+
+---
+
+## 12. Articles Content
+
+### 12.1 Articles content -- text output
+```bash
+uv run news48 articles content 1
+```
+Expected: article title, URL, content length, and full content
+
+### 12.2 Articles content -- JSON output
+```bash
+uv run news48 articles content 1 --json
+```
+Expected: `{"id": 1, "title": "...", "url": "...", "content": "...", "content_length": N}`
+
+### 12.3 Articles content -- no content
+```bash
+uv run news48 articles content 1
+```
+Expected: `(No content)` message if article has no downloaded content
+
+### 12.4 Articles content -- not found
+```bash
+uv run news48 articles content 99999 --json
+```
+Expected: `{"error": "Article not found: 99999"}`, exit code 1
+
+---
+
+## 13. Error Handling
+
+### 13.1 No database configured
 ```bash
 DATABASE_PATH="" uv run news48 stats
 ```
 Expected: `Error: DATABASE_PATH not configured` to stderr, exit code 1
 
-### 9.2 Invalid database path
+### 13.2 Invalid database path
 ```bash
 DATABASE_PATH=/nonexistent/path.db uv run news48 stats --json
 ```
@@ -326,7 +492,7 @@ Expected: `{"error": "..."}` to stdout, exit code 1
 
 ---
 
-## 10. Full Pipeline Walkthrough (stage by stage)
+## 14. Full Pipeline Walkthrough (stage by stage)
 
 ```bash
 # 1. Start fresh

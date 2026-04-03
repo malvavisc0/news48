@@ -11,8 +11,8 @@ wheels/
 .env
 
 .files/
-.plans/
 .logs/
+.orchestrator.json
 
 # SQLite database
 *.db

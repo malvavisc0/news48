@@ -78,6 +78,9 @@ CREATE TABLE IF NOT EXISTS articles (
     parse_failed INTEGER NOT NULL DEFAULT 0,
     parse_error TEXT,
     countries TEXT,
+    fact_check_status TEXT,
+    fact_check_result TEXT,
+    fact_checked_at DATETIME,
     created_at DATETIME NOT NULL,
     FOREIGN KEY (fetch_id) REFERENCES fetches(id),
     FOREIGN KEY (feed_id) REFERENCES feeds(id)
@@ -98,8 +101,18 @@ CREATE_INDEXES = [
 ]
 
 
+# Migrations for existing databases that lack newer columns.
+_MIGRATIONS = [
+    "ALTER TABLE articles ADD COLUMN fact_check_status TEXT",
+    "ALTER TABLE articles ADD COLUMN fact_check_result TEXT",
+    "ALTER TABLE articles ADD COLUMN fact_checked_at DATETIME",
+]
+
+
 def init_database(db_path: Path) -> None:
     """Initialize the database with required tables and indexes.
+
+    Also applies any pending migrations for existing databases.
 
     Args:
         db_path: Path to the SQLite database file.
@@ -110,6 +123,12 @@ def init_database(db_path: Path) -> None:
         db.execute(CREATE_ARTICLES_TABLE)
         for index_sql in CREATE_INDEXES:
             db.execute(index_sql)
+        # Apply migrations (safe to re-run; duplicate columns are ignored)
+        for migration in _MIGRATIONS:
+            try:
+                db.execute(migration)
+            except sqlite3.OperationalError:
+                pass  # Column already exists
         db.commit()
 
 
@@ -510,6 +529,44 @@ def update_article(
         db.commit()
 
 
+def update_article_fact_check(
+    db_path: Path,
+    article_id: int,
+    status: str,
+    result: str | None = None,
+) -> bool:
+    """Update the fact-check fields of an article.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        article_id: The article ID to update.
+        status: Fact-check verdict. One of: verified, disputed,
+            unverifiable, mixed.
+        result: Optional free-text summary of the fact-check assessment.
+
+    Returns:
+        True if the article was found and updated, False otherwise.
+    """
+    valid_statuses = {"verified", "disputed", "unverifiable", "mixed"}
+    if status.lower() not in valid_statuses:
+        raise ValueError(
+            f"Invalid fact_check_status '{status}'. "
+            f"Valid: {', '.join(sorted(valid_statuses))}"
+        )
+    now = _utcnow()
+    with get_connection(db_path) as db:
+        cursor = db.execute(
+            """UPDATE articles
+               SET fact_check_status = ?,
+                   fact_check_result = ?,
+                   fact_checked_at = ?
+               WHERE id = ?""",
+            (status.lower(), result, now, article_id),
+        )
+        db.commit()
+        return cursor.rowcount > 0
+
+
 def get_unparsed_articles(
     db_path: Path, limit: int = 50, feed_domain: str | None = None
 ) -> list[dict]:
@@ -726,6 +783,10 @@ def get_articles_paginated(
         "parsed": "a.parsed_at IS NOT NULL",
         "download-failed": "a.download_failed = 1",
         "parse-failed": "a.parse_failed = 1",
+        "fact-checked": "a.fact_check_status IS NOT NULL",
+        "fact-unchecked": (
+            "a.parsed_at IS NOT NULL " "AND a.fact_check_status IS NULL"
+        ),
     }
 
     where_clauses = []
@@ -758,6 +819,7 @@ def get_articles_paginated(
                        a.content IS NOT NULL as has_content,
                        a.parsed_at IS NOT NULL as is_parsed,
                        a.download_failed, a.parse_failed,
+                       a.fact_check_status,
                        a.created_at, a.published_at
                 FROM articles a
                 JOIN feeds f ON a.feed_id = f.id
@@ -861,6 +923,22 @@ def reset_article_parse(db_path: Path, article_id: int) -> None:
         db.commit()
 
 
+def delete_article(db_path: Path, article_id: int) -> bool:
+    """Delete an article by ID.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        article_id: The ID of the article to delete.
+
+    Returns:
+        True if the article was deleted, False if not found.
+    """
+    with get_connection(db_path) as db:
+        cursor = db.execute("DELETE FROM articles WHERE id = ?", (article_id,))
+        db.commit()
+        return cursor.rowcount > 0
+
+
 # Stats operations
 
 
@@ -877,8 +955,7 @@ def get_article_stats(db_path: Path) -> dict:
         oldest_unparsed_at, articles_today, articles_this_week.
     """
     with get_connection(db_path) as db:
-        cursor = db.execute(
-            """SELECT
+        cursor = db.execute("""SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN parsed_at IS NOT NULL THEN 1 ELSE 0 END)
                     AS parsed,
@@ -902,35 +979,28 @@ def get_article_stats(db_path: Path) -> dict:
                     AS sentiment_negative,
                 SUM(CASE WHEN sentiment = 'neutral' THEN 1 ELSE 0 END)
                     AS sentiment_neutral
-            FROM articles"""
-        )
+            FROM articles""")
         row = dict(cursor.fetchone())
 
         # Oldest unparsed article
-        cursor = db.execute(
-            """SELECT MIN(created_at) AS oldest_unparsed_at
+        cursor = db.execute("""SELECT MIN(created_at) AS oldest_unparsed_at
                FROM articles
                WHERE content IS NOT NULL
                  AND parsed_at IS NULL
-                 AND parse_failed = 0"""
-        )
+                 AND parse_failed = 0""")
         oldest = cursor.fetchone()
         row["oldest_unparsed_at"] = (
             oldest["oldest_unparsed_at"] if oldest else None
         )
 
         # Articles created today (UTC)
-        cursor = db.execute(
-            """SELECT COUNT(*) AS cnt FROM articles
-               WHERE created_at >= date('now')"""
-        )
+        cursor = db.execute("""SELECT COUNT(*) AS cnt FROM articles
+               WHERE created_at >= date('now')""")
         row["articles_today"] = cursor.fetchone()["cnt"]
 
         # Articles created this week (UTC, Monday-based)
-        cursor = db.execute(
-            """SELECT COUNT(*) AS cnt FROM articles
-               WHERE created_at >= date('now', 'weekday 1', '-7 days')"""
-        )
+        cursor = db.execute("""SELECT COUNT(*) AS cnt FROM articles
+               WHERE created_at >= date('now', 'weekday 1', '-7 days')""")
         row["articles_this_week"] = cursor.fetchone()["cnt"]
 
         return row
@@ -989,22 +1059,209 @@ def get_fetch_stats(db_path: Path) -> dict:
         recent_runs (list of dicts).
     """
     with get_connection(db_path) as db:
-        cursor = db.execute(
-            """SELECT
+        cursor = db.execute("""SELECT
                 COUNT(*) AS total_runs,
                 MAX(started_at) AS last_run_at,
                 ROUND(AVG(articles_found), 1) AS avg_articles_per_run
-            FROM fetches"""
-        )
+            FROM fetches""")
         row = dict(cursor.fetchone())
 
-        cursor = db.execute(
-            """SELECT id, started_at, completed_at, status,
+        cursor = db.execute("""SELECT id, started_at, completed_at, status,
                       feeds_fetched, articles_found
                FROM fetches
                ORDER BY started_at DESC
-               LIMIT 5"""
-        )
+               LIMIT 5""")
         row["recent_runs"] = [dict(r) for r in cursor.fetchall()]
 
         return row
+
+
+# Retention policy operations
+
+
+def get_articles_older_than_hours(
+    db_path: Path, hours: int = 48
+) -> list[dict]:
+    """Get articles older than specified hours.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        hours: Number of hours to use as threshold (default: 48).
+
+    Returns:
+        A list of dicts with article data for articles older than threshold.
+    """
+    with get_connection(db_path) as db:
+        threshold = (
+            datetime.now(timezone.utc) - timedelta(hours=hours)
+        ).isoformat()
+
+        cursor = db.execute(
+            """SELECT a.*, f.url as feed_url
+               FROM articles a
+               JOIN feeds f ON a.feed_id = f.id
+               WHERE a.created_at < ?
+               ORDER BY a.created_at ASC""",
+            (threshold,),
+        )
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+def purge_articles_older_than_hours(
+    db_path: Path,
+    hours: int = 48,
+    dry_run: bool = False,
+) -> dict:
+    """Purge articles older than specified hours.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        hours: Number of hours to use as threshold (default: 48).
+        dry_run: If True, only count articles without deleting.
+
+    Returns:
+        A dict with purge results:
+        - articles_found: Number of articles older than threshold
+        - articles_deleted: Number of articles actually deleted
+        - threshold_hours: The hours threshold used
+        - cutoff_time: The ISO 8601 cutoff time
+    """
+    with get_connection(db_path) as db:
+        threshold = (
+            datetime.now(timezone.utc) - timedelta(hours=hours)
+        ).isoformat()
+
+        # Count articles to purge
+        cursor = db.execute(
+            "SELECT COUNT(*) as cnt FROM articles WHERE created_at < ?",
+            (threshold,),
+        )
+        articles_found = cursor.fetchone()["cnt"]
+
+        articles_deleted = 0
+        if not dry_run and articles_found > 0:
+            # Delete articles (cascade will handle related records)
+            cursor = db.execute(
+                "DELETE FROM articles WHERE created_at < ?",
+                (threshold,),
+            )
+            articles_deleted = cursor.rowcount
+            db.commit()
+
+        return {
+            "articles_found": articles_found,
+            "articles_deleted": articles_deleted,
+            "threshold_hours": hours,
+            "cutoff_time": threshold,
+            "dry_run": dry_run,
+        }
+
+
+def get_retention_policy_stats(db_path: Path) -> dict:
+    """Get statistics about the 48-hour retention policy.
+
+    Args:
+        db_path: Path to the SQLite database file.
+
+    Returns:
+        A dict with retention policy statistics:
+        - total_articles: Total articles in database
+        - articles_within_48h: Articles published within last 48 hours
+        - articles_expired: Articles older than 48 hours
+        - retention_rate: Percentage of articles within 48h window
+        - oldest_article: Creation date of oldest article
+        - newest_article: Creation date of newest article
+    """
+    with get_connection(db_path) as db:
+        threshold_48h = (
+            datetime.now(timezone.utc) - timedelta(hours=48)
+        ).isoformat()
+
+        # Total articles
+        cursor = db.execute("SELECT COUNT(*) as cnt FROM articles")
+        total = cursor.fetchone()["cnt"]
+
+        # Articles within 48 hours
+        cursor = db.execute(
+            "SELECT COUNT(*) as cnt FROM articles WHERE created_at >= ?",
+            (threshold_48h,),
+        )
+        within_48h = cursor.fetchone()["cnt"]
+
+        # Articles expired (older than 48 hours)
+        cursor = db.execute(
+            "SELECT COUNT(*) as cnt FROM articles WHERE created_at < ?",
+            (threshold_48h,),
+        )
+        expired = cursor.fetchone()["cnt"]
+
+        # Oldest and newest articles
+        cursor = db.execute("""SELECT MIN(created_at) as oldest,
+                      MAX(created_at) as newest
+               FROM articles""")
+        dates = cursor.fetchone()
+
+        retention_rate = (within_48h / total * 100) if total > 0 else 0
+
+        return {
+            "total_articles": total,
+            "articles_within_48h": within_48h,
+            "articles_expired": expired,
+            "retention_rate": round(retention_rate, 2),
+            "oldest_article": dates["oldest"],
+            "newest_article": dates["newest"],
+            "threshold_hours": 48,
+        }
+
+
+def check_database_health(db_path: Path) -> dict:
+    """Check database health and connectivity.
+
+    Args:
+        db_path: Path to the SQLite database file.
+
+    Returns:
+        A dict with health check results:
+        - is_connected: Whether database is accessible
+        - db_size_mb: Database size in megabytes
+        - table_counts: Number of rows in each table
+        - integrity_ok: Whether database integrity check passed
+        - wal_mode: Whether WAL mode is enabled
+    """
+    health = {
+        "is_connected": False,
+        "db_size_mb": 0,
+        "table_counts": {},
+        "integrity_ok": False,
+        "wal_mode": False,
+    }
+
+    try:
+        # Check if database file exists and is accessible
+        if not db_path.exists():
+            return health
+
+        health["db_size_mb"] = round(db_path.stat().st_size / (1024 * 1024), 2)
+
+        with get_connection(db_path) as db:
+            health["is_connected"] = True
+
+            # Check WAL mode
+            cursor = db.execute("PRAGMA journal_mode")
+            health["wal_mode"] = cursor.fetchone()[0] == "wal"
+
+            # Get table counts
+            for table in ["feeds", "fetches", "articles"]:
+                cursor = db.execute(f"SELECT COUNT(*) as cnt FROM {table}")
+                health["table_counts"][table] = cursor.fetchone()["cnt"]
+
+            # Check integrity
+            cursor = db.execute("PRAGMA integrity_check")
+            result = cursor.fetchone()[0]
+            health["integrity_ok"] = result == "ok"
+
+    except Exception as e:
+        health["error"] = str(e)
+
+    return health

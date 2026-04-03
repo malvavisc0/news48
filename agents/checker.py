@@ -1,8 +1,4 @@
-"""CLI Operator agent entry point.
-
-A news48 pipeline worker agent that controls the CLI, monitors the system,
-troubleshoots issues, and verifies information via web search.
-"""
+"""Fact Checker agent for selective article verification."""
 
 import json
 from os import getenv
@@ -20,7 +16,8 @@ from loguru import logger
 from agents.instructions import load_agent_instructions
 
 
-async def main(user_prompt: str):
+def get_agent() -> FunctionAgent:
+    """Create and return the Fact Checker Agent."""
     load_dotenv()
 
     api_base = getenv("API_BASE", "")
@@ -37,14 +34,13 @@ async def main(user_prompt: str):
         update_plan,
     )
 
-    agent = FunctionAgent(
-        name="CLI Operator",
+    return FunctionAgent(
+        name="Checker",
         description=(
-            "A news48 pipeline worker agent that controls the pipeline "
-            "via CLI commands, monitors system health, troubleshoots "
-            "failures, and verifies information via web search. "
-            "Operates in four roles: Pipeline Operator, System Monitor, "
-            "Troubleshooter, and Fact Checker."
+            "Fact-checking agent that selectively verifies parsed news "
+            "articles by searching for corroborating or contradicting "
+            "sources, then records a verdict (verified, disputed, "
+            "unverifiable, mixed) in the database."
         ),
         llm=OpenAILike(
             model="enfuse/smol-tools-4b-32k",
@@ -55,19 +51,32 @@ async def main(user_prompt: str):
         tools=[
             run_shell_command,
             read_file,
+            get_system_info,
             perform_web_search,
             fetch_webpage_content,
-            get_system_info,
             create_plan,
             update_plan,
         ],
-        system_prompt=load_agent_instructions("cli-operator"),
+        system_prompt=load_agent_instructions("checker"),
         verbose=False,
         streaming=True,
     )
-    handler = agent.run(user_msg=user_prompt, max_iterations=500)
 
-    # handle streaming output
+
+async def run(task: str) -> str:
+    """Run the Fact Checker Agent with a task prompt.
+
+    Args:
+        task: What to do, e.g., "Fact-check 3 recently parsed articles"
+              or "Verify articles about politics from the last 24 hours".
+
+    Returns:
+        The agent final response text.
+    """
+    agent = get_agent()
+    handler = agent.run(user_msg=task, max_iterations=500)
+
+    final_response = ""
     async for event in handler.stream_events():
         if isinstance(event, ToolCall):
             logger.info(
@@ -84,16 +93,13 @@ async def main(user_prompt: str):
             error = output.get("error", None)
             if error:
                 logger.info(
-                    f"Unsuccessfully execution of the tool: {event.tool_name}."
-                    f" Error: {error}."
+                    f"Unsuccessfully execution of the tool: "
+                    f"{event.tool_name}. Error: {error}."
                 )
                 continue
             logger.info(f"Completed execution of tool: {event.tool_name}.")
         elif isinstance(event, AgentStream):
+            final_response += event.delta
             print(event.delta, end="", flush=True)
 
-
-if __name__ == "__main__":
-    import asyncio
-
-    asyncio.run(main(user_prompt="show system stats"))
+    return final_response

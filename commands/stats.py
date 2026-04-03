@@ -7,9 +7,11 @@ from pathlib import Path
 import typer
 
 from database import (
+    check_database_health,
     get_article_stats,
     get_feed_stats,
     get_fetch_stats,
+    get_retention_policy_stats,
     init_database,
 )
 
@@ -66,6 +68,9 @@ def _collect_stats(db_path: Path, stale_days: int) -> dict:
     feed = get_feed_stats(db_path, stale_days)
     fetch = get_fetch_stats(db_path)
 
+    retention = get_retention_policy_stats(db_path)
+    health = check_database_health(db_path)
+
     return {
         "db_size_mb": round(db_size / (1024 * 1024), 2),
         "articles": {
@@ -98,6 +103,21 @@ def _collect_stats(db_path: Path, stale_days: int) -> dict:
             "last_fetch_at": fetch.get("last_run_at"),
             "avg_articles_per_fetch": fetch.get("avg_articles_per_run"),
             "recent": fetch.get("recent_runs", []),
+        },
+        "retention": {
+            "threshold_hours": retention["threshold_hours"],
+            "articles_within_48h": retention["articles_within_48h"],
+            "articles_expired": retention["articles_expired"],
+            "retention_rate": retention["retention_rate"],
+            "oldest_article": retention["oldest_article"],
+            "newest_article": retention["newest_article"],
+        },
+        "health": {
+            "is_connected": health["is_connected"],
+            "db_size_mb": health["db_size_mb"],
+            "wal_mode": health["wal_mode"],
+            "integrity_ok": health["integrity_ok"],
+            "table_counts": health["table_counts"],
         },
     }
 
@@ -181,6 +201,28 @@ def _render_text(data: dict) -> None:
                 f"({r.get('feeds_fetched', 0)} feeds, "
                 f"{r.get('articles_found', 0)} articles)"
             )
+
+    # Retention Policy
+    ret = data["retention"]
+    print("\nRetention Policy (48-hour window):")
+    print(f"  Within 48h: {ret['articles_within_48h']:,}")
+    print(f"  Expired (>48h): {ret['articles_expired']:,}")
+    print(f"  Retention rate: {ret['retention_rate']}%")
+    if ret.get("oldest_article"):
+        print(f"  Oldest article: {_fmt_date(ret['oldest_article'])}")
+    if ret.get("newest_article"):
+        print(f"  Newest article: {_fmt_date(ret['newest_article'])}")
+
+    # Database Health
+    hlt = data["health"]
+    print("\nDatabase Health:")
+    print(f"  Connected: {'✓' if hlt['is_connected'] else '✗'}")
+    print(f"  WAL mode: {'✓' if hlt['wal_mode'] else '✗'}")
+    print(f"  Integrity: {'✓' if hlt['integrity_ok'] else '✗'}")
+    if hlt.get("table_counts"):
+        print("  Table counts:")
+        for table, count in hlt["table_counts"].items():
+            print(f"    {table}: {count:,}")
 
 
 def stats(
