@@ -19,3 +19,5 @@ wheels/
 *.db-journal
 *.db-wal
 *.db-shm
+
+seed.txt
