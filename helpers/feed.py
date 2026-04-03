@@ -9,9 +9,9 @@ import dateparser
 import feedparser
 
 from database import (
-    complete_run,
-    create_run,
-    fail_run,
+    complete_fetch,
+    create_fetch,
+    fail_fetch,
     get_feed_by_url,
     insert_articles,
     update_feed_metadata,
@@ -105,10 +105,10 @@ async def get_fetch_summary(
         A FeedSummary containing successful and failed feed results.
     """
     summary = FeedSummary()
-    run_id = None
+    fetch_id = None
 
     if db_path:
-        run_id = create_run(db_path)
+        fetch_id = create_fetch(db_path)
 
     try:
         for i, url in enumerate(urls):
@@ -119,7 +119,7 @@ async def get_fetch_summary(
             if on_feed_done:
                 on_feed_done(result)
 
-            if db_path and run_id and result.success:
+            if db_path and fetch_id and result.success:
                 feed = get_feed_by_url(db_path, url)
                 if feed:
                     update_feed_metadata(
@@ -132,18 +132,18 @@ async def get_fetch_summary(
                         if is_article_from_last_48_hours(entry.published_at)
                     ]
                     # Each function manages its own connection
-                    insert_articles(db_path, run_id, feed["id"], articles)
+                    insert_articles(db_path, fetch_id, feed["id"], articles)
 
-        if db_path and run_id:
-            complete_run(
+        if db_path and fetch_id:
+            complete_fetch(
                 db_path,
-                run_id,
+                fetch_id,
                 len(urls),
                 sum(r.valid_articles_count for r in summary.successful),
             )
     except Exception:
-        if db_path and run_id:
-            fail_run(db_path, run_id)
+        if db_path and fetch_id:
+            fail_fetch(db_path, fetch_id)
         raise
 
     return summary

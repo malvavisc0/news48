@@ -7,7 +7,7 @@ __all__ = [
     "FeedEntry",
     "FeedResult",
     "Feed",
-    "Run",
+    "Fetch",
     "Article",
     "FeedSummary",
     "ByparrSolution",
@@ -90,22 +90,24 @@ class Feed(BaseModel):
         return v
 
 
-class Run(BaseModel):
-    """A fetch run stored in the database."""
+class Fetch(BaseModel):
+    """A fetch operation stored in the database."""
 
     model_config = {"str_strip_whitespace": True}
 
-    id: int | None = Field(default=None, description="Database ID of the run")
-    started_at: datetime = Field(description="When the run started")
-    completed_at: datetime | None = Field(
-        default=None, description="When the run completed"
+    id: int | None = Field(
+        default=None, description="Database ID of the fetch"
     )
-    status: str = Field(default="running", description="Status of the run")
+    started_at: datetime = Field(description="When the fetch started")
+    completed_at: datetime | None = Field(
+        default=None, description="When the fetch completed"
+    )
+    status: str = Field(default="running", description="Status of the fetch")
     feeds_fetched: int = Field(
-        default=0, ge=0, description="Number of feeds fetched in this run"
+        default=0, ge=0, description="Number of feeds fetched"
     )
     articles_found: int = Field(
-        default=0, ge=0, description="Number of articles found in this run"
+        default=0, ge=0, description="Number of articles found"
     )
 
     @field_validator("status")
@@ -124,7 +126,9 @@ class Article(BaseModel):
     id: int | None = Field(
         default=None, description="Database ID of the article"
     )
-    run_id: int = Field(description="ID of the run this article belongs to")
+    fetch_id: int = Field(
+        description="ID of the fetch this article belongs to"
+    )
     feed_id: int = Field(description="ID of the feed this article belongs to")
     url: str = Field(description="URL of the article")
     title: str | None = Field(default=None, description="Title of the article")

@@ -189,7 +189,7 @@ def _build_response(
 
 
 def run_shell_command(
-    intent: str, command: str, timeout: Optional[int] = 120
+    reason: str, command: str, timeout: Optional[int] = 120
 ) -> str:
     """Execute a shell command and return the result as JSON.
 
@@ -202,9 +202,8 @@ def run_shell_command(
     - {{SCRIPT_DIR}} -> directory containing parser scripts
 
     Args:
-        intent: Natural-language description of what the command is intended to
-                accomplish.  This parameter is consumed by the LLM for
-                chain-of-thought reasoning and is intentionally unused in code.
+        reason: Natural-language description of what the command is intended to
+                accomplish.
         command: The shell command to execute. Can be any valid shell command
                  including pipes, redirects, and compound commands.
         timeout: Optional timeout in seconds for command execution.
@@ -217,7 +216,7 @@ def run_shell_command(
              - metadata: Dict with timestamp (ISO 8601 format)
              Returns error JSON if execution fails.
     """
-    logger.info(f"Tool call: run_shell_command | intent: {intent}")
+    logger.info(f"Tool call: run_shell_command | reason: {reason}")
     logger.debug(f"  command: {command}")
 
     # Resolve template variables before execution
@@ -283,11 +282,11 @@ def run_shell_command(
         )
 
 
-def read_file(intent: str, file_path: str) -> str:
+def read_file(reason: str, file_path: str) -> str:
     """Read a file and return its contents.
 
     Args:
-        intent: Natural-language description of why the file is
+        reason: Natural-language description of why the file is
                 being read. Consumed by the LLM for reasoning.
         file_path: The path to the file to read.
 
@@ -295,7 +294,7 @@ def read_file(intent: str, file_path: str) -> str:
         str: File contents (possibly summarized for HTML files),
              or an error message if reading fails.
     """
-    logger.info(f"Tool call: read_file | intent: {intent}")
+    logger.info(f"Tool call: read_file | reason: {reason}")
     logger.debug(f"  file_path: {file_path}")
 
     try:

@@ -11,6 +11,8 @@ wheels/
 .env
 
 .files/
+.plans/
+.logs/
 
 # SQLite database
 *.db

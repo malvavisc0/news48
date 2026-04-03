@@ -3,89 +3,83 @@
 import asyncio
 
 import typer
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
-from rich.table import Table
 
 from database import get_all_feeds, init_database
 from helpers import get_fetch_summary
 
-from ._common import DEFAULT_DELAY, console, require_db
+from ._common import (
+    DEFAULT_DELAY,
+    emit_error,
+    emit_json,
+    require_db,
+    status_msg,
+)
 
 
-async def _fetch(delay: float) -> None:
+async def _fetch(delay: float, feed_domain: str | None = None) -> dict:
     """Async entry point: load URLs from database, fetch feeds.
 
     Args:
         delay: Delay between requests in seconds.
+        feed_domain: Optional domain to filter feeds by.
+
+    Returns:
+        A dict with fetch results.
     """
     db_path = require_db()
     init_database(db_path)
 
-    feeds = get_all_feeds(db_path)
+    feeds = get_all_feeds(db_path, feed_domain=feed_domain)
     if not feeds:
-        console.print(
-            "[yellow]No feeds found in database. Run 'seed' first.[/yellow]"
-        )
-        return
+        return {
+            "feed_filter": feed_domain,
+            "feeds_fetched": 0,
+            "entries": 0,
+            "valid": 0,
+            "success_rate": 0.0,
+            "successful": [],
+            "failed": [],
+        }
 
     urls = [feed["url"] for feed in feeds]
+    status_msg(f"Fetching {len(urls)} feeds...")
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        MofNCompleteColumn(),
-        TimeElapsedColumn(),
-        console=console,
-    ) as progress:
-        task_id = progress.add_task("Fetching feeds", total=len(urls))
-
-        summary = await get_fetch_summary(
-            urls,
-            delay,
-            db_path,
-            on_feed_done=lambda _: progress.advance(task_id),
-        )
-
-    table = Table(title="Feed Summary")
-    table.add_column("Feed Title", style="cyan")
-    table.add_column("Entries", justify="right", style="green")
-    table.add_column("Valid", justify="right", style="yellow")
-    table.add_column("URL", style="dim")
-
-    for result in summary.successful:
-        table.add_row(
-            result.title or "Unknown",
-            str(result.entry_count),
-            str(result.valid_articles_count),
-            result.url,
-        )
-
-    console.print(table)
-    console.print(
-        f"Total: {len(summary.successful)} feeds, "
-        f"{sum(r.entry_count for r in summary.successful)} entries, "
-        f"{sum(r.valid_articles_count for r in summary.successful)} valid"
+    summary = await get_fetch_summary(
+        urls,
+        delay,
+        db_path,
+        on_feed_done=lambda _: None,
     )
-    console.print(f"Success rate: {summary.success_rate:.1f}%")
 
-    if summary.failed:
-        failed_table = Table(title="Failed Feeds", style="red")
-        failed_table.add_column("URL", style="cyan")
-        failed_table.add_column("Error", style="red")
+    total_entries = sum(r.entry_count for r in summary.successful)
+    total_valid = sum(r.valid_articles_count for r in summary.successful)
+    total_feeds = len(summary.successful) + len(summary.failed)
+    success_rate = (
+        (len(summary.successful) / total_feeds * 100)
+        if total_feeds > 0
+        else 0.0
+    )
 
-        for result in summary.failed:
-            failed_table.add_row(result.url, result.error or "Unknown error")
-
-        console.print(failed_table)
-        console.print(f"Total failed: {len(summary.failed)}")
+    return {
+        "feed_filter": feed_domain,
+        "feeds_fetched": len(summary.successful),
+        "entries": total_entries,
+        "valid": total_valid,
+        "success_rate": round(success_rate, 1),
+        "successful": [
+            {
+                "title": r.title or "Unknown",
+                "url": r.url,
+                "entries": r.entry_count,
+                "valid": r.valid_articles_count,
+            }
+            for r in summary.successful
+        ],
+        "failed": [
+            {"url": r.url, "error": r.error or "Unknown error"}
+            for r in summary.failed
+        ],
+    }
 
 
 def fetch(
@@ -95,6 +89,8 @@ def fetch(
         "-d",
         help="Delay between requests in seconds",
     ),
+    feed: str = typer.Option(None, "--feed", help="Filter by feed domain"),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Fetch and parse RSS/Atom feeds from URLs stored in the database.
 
@@ -103,5 +99,25 @@ def fetch(
 
     Args:
         delay: Delay between requests in seconds.
+        feed: Optional domain to filter feeds by.
+        output_json: Output as JSON instead of human-readable text.
     """
-    asyncio.run(_fetch(delay))
+    try:
+        data = asyncio.run(_fetch(delay, feed_domain=feed))
+    except SystemExit:
+        raise
+    except Exception as e:
+        emit_error(str(e), as_json=output_json)
+    if output_json:
+        emit_json(data)
+    else:
+        print(
+            f"Fetched {data['feeds_fetched']} feeds, "
+            f"{data['entries']} entries, "
+            f"{data['valid']} valid"
+        )
+        print(f"Success rate: {data['success_rate']}%")
+        if data["failed"]:
+            print(f"Failed: {len(data['failed'])} feeds")
+            for f in data["failed"]:
+                print(f"  - {f['url']}: {f['error']}")

@@ -1,21 +1,19 @@
 """Stats command - show system statistics."""
 
-import json
 import os
 import sqlite3
 from pathlib import Path
 
 import typer
-from rich.table import Table
 
 from database import (
     get_article_stats,
     get_feed_stats,
-    get_run_stats,
+    get_fetch_stats,
     init_database,
 )
 
-from ._common import _fmt_date, console, require_db
+from ._common import _fmt_date, emit_error, emit_json, require_db
 
 
 def _format_size(size_bytes: int) -> str:
@@ -25,6 +23,24 @@ def _format_size(size_bytes: int) -> str:
     if size_bytes > 1024:
         return f"{size_bytes / 1024:.2f} KB"
     return f"{size_bytes} bytes"
+
+
+def _extract_domain(url: str) -> str:
+    """Extract domain from a URL for display purposes.
+
+    Args:
+        url: A URL string.
+
+    Returns:
+        The domain portion of the URL, or the original URL if parsing fails.
+    """
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        return parsed.netloc or url
+    except Exception:
+        return url
 
 
 def _safe_int(value: int | float | str | None) -> int:
@@ -48,14 +64,10 @@ def _collect_stats(db_path: Path, stale_days: int) -> dict:
 
     article = get_article_stats(db_path)
     feed = get_feed_stats(db_path, stale_days)
-    run = get_run_stats(db_path)
+    fetch = get_fetch_stats(db_path)
 
     return {
-        "database": {
-            "path": str(db_path),
-            "size_bytes": db_size,
-            "size_human": _format_size(db_size),
-        },
+        "db_size_mb": round(db_size / (1024 * 1024), 2),
         "articles": {
             "total": _safe_int(article["total"]),
             "parsed": _safe_int(article["parsed"]),
@@ -81,195 +93,94 @@ def _collect_stats(db_path: Path, stale_days: int) -> dict:
             "stale_days": stale_days,
             "top_feeds": feed.get("top_feeds", []),
         },
-        "runs": {
-            "total": _safe_int(run["total_runs"]),
-            "last_run_at": run.get("last_run_at"),
-            "avg_articles_per_run": run.get("avg_articles_per_run"),
-            "recent": run.get("recent_runs", []),
+        "fetches": {
+            "total": _safe_int(fetch["total_runs"]),
+            "last_fetch_at": fetch.get("last_run_at"),
+            "avg_articles_per_fetch": fetch.get("avg_articles_per_run"),
+            "recent": fetch.get("recent_runs", []),
         },
     }
 
 
-def _render_rich(data: dict) -> None:
-    """Render stats as Rich tables and panels.
+def _render_text(data: dict) -> None:
+    """Render stats as simple text output.
 
     Args:
         data: The stats dict from _collect_stats.
     """
-    db = data["database"]
     art = data["articles"]
     sent = data["sentiment"]
     feeds = data["feeds"]
-    runs = data["runs"]
+    fetches = data["fetches"]
 
-    # ── Database ──────────────────────────────────────────
-    tbl = Table(title="Database", show_header=False, min_width=40)
-    tbl.add_column("Metric", style="bold")
-    tbl.add_column("Value")
-    tbl.add_row("Path", db["path"])
-    tbl.add_row("Size", db["size_human"])
-    console.print(tbl)
+    # Database
+    print(f"Database: {data['db_size_mb']} MB")
 
-    # ── Articles ──────────────────────────────────────────
-    tbl = Table(title="Articles", show_header=False, min_width=40)
-    tbl.add_column("Metric", style="bold")
-    tbl.add_column("Value", justify="right")
-    tbl.add_row("Total", f"{art['total']:,}")
-    tbl.add_row("Parsed", f"[green]{art['parsed']:,}[/green]")
-    tbl.add_row("Unparsed", f"{art['unparsed']:,}")
-    tbl.add_row("No content", f"{art['no_content']:,}")
-    tbl.add_row(
-        "Download failures",
-        (
-            f"[red]{art['download_failures']:,}[/red]"
-            if art["download_failures"]
-            else "0"
-        ),
+    # Articles
+    print(
+        f"Articles: {art['total']:,} total, {art['parsed']:,} parsed, "
+        f"{art['unparsed']:,} unparsed, {art['no_content']:,} no content"
     )
-    tbl.add_row(
-        "Parse failures",
-        (
-            f"[red]{art['parse_failures']:,}[/red]"
-            if art["parse_failures"]
-            else "0"
-        ),
+    if art["download_failures"]:
+        print(f"  Download failures: {art['download_failures']:,}")
+    if art["parse_failures"]:
+        print(f"  Parse failures: {art['parse_failures']:,}")
+    print(
+        f"  New today: {art['articles_today']:,}, "
+        f"this week: {art['articles_this_week']:,}"
     )
-    tbl.add_row("New today", f"{art['articles_today']:,}")
-    tbl.add_row("New this week", f"{art['articles_this_week']:,}")
-    console.print(tbl)
 
-    # ── Pipeline Health ───────────────────────────────────
-    tbl = Table(
-        title="Pipeline Health",
-        show_header=False,
-        min_width=40,
-    )
-    tbl.add_column("Metric", style="bold")
-    tbl.add_column("Value", justify="right")
-    tbl.add_row(
-        "Download backlog",
-        (
-            f"[yellow]{art['download_backlog']:,}[/yellow]"
-            if art["download_backlog"]
-            else "[green]0[/green]"
-        ),
-    )
-    tbl.add_row(
-        "Parse backlog",
-        (
-            f"[yellow]{art['parse_backlog']:,}[/yellow]"
-            if art["parse_backlog"]
-            else "[green]0[/green]"
-        ),
+    # Pipeline Health
+    print(
+        f"Pipeline: download backlog {art['download_backlog']:,}, "
+        f"parse backlog {art['parse_backlog']:,}"
     )
     oldest = art.get("oldest_unparsed_at")
-    tbl.add_row(
-        "Oldest unparsed",
-        _fmt_date(oldest) if oldest else "[green]—[/green]",
-    )
-    console.print(tbl)
+    if oldest:
+        print(f"  Oldest unparsed: {_fmt_date(oldest)}")
 
+    # Sentiment
     total_sent = sent["positive"] + sent["negative"] + sent["neutral"]
     if total_sent > 0:
-        tbl = Table(
-            title="Sentiment Distribution",
-            show_header=False,
-            min_width=40,
+        print(
+            f"Sentiment: positive {sent['positive']:,}, "
+            f"negative {sent['negative']:,}, neutral {sent['neutral']:,}"
         )
-        tbl.add_column("Sentiment", style="bold")
-        tbl.add_column("Count", justify="right")
-        tbl.add_column("%", justify="right")
-        tbl.add_row(
-            "Positive",
-            f"[green]{sent['positive']:,}[/green]",
-            f"{sent['positive'] / total_sent * 100:.1f}%",
-        )
-        tbl.add_row(
-            "Negative",
-            f"[red]{sent['negative']:,}[/red]",
-            f"{sent['negative'] / total_sent * 100:.1f}%",
-        )
-        tbl.add_row(
-            "Neutral",
-            f"{sent['neutral']:,}",
-            f"{sent['neutral'] / total_sent * 100:.1f}%",
-        )
-        console.print(tbl)
 
-    tbl = Table(title="Feeds", show_header=False, min_width=40)
-    tbl.add_column("Metric", style="bold")
-    tbl.add_column("Value", justify="right")
-    tbl.add_row("Total", f"{feeds['total']:,}")
-    tbl.add_row(
-        "Never fetched",
-        (
-            f"[yellow]{feeds['never_fetched']:,}[/yellow]"
-            if feeds["never_fetched"]
-            else "0"
-        ),
+    # Feeds
+    print(
+        f"Feeds: {feeds['total']:,} total, "
+        f"{feeds['never_fetched']:,} never fetched, "
+        f"{feeds['stale']:,} stale (>{feeds['stale_days']}d)"
     )
-    tbl.add_row(
-        f"Stale (>{feeds['stale_days']}d)",
-        f"[red]{feeds['stale']:,}[/red]" if feeds["stale"] else "0",
-    )
-    console.print(tbl)
 
     top = feeds.get("top_feeds", [])
     if top:
-        tbl = Table(title="Top Feeds by Article Count")
-        tbl.add_column("#", justify="right", style="dim")
-        tbl.add_column("Articles", justify="right", style="cyan")
-        tbl.add_column("Title", style="green")
-        tbl.add_column("URL", style="dim")
+        print("Top feeds:")
         for i, f in enumerate(top, 1):
-            title = f.get("title") or "Untitled"
-            url = f.get("url", "")
+            title = f.get("title")
+            if not title:
+                title = _extract_domain(f.get("url", "Unknown"))
             count = _safe_int(f.get("article_count"))
-            # Truncate with ellipsis for readability
-            if len(title) > 50:
-                title = title[:47] + "…"
-            if len(url) > 50:
-                url = url[:47] + "…"
-            tbl.add_row(str(i), f"{count:,}", title, url)
-        console.print(tbl)
+            print(f"  {i}. {title} ({count} articles)")
 
-    tbl = Table(title="Runs", show_header=False, min_width=40)
-    tbl.add_column("Metric", style="bold")
-    tbl.add_column("Value", justify="right")
-    tbl.add_row("Total runs", f"{runs['total']:,}")
-    tbl.add_row("Last run", _fmt_date(runs.get("last_run_at")))
-    avg = runs.get("avg_articles_per_run")
-    tbl.add_row(
-        "Avg articles/run",
-        str(avg) if avg is not None else "—",
-    )
-    console.print(tbl)
-
-    recent = runs.get("recent", [])
+    # Fetches
+    print(f"Fetches: {fetches['total']:,} total")
+    avg = fetches.get("avg_articles_per_fetch")
+    if avg is not None:
+        print(f"  Avg articles/fetch: {avg}")
+    recent = fetches.get("recent", [])
     if recent:
-        tbl = Table(title="Recent Runs")
-        tbl.add_column("ID", justify="right", style="cyan")
-        tbl.add_column("Started", style="dim")
-        tbl.add_column("Status")
-        tbl.add_column("Feeds", justify="right")
-        tbl.add_column("Articles", justify="right")
+        print("Recent fetches:")
         for r in recent:
             status = r.get("status", "unknown")
-            style_map = {
-                "completed": "green",
-                "running": "yellow",
-                "failed": "red",
-            }
-            st = style_map.get(status, "white")
-            icon = {"completed": "✓", "failed": "✗"}.get(status, "…")
-            tbl.add_row(
-                str(r.get("id", "?")),
-                _fmt_date(r.get("started_at")),
-                f"[{st}]{icon} {status}[/{st}]",
-                str(r.get("feeds_fetched", 0)),
-                str(r.get("articles_found", 0)),
+            icon = {"completed": "+", "failed": "x"}.get(status, "~")
+            print(
+                f"  [{icon}] #{r.get('id', '?')} "
+                f"{_fmt_date(r.get('started_at'))} - {status} "
+                f"({r.get('feeds_fetched', 0)} feeds, "
+                f"{r.get('articles_found', 0)} articles)"
             )
-        console.print(tbl)
 
 
 def stats(
@@ -296,10 +207,11 @@ def stats(
     try:
         data = _collect_stats(db_path, stale_days)
     except sqlite3.DatabaseError as exc:
-        console.print(f"[red]Database error: {exc}[/red]")
-        raise typer.Exit(code=1) from exc
+        emit_error(f"Database error: {exc}", as_json=output_json)
+    except Exception as exc:
+        emit_error(str(exc), as_json=output_json)
 
     if output_json:
-        console.print_json(json.dumps(data, default=str))
+        emit_json(data)
     else:
-        _render_rich(data)
+        _render_text(data)

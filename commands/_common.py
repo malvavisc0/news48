@@ -1,17 +1,17 @@
 """Shared utilities for CLI commands."""
 
+import json
+import sys
 from datetime import datetime
 from pathlib import Path
+from typing import NoReturn
 
 import typer
-from rich.console import Console
 
 from config import Database as DbConfig
 
 DEFAULT_DELAY = 0.5
 DATE_FMT = "%Y-%m-%d %H:%M"
-
-console = Console(width=120)
 
 
 def _fmt_date(iso_str: str | None) -> str:
@@ -28,6 +28,29 @@ def _fmt_date(iso_str: str | None) -> str:
 def require_db() -> Path:
     """Return the DB path or exit with an error."""
     if not DbConfig.path:
-        console.print("[red]DATABASE_PATH not configured[/red]")
+        print("DATABASE_PATH not configured", file=sys.stderr)
         raise typer.Exit(code=1)
     return DbConfig.path
+
+
+def emit_json(data: dict) -> None:
+    """Output data as JSON to stdout."""
+    json.dump(data, sys.stdout, default=str, indent=2)
+    print()
+
+
+def emit_error(msg: str, as_json: bool = False) -> NoReturn:
+    """Output an error message. JSON to stdout if as_json, else stderr.
+
+    Always raises typer.Exit(code=1) after outputting.
+    """
+    if as_json:
+        emit_json({"error": msg})
+    else:
+        print(f"Error: {msg}", file=sys.stderr)
+    raise typer.Exit(code=1)
+
+
+def status_msg(msg: str) -> None:
+    """Print a status/progress message to stderr."""
+    print(msg, file=sys.stderr)
