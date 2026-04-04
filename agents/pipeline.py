@@ -60,7 +60,7 @@ def get_agent() -> FunctionAgent:
     )
 
 
-async def run(task: str) -> str:
+async def run(task: str):
     """Run the Pipeline Agent with a task prompt.
 
     Args:
@@ -70,10 +70,9 @@ async def run(task: str) -> str:
     Returns:
         The agent final response text.
     """
-    agent = get_agent()
-    handler = agent.run(user_msg=task, max_iterations=500)
 
     final_response = ""
+    handler = get_agent().run(user_msg=task, max_iterations=500)
     async for event in handler.stream_events():
         if isinstance(event, ToolCall):
             logger.info(

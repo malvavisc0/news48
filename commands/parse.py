@@ -17,6 +17,8 @@ from agents import get_news_parser_agent
 from agents.parser import NewsParsingResult
 from config import ParserAgent as ParserAgentConfig
 from database import (
+    claim_articles_for_processing,
+    clear_article_processing_claim,
     get_article_by_id,
     get_parse_failed_articles,
     get_unparsed_articles,
@@ -57,6 +59,7 @@ async def _parse(
     retry: bool = False,
     feed_domain: str | None = None,
     article_id: int | None = None,
+    force: bool = False,
 ) -> dict:
     """Parse unparsed articles from the database.
 
@@ -71,6 +74,7 @@ async def _parse(
         A dict with parse results.
     """
     db_path = require_db()
+    claim_owner = f"parse:{os.getpid()}"
 
     init_database(db_path)
 
@@ -83,15 +87,61 @@ async def _parse(
                 "error": f"Article {article_id} has no content. "
                 "Download it first."
             }
-        reset_article_parse(db_path, article_id)
+        if article.get("parsed_at") and not force:
+            return {
+                "error": (
+                    f"Article {article_id} is already parsed. "
+                    "Use --force to parse it again."
+                )
+            }
+        if force or retry or article.get("parse_failed"):
+            reset_article_parse(db_path, article_id)
+        claimed = claim_articles_for_processing(
+            db_path,
+            [article_id],
+            "parse",
+            claim_owner,
+            force=force,
+        )
+        if article_id not in claimed:
+            return {
+                "error": (
+                    f"Article {article_id} is already being processed. "
+                    "Use --force to override the active claim."
+                )
+            }
         articles = [article]
         status_msg(f"Parsing article {article_id}")
     elif retry:
-        articles = get_parse_failed_articles(
+        candidates = get_parse_failed_articles(
             db_path, limit, feed_domain=feed_domain
         )
-        if not articles:
+        if not candidates:
             status_msg("No failed articles found to retry")
+            return {
+                "feed_filter": feed_domain,
+                "parsed": 0,
+                "failed": 0,
+                "total": 0,
+                "retry": True,
+                "results": [],
+            }
+        claimed = set(
+            claim_articles_for_processing(
+                db_path,
+                [article["id"] for article in candidates],
+                "parse",
+                claim_owner,
+                force=force,
+            )
+        )
+        articles = [
+            article for article in candidates if article["id"] in claimed
+        ]
+        if not articles:
+            status_msg(
+                "All failed parse candidates are already being processed"
+            )
             return {
                 "feed_filter": feed_domain,
                 "parsed": 0,
@@ -102,11 +152,33 @@ async def _parse(
             }
         status_msg(f"Found {len(articles)} failed articles to retry")
     else:
-        articles = get_unparsed_articles(
+        candidates = get_unparsed_articles(
             db_path, limit, feed_domain=feed_domain
         )
-        if not articles:
+        if not candidates:
             status_msg("No unparsed articles found")
+            return {
+                "feed_filter": feed_domain,
+                "parsed": 0,
+                "failed": 0,
+                "total": 0,
+                "retry": False,
+                "results": [],
+            }
+        claimed = set(
+            claim_articles_for_processing(
+                db_path,
+                [article["id"] for article in candidates],
+                "parse",
+                claim_owner,
+                force=force,
+            )
+        )
+        articles = [
+            article for article in candidates if article["id"] in claimed
+        ]
+        if not articles:
+            status_msg("All unparsed articles are already being processed")
             return {
                 "feed_filter": feed_domain,
                 "parsed": 0,
@@ -242,6 +314,11 @@ async def _parse(
                 }
             )
         finally:
+            clear_article_processing_claim(
+                db_path,
+                article["id"],
+                owner=claim_owner,
+            )
             if tmp_path:
                 try:
                     os.unlink(tmp_path)
@@ -272,6 +349,12 @@ def parse(
     feed: str = typer.Option(None, "--feed", help="Filter by feed domain"),
     article: int = typer.Option(
         None, "--article", help="Parse a specific article by ID"
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Override active claims or re-parse a specific article",
     ),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
@@ -307,6 +390,7 @@ def parse(
                 retry=retry,
                 feed_domain=feed,
                 article_id=article,
+                force=force,
             )
         )
     except SystemExit:

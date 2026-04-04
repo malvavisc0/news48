@@ -59,20 +59,16 @@ def get_agent() -> FunctionAgent:
     )
 
 
-async def run(task: str) -> str:
+async def run(task: str):
     """Run the Reporter Agent with a task prompt.
 
     Args:
         task: What to do, e.g., "Generate a daily pipeline report"
               or "Write a weekly summary of system activity".
-
-    Returns:
-        The agent final response text.
     """
-    agent = get_agent()
-    handler = agent.run(user_msg=task, max_iterations=500)
 
     final_response = ""
+    handler = get_agent().run(user_msg=task, max_iterations=500)
     async for event in handler.stream_events():
         if isinstance(event, ToolCall):
             logger.info(
@@ -97,5 +93,3 @@ async def run(task: str) -> str:
         elif isinstance(event, AgentStream):
             final_response += event.delta
             print(event.delta, end="", flush=True)
-
-    return final_response

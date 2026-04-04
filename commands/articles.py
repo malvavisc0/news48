@@ -1,10 +1,13 @@
 """Articles sub-app - manage articles in the database (list, info)."""
 
+import os
 import sys
 
 import typer
 
 from database import (
+    claim_articles_for_processing,
+    clear_article_processing_claim,
     delete_article,
     get_article_by_id,
     get_article_by_url,
@@ -114,6 +117,9 @@ def list_articles(
                 "url": a["url"],
                 "feed_url": a["feed_url"],
                 "status": _article_status(a),
+                "processing_status": a.get("processing_status"),
+                "processing_owner": a.get("processing_owner"),
+                "processing_started_at": a.get("processing_started_at"),
                 "created_at": a["created_at"],
             }
         )
@@ -204,6 +210,11 @@ def article_info(
             "result": article.get("fact_check_result"),
             "checked_at": article.get("fact_checked_at"),
         },
+        "processing": {
+            "status": article.get("processing_status"),
+            "owner": article.get("processing_owner"),
+            "started_at": article.get("processing_started_at"),
+        },
         "errors": {
             "download_error": article.get("download_error"),
             "parse_error": article.get("parse_error"),
@@ -235,6 +246,12 @@ def article_info(
             if fc["result"]:
                 print(f"  Result:      {fc['result']}")
             print(f"  Checked at:  {_fmt_date(fc['checked_at'])}")
+        proc = data["processing"]
+        if proc["status"]:
+            print(f"Processing:    {proc['status']}")
+            if proc["owner"]:
+                print(f"  Owner:       {proc['owner']}")
+            print(f"  Started at:  {_fmt_date(proc['started_at'])}")
         if data["errors"]["download_error"]:
             print(f"Download error: {data['errors']['download_error']}")
         if data["errors"]["parse_error"]:
@@ -435,6 +452,12 @@ def check_article(
         "-r",
         help="Free-text summary of the fact-check assessment",
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Overwrite an existing fact-check result and override active claims",
+    ),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Set the fact-check status and result for an article."""
@@ -471,12 +494,49 @@ def check_article(
             as_json=output_json,
         )
 
-    updated = update_article_fact_check(
+    if article.get("fact_check_status") and not force:
+        emit_error(
+            f"Article {article['id']} is already fact-checked. "
+            "Use --force to overwrite the existing result.",
+            as_json=output_json,
+        )
+
+    claim_owner = f"fact_check:{os.getpid()}"
+    claimed = claim_articles_for_processing(
         db_path,
-        article["id"],
-        status=status.lower(),
-        result=result,
+        [article["id"]],
+        "fact_check",
+        claim_owner,
+        force=force,
     )
+    if article["id"] not in claimed:
+        emit_error(
+            f"Article {article['id']} is already being processed. "
+            "Use --force to override the active claim.",
+            as_json=output_json,
+        )
+
+    try:
+        updated = update_article_fact_check(
+            db_path,
+            article["id"],
+            status=status.lower(),
+            result=result,
+            force=force,
+        )
+    finally:
+        clear_article_processing_claim(
+            db_path,
+            article["id"],
+            owner=claim_owner,
+        )
+
+    if not updated:
+        emit_error(
+            f"Article {article['id']} could not be updated. "
+            "It may already have a fact-check result.",
+            as_json=output_json,
+        )
 
     data = {
         "checked": updated,

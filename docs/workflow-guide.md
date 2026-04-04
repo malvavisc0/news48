@@ -4,13 +4,21 @@ This guide explains the end-to-end workflow for using the `news48` CLI to fetch,
 
 ## Overview
 
-The news48 pipeline consists of five main stages:
+The system has two related workflows:
+
+1. **Setup**: seed feeds into the database when onboarding or changing sources
+2. **Recurring pipeline cycle**: fetch -> download -> parse -> cleanup
+
+Autonomous agents and the orchestrator sit above that recurring cycle; they are not a separate pipeline stage.
 
 ```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│   1. Seed   │───▶│  2. Fetch   │───▶│  3. Download │───▶│   4. Parse  │───▶│ 5. Maintain │
-│  (Feeds)    │    │  (Articles) │    │  (Content)   │    │  (Analysis) │    │ (Autonomous)│
-└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+Setup: seed feeds
+
+Recurring cycle:
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│    Fetch    │───▶│  Download   │───▶│    Parse    │───▶│   Cleanup   │
+│ (metadata)  │    │   (HTML)    │    │ (analysis)  │    │ (retention) │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
 ```
 
 ---
@@ -446,7 +454,7 @@ uv run news48 parse --article 42
 
 ---
 
-## Stage 5: Agent-Based Management
+## Autonomous Agents and Scheduling
 
 The news48 system uses LlamaIndex `FunctionAgent` instances for autonomous pipeline execution, monitoring, and reporting. All agents share a consistent interface: `get_agent()` returns the configured agent, and `run(task)` executes it with a task prompt.
 
@@ -496,6 +504,7 @@ uv run news48 agents report --type monthly
 ### What Each Agent Does
 
 #### Pipeline Agent
+- Reviews system status before planning or execution
 - Runs the full news48 pipeline: fetch, download, parse, cleanup
 - Executes stages one at a time, inspects results between stages
 - Handles failures with retries
@@ -561,13 +570,13 @@ The orchestrator runs agents on a schedule:
 
 | Operation | Manual CLI Command | Autonomous Agent |
 |-----------|-------------------|------------------|
-| Run full pipeline | `uv run news48 fetch && download && parse` | Pipeline Agent (every 60 min) |
+| Run recurring pipeline cycle | `uv run news48 fetch && uv run news48 download --limit 10 && uv run news48 parse --limit 10 && uv run news48 cleanup purge --force` | Pipeline Agent (every 60 min) |
 | Purge old articles | `uv run news48 cleanup purge --force` | Pipeline Agent (end of cycle) |
 | Check database health | `uv run news48 cleanup health` | Monitor Agent (every 15 min) |
 | View retention status | `uv run news48 cleanup status` | Monitor Agent (alerts) |
 | View system stats | `uv run news48 stats` | Reporter Agent (daily reports) |
-| Generate reports | Manual via `uv run news48 stats` | Reporter Agent (scheduled) |
-| Fact-check an article | `uv run news48 articles check <id> --status verified` | Checker Agent (every 6 hours) |
+| Read stored article content | `uv run news48 articles content <id> --json` | Pipeline Agent or Checker Agent during investigation |
+| Set fact-check verdict | `uv run news48 articles check <id> --status verified --result "..." --json` | Checker Agent (every 6 hours) |
 | List fact-checked articles | `uv run news48 articles list --status fact-checked` | Checker Agent (automatic) |
 
 **Key Principle**: Use Manual CLI for one-off operations and troubleshooting. Use Autonomous Agents for scheduled, recurring maintenance.

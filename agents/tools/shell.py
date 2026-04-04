@@ -1,10 +1,38 @@
 import os
+import shlex
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 from agents.tools._helpers import _get_function_name, _safe_json
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_MAIN_MODULE_PATH = _PROJECT_ROOT / "main.py"
+
+
+def _prepare_shell_command(command: str) -> tuple[list[str], str]:
+    """Prepare a shell command with a bound ``news48`` function.
+
+    The function ensures that any ``news48`` invocation uses the same Python
+    interpreter that is currently running the agent tool.
+
+    Args:
+        command: The raw shell command requested by the agent.
+
+    Returns:
+        A tuple of (argv, resolved_command_string).
+    """
+    python_bin = shlex.quote(sys.executable)
+    main_path = shlex.quote(str(_MAIN_MODULE_PATH))
+
+    normalized = command.replace("uv run news48", "news48")
+    resolved_command = (
+        "news48() { " f'{python_bin} {main_path} "$@"; ' "}\n" f"{normalized}"
+    )
+    return ["/bin/bash", "-lc", resolved_command], resolved_command
 
 
 def run_shell_command(
@@ -44,9 +72,9 @@ def run_shell_command(
     working_dir = os.getcwd()
 
     try:
+        argv, resolved_command = _prepare_shell_command(command)
         result = subprocess.run(
-            command,
-            shell=True,
+            argv,
             cwd=working_dir,
             env=env_vars,
             capture_output=True,
@@ -59,6 +87,8 @@ def run_shell_command(
             "stderr": result.stderr,
             "return_code": result.returncode,
             "execution_time": time.time() - start_time,
+            "resolved_command": resolved_command,
+            "python_executable": sys.executable,
         }
         return _safe_json(
             {

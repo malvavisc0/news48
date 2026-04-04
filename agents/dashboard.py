@@ -1,0 +1,187 @@
+"""Rich Live dashboard that tails agent log files."""
+
+import threading
+import time
+from collections import deque
+from typing import Dict
+
+from rich.align import Align
+from rich.layout import Layout
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+
+_AGENT_NAMES = ["pipeline", "monitor", "checker", "reporter"]
+
+_AGENT_COLORS = {
+    "pipeline": "blue",
+    "monitor": "green",
+    "reporter": "yellow",
+    "checker": "red",
+}
+
+_HEADER_ROWS = 3
+_FOOTER_ROWS = 3
+_PANEL_BORDER_ROWS = 2  # top + bottom border per panel
+
+
+class EventBuffer:
+    """Thread-safe ring buffer for agent log lines."""
+
+    def __init__(self, max_lines: int = 100):
+        self._buffer: deque[str] = deque(maxlen=max_lines)
+        self._lock = threading.Lock()
+
+    def append(self, line: str) -> None:
+        with self._lock:
+            self._buffer.append(line)
+
+    def get_lines(self) -> list[str]:
+        with self._lock:
+            return list(self._buffer)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._buffer.clear()
+
+
+_FLUSH_INTERVAL = 1.0  # seconds before flushing partial line
+
+
+def tail_file_stream(
+    log_file: str, buffer: EventBuffer, stop_event: threading.Event
+) -> None:
+    """Tail a log file, appending new lines to the buffer.
+
+    Reads from the start (fresh per-run logs). Runs until stop_event
+    is set or the file is deleted.
+
+    Buffers partial lines (tokens flushed without newlines) and only
+    emits a line when a real newline arrives or after
+    ``_FLUSH_INTERVAL`` seconds so the dashboard shows coherent
+    sentences instead of individual tokens.
+    """
+    try:
+        with open(log_file, "r", encoding="utf-8") as f:
+            partial = ""
+            partial_start: float = 0.0
+            while not stop_event.is_set():
+                line = f.readline()
+                if line:
+                    if line.endswith("\n"):
+                        full = partial + line.rstrip("\n")
+                        partial = ""
+                        partial_start = 0.0
+                        if full:
+                            buffer.append(full)
+                    else:
+                        if not partial:
+                            partial_start = time.monotonic()
+                        partial += line
+                else:
+                    time.sleep(0.1)
+
+                # Time-based flush for streaming tokens
+                if partial and partial_start:
+                    elapsed = time.monotonic() - partial_start
+                    if elapsed >= _FLUSH_INTERVAL:
+                        buffer.append(partial)
+                        partial = ""
+                        partial_start = 0.0
+    except (OSError, FileNotFoundError):
+        pass
+
+
+class Dashboard:
+    """Rich Live dashboard that tails agent log files.
+
+    Fills 90% of the terminal width and height. Dynamically adapts
+    the number of visible log lines per panel when the terminal is
+    resized.
+    """
+
+    def __init__(self, tick_seconds: int):
+        from rich.console import Console
+
+        self.console = Console()
+        self.buffers: Dict[str, EventBuffer] = {}
+        self.agent_status: Dict[str, str] = {}
+        self.tick_seconds = tick_seconds
+
+    def render(self) -> Align:
+        # Read current terminal size (supports live resize)
+        term_width, term_height = self.console.size
+        usable_width = int(term_width * 0.9)
+        usable_height = int(term_height * 0.9)
+
+        # Calculate how many log lines fit per panel:
+        # usable_height - header - footer = agent area
+        # agent area / 2 rows of panels - panel border = content lines
+        agent_area = usable_height - _HEADER_ROWS - _FOOTER_ROWS
+        lines_per_panel = max(3, (agent_area // 2) - _PANEL_BORDER_ROWS)
+
+        layout = Layout(size=usable_height)
+        layout.split_column(
+            Layout(name="header", size=_HEADER_ROWS),
+            Layout(name="agents"),
+            Layout(name="footer", size=_FOOTER_ROWS),
+        )
+
+        # Header
+        header = Table(show_header=False, border_style="dim", padding=(0, 1))
+        header.add_column("title", style="bold white")
+        header.add_column("tick", style="cyan", justify="right")
+        header.add_row(" news48 dashboard", f"Tick: {self.tick_seconds}s")
+        layout["header"].update(header)
+
+        # Agent panels - 2x2 grid via nested Layout splits
+        panels = []
+        for name in _AGENT_NAMES:
+            color = _AGENT_COLORS.get(name, "white")
+            buffer = self.buffers.get(name)
+            if buffer:
+                lines = buffer.get_lines()
+                content = Text()
+                for line in lines[-lines_per_panel:]:
+                    content.append(line + "\n", style=f"{color} dim")
+            else:
+                content = Text("Waiting...", style="dim")
+
+            status = self.agent_status.get(name, "idle")
+            title_extra = f" [{status}]" if status != "idle" else ""
+            panels.append(
+                Panel(
+                    content,
+                    title=f"[bold {color}]{name}{title_extra}[/]",
+                    border_style=color,
+                )
+            )
+
+        agents_layout = Layout()
+        agents_layout.split_column(
+            Layout(name="top_row"),
+            Layout(name="bottom_row"),
+        )
+        agents_layout["top_row"].split_row(
+            Layout(panels[0]), Layout(panels[1])
+        )
+        agents_layout["bottom_row"].split_row(
+            Layout(panels[2]), Layout(panels[3])
+        )
+        layout["agents"].update(agents_layout)
+
+        # Footer - status summary
+        parts = []
+        running = [n for n, s in self.agent_status.items() if s == "running"]
+        completed = [
+            n for n, s in self.agent_status.items() if s == "completed"
+        ]
+        if completed:
+            parts.append(f"Completed: {', '.join(completed)}")
+        if running:
+            parts.append(f"Running: {', '.join(running)}")
+        footer_text = "  " + "  |  ".join(parts) if parts else "  Idle"
+        layout["footer"].update(Text(footer_text, style="dim"))
+
+        # Center horizontally at 90% width
+        return Align.center(layout, width=usable_width)

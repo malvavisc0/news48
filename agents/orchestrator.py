@@ -9,8 +9,8 @@ Supports two modes:
 import json
 import logging
 import os
+import signal
 import subprocess
-import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -54,17 +54,19 @@ DEFAULT_SCHEDULES: Dict[str, AgentSchedule] = {
     "pipeline": AgentSchedule(
         agent_name="pipeline",
         task_prompt=(
-            "Run a full pipeline cycle: fetch all feeds, download up to "
-            "20 articles, parse up to 10 articles, then purge expired "
-            "articles."
+            "Run a full pipeline cycle: fetch all feeds to update article "
+            "metadata, then for each feed domain check for empty articles "
+            "and fork a download process per domain, then for each feed "
+            "domain check for downloaded-but-unparsed articles and fork a "
+            "parse process per domain, then purge expired articles."
         ),
-        interval_minutes=60,
+        interval_minutes=120,
     ),
     "monitor": AgentSchedule(
         agent_name="monitor",
         task_prompt="Perform a full system health check and report any "
         "issues.",
-        interval_minutes=15,
+        interval_minutes=5,
     ),
     "reporter": AgentSchedule(
         agent_name="reporter",
@@ -110,10 +112,6 @@ class Orchestrator:
             for name, s in DEFAULT_SCHEDULES.items()
         }
         self.running: Dict[str, RunningAgent] = {}
-
-    # ------------------------------------------------------------------
-    # Persistent state
-    # ------------------------------------------------------------------
 
     def load_state(self) -> None:
         """Load schedule state from ``.orchestrator.json``.
@@ -187,10 +185,6 @@ class Orchestrator:
         except OSError as exc:
             logger.error(f"Could not save state: {exc}")
 
-    # ------------------------------------------------------------------
-    # Schedule logic
-    # ------------------------------------------------------------------
-
     def _should_run(self, schedule: AgentSchedule) -> bool:
         """Check if an agent should run based on its schedule."""
         if not schedule.enabled:
@@ -206,10 +200,6 @@ class Orchestrator:
             return (now - last_run) >= interval
         except (ValueError, TypeError):
             return True
-
-    # ------------------------------------------------------------------
-    # Inline execution (agents run -- one-shot mode)
-    # ------------------------------------------------------------------
 
     async def run_agent(self, name: str, task: str) -> Dict[str, Any]:
         """Run a specific agent inline with a task prompt.
@@ -279,10 +269,6 @@ class Orchestrator:
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
-    # ------------------------------------------------------------------
-    # Forked execution (agents start -- daemon mode)
-    # ------------------------------------------------------------------
-
     def fork_agent(self, name: str, task: Optional[str] = None) -> bool:
         """Fork an agent as an independent subprocess.
 
@@ -309,20 +295,6 @@ class Orchestrator:
         log_file = str(_LOGS_DIR / f"{name}-{timestamp}.log")
 
         cmd = [
-            sys.executable,
-            "-m",
-            "news48",
-            "agents",
-            "run",
-            "--agent",
-            name,
-            "--json",
-        ]
-        if task:
-            cmd.extend(["--task", task])
-
-        # Also try using `uv run` if available
-        cmd = [
             "uv",
             "run",
             "news48",
@@ -344,6 +316,7 @@ class Orchestrator:
                 cwd=os.getcwd(),
                 start_new_session=True,  # Detach from parent
             )
+            log_fh.close()  # Child inherited the fd
             self.running[name] = RunningAgent(
                 pid=proc.pid,
                 agent_name=name,
@@ -502,6 +475,55 @@ class Orchestrator:
         except KeyboardInterrupt:
             logger.info("Orchestrator stopped by user")
             self.save_state()
+
+    # ------------------------------------------------------------------
+    # Stop
+    # ------------------------------------------------------------------
+
+    def stop_agent(self, name: str) -> Dict[str, Any]:
+        """Stop a running agent: SIGTERM, wait 5s, then SIGKILL."""
+        if name not in self.running:
+            return {"stopped": [], "already_stopped": [name]}
+
+        running = self.running[name]
+        pid = running.pid
+
+        # Send SIGTERM to process group
+        try:
+            os.killpg(os.getpgid(pid), signal.SIGTERM)
+        except OSError:
+            pass
+
+        # Wait up to 5 seconds
+        for _ in range(50):
+            time.sleep(0.1)
+            if not _is_process_alive(pid):
+                break
+        else:
+            try:
+                os.killpg(os.getpgid(pid), signal.SIGKILL)
+            except OSError:
+                pass
+
+        # Update schedule
+        schedule = self.schedules.get(name)
+        if schedule:
+            schedule.last_run = running.started_at
+            schedule.last_result = "stopped"
+            schedule.last_error = "Stopped by user"
+
+        del self.running[name]
+        self.save_state()
+        return {"stopped": [name], "already_stopped": []}
+
+    def stop_all(self) -> Dict[str, Any]:
+        """Stop all running agents."""
+        stopped, already = [], []
+        for name in list(self.running.keys()):
+            result = self.stop_agent(name)
+            stopped.extend(result["stopped"])
+            already.extend(result["already_stopped"])
+        return {"stopped": stopped, "already_stopped": already}
 
     # ------------------------------------------------------------------
     # Status

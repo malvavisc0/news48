@@ -12,6 +12,7 @@ wheels/
 
 .files/
 .logs/
+.plans/
 .orchestrator.json
 
 # SQLite database

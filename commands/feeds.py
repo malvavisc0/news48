@@ -62,7 +62,7 @@ async def _list_feeds(limit: int, offset: int) -> dict:
 @feeds_app.command(name="list")
 def list_feeds(
     limit: int = typer.Option(
-        20, "--limit", "-l", help="Number of feeds to show"
+        1000, "--limit", "-l", help="Number of feeds to show"
     ),
     offset: int = typer.Option(
         0, "--offset", "-o", help="Number of feeds to skip"

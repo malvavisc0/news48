@@ -1,14 +1,10 @@
-"""Tests for the agent modules."""
+"""Non-LLM tests for orchestrator scheduling behavior."""
 
 from agents.orchestrator import AgentSchedule, Orchestrator
 
-# ---------------------------------------------------------------------------
-# Orchestrator tests (no LLM required)
-# ---------------------------------------------------------------------------
-
 
 class TestAgentSchedule:
-    """Tests for AgentSchedule dataclass."""
+    """Tests for [`AgentSchedule`](agents/orchestrator.py:27)."""
 
     def test_default_values(self):
         schedule = AgentSchedule(
@@ -35,7 +31,7 @@ class TestAgentSchedule:
 
 
 class TestOrchestrator:
-    """Tests for the Orchestrator dispatcher."""
+    """Pure scheduler tests that do not import LLM-backed agent modules."""
 
     def test_default_schedules(self):
         orchestrator = Orchestrator()
@@ -46,8 +42,8 @@ class TestOrchestrator:
 
     def test_default_schedule_intervals(self):
         orchestrator = Orchestrator()
-        assert orchestrator.schedules["pipeline"].interval_minutes == 60
-        assert orchestrator.schedules["monitor"].interval_minutes == 15
+        assert orchestrator.schedules["pipeline"].interval_minutes == 120
+        assert orchestrator.schedules["monitor"].interval_minutes == 5
         assert orchestrator.schedules["reporter"].interval_minutes == 1440
         assert orchestrator.schedules["checker"].interval_minutes == 360
 
@@ -163,75 +159,3 @@ class TestOrchestrator:
         result = asyncio.run(orchestrator.run_due_agents())
         assert result["agents_run"] == []
         assert result["results"] == {}
-
-    def test_run_due_agents_all_due(self):
-        import asyncio
-
-        schedules = {
-            "monitor": AgentSchedule(
-                agent_name="monitor",
-                task_prompt="Check",
-                interval_minutes=15,
-            ),
-        }
-        orchestrator = Orchestrator(schedules=schedules)
-        result = asyncio.run(orchestrator.run_due_agents())
-        assert "monitor" in result["agents_run"]
-        assert "timestamp" in result
-
-
-# ---------------------------------------------------------------------------
-# Agent module import tests (no LLM required)
-# ---------------------------------------------------------------------------
-
-
-class TestAgentImports:
-    """Test that agent modules can be imported."""
-
-    def test_import_pipeline(self):
-        from agents.pipeline import get_agent, run
-
-        assert callable(get_agent)
-        assert callable(run)
-
-    def test_import_monitor(self):
-        from agents.monitor import get_agent, run
-
-        assert callable(get_agent)
-        assert callable(run)
-
-    def test_import_reporter(self):
-        from agents.reporter import get_agent, run
-
-        assert callable(get_agent)
-        assert callable(run)
-
-    def test_import_checker(self):
-        from agents.checker import get_agent, run
-
-        assert callable(get_agent)
-        assert callable(run)
-
-    def test_import_orchestrator(self):
-        from agents.orchestrator import Orchestrator
-
-        assert Orchestrator is not None
-
-    def test_import_parser(self):
-        from agents.parser import NewsParsingResult, get_agent
-
-        assert NewsParsingResult is not None
-        assert callable(get_agent)
-
-    def test_import_package(self):
-        import agents
-
-        assert hasattr(agents, "Orchestrator")
-        assert hasattr(agents, "get_pipeline_agent")
-        assert hasattr(agents, "get_monitor_agent")
-        assert hasattr(agents, "get_reporter_agent")
-        assert hasattr(agents, "get_checker_agent")
-        assert hasattr(agents, "run_pipeline")
-        assert hasattr(agents, "run_monitor")
-        assert hasattr(agents, "run_reporter")
-        assert hasattr(agents, "run_checker")

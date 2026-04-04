@@ -63,20 +63,16 @@ def get_agent() -> FunctionAgent:
     )
 
 
-async def run(task: str) -> str:
+async def run(task: str):
     """Run the Fact Checker Agent with a task prompt.
 
     Args:
         task: What to do, e.g., "Fact-check 3 recently parsed articles"
               or "Verify articles about politics from the last 24 hours".
-
-    Returns:
-        The agent final response text.
     """
-    agent = get_agent()
-    handler = agent.run(user_msg=task, max_iterations=500)
 
     final_response = ""
+    handler = get_agent().run(user_msg=task, max_iterations=500)
     async for event in handler.stream_events():
         if isinstance(event, ToolCall):
             logger.info(

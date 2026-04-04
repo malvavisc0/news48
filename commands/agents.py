@@ -14,9 +14,11 @@ VALID_AGENTS = ["pipeline", "monitor", "reporter", "checker"]
 
 DEFAULT_TASKS = {
     "pipeline": (
-        "Run a full pipeline cycle: fetch all feeds, download up to "
-        "20 articles, parse up to 10 articles, then purge expired "
-        "articles."
+        "Run a full pipeline cycle: fetch all feeds to update article "
+        "metadata, then for each feed domain check for empty articles "
+        "and fork a download process per domain, then for each feed "
+        "domain check for downloaded-but-unparsed articles and fork a "
+        "parse process per domain, then purge expired articles."
     ),
     "monitor": "Perform a full system health check and report any issues.",
     "reporter": "Generate a daily pipeline report.",
@@ -146,7 +148,6 @@ def agents_start(
         "-t",
         help="Seconds between each scheduling tick (default: 60)",
     ),
-    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Start the orchestrator daemon (continuous scheduling loop).
 
@@ -155,29 +156,179 @@ def agents_start(
     """
     import logging
 
+    from rich.console import Console
+    from rich.table import Table
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(name)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    console = Console()
+    orchestrator = Orchestrator()
+    orchestrator.load_state()
+    status = orchestrator.get_status()
+
+    console.print()
+    console.print(" news48 orchestrator", style="bold white")
+    console.print("─" * 57, style="dim")
+    console.print(f"  Tick interval: [cyan]{tick}s[/cyan]")
+    console.print(
+        "  Dashboard:     [dim]run [cyan]news48 agents dashboard[/cyan] "
+        "in another terminal[/dim]"
+    )
+    console.print()
+
+    table = Table(
+        show_header=True, header_style="bold dim", border_style="dim"
+    )
+    table.add_column("Agent", style="bold", min_width=10)
+    table.add_column("Interval", justify="right", min_width=10)
+    table.add_column("Last Run", min_width=22)
+    table.add_column("Status", min_width=10)
+
+    for name, s in status.items():
+        last = s.get("last_run") or "never"
+        interval = f"{s['interval_minutes']}min"
+        is_running = s.get("running", False)
+        if is_running:
+            status_str = "[green]running[/green]"
+        elif last == "never":
+            status_str = "[cyan]due[/cyan]"
+        else:
+            status_str = "[dim]waiting[/dim]"
+        table.add_row(name, interval, last, status_str)
+
+    console.print(table)
+    console.print()
+
+    orchestrator.start(tick_seconds=tick)
+
+
+@agents_app.command(name="dashboard")
+def agents_dashboard(
+    tick: int = typer.Option(
+        60,
+        "--tick",
+        "-t",
+        help="Tick interval to display (cosmetic, matches orchestrator)",
+    ),
+    refresh: float = typer.Option(
+        0.5,
+        "--refresh",
+        "-r",
+        help="Dashboard refresh interval in seconds",
+    ),
+) -> None:
+    """Live dashboard showing agent output (read-only).
+
+    Connects to a running orchestrator by reading .orchestrator.json
+    and tailing agent log files. Press Ctrl+C to exit.
+    """
+    import json
+    import threading
+    import time
+    from pathlib import Path
+
+    from rich.live import Live
+
+    from agents.dashboard import Dashboard, EventBuffer, tail_file_stream
+
+    STATE_FILE = Path(".orchestrator.json")
+
+    dashboard = Dashboard(tick_seconds=tick)
+    tailers: dict[str, tuple[threading.Thread, threading.Event]] = {}
+
+    def sync_state() -> None:
+        """Read .orchestrator.json and start/stop tailers as needed."""
+        if not STATE_FILE.exists():
+            return
+        try:
+            data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return
+
+        current_running = data.get("running", {})
+
+        # Start tailers for new agents
+        for name, info in current_running.items():
+            log_file = info.get("log_file", "")
+            if name not in tailers and log_file:
+                buffer = EventBuffer(max_lines=100)
+                stop_event = threading.Event()
+                thread = threading.Thread(
+                    target=tail_file_stream,
+                    args=(log_file, buffer, stop_event),
+                    daemon=True,
+                )
+                thread.start()
+                tailers[name] = (thread, stop_event)
+                dashboard.buffers[name] = buffer
+                dashboard.agent_status[name] = "running"
+
+        # Mark completed agents
+        for name in list(tailers.keys()):
+            if name not in current_running:
+                thread, stop_event = tailers.pop(name)
+                stop_event.set()
+                thread.join(timeout=2)
+                dashboard.agent_status[name] = "completed"
+
+    try:
+        with Live(
+            dashboard.render(),
+            refresh_per_second=4,
+            console=dashboard.console,
+        ) as live:
+            last_sync = 0.0
+            while True:
+                now = time.monotonic()
+                if now - last_sync >= 3.0:
+                    sync_state()
+                    last_sync = now
+                live.update(dashboard.render())
+                time.sleep(refresh)
+    except KeyboardInterrupt:
+        # Stop all tailer threads
+        for thread, stop_event in tailers.values():
+            stop_event.set()
+        for thread, stop_event in tailers.values():
+            thread.join(timeout=2)
+        dashboard.console.print("\n  [dim]Dashboard closed.[/dim]")
+
+
+@agents_app.command(name="stop")
+def agents_stop(
+    agent: str = typer.Option(
+        None, "--agent", "-a", help="Specific agent to stop"
+    ),
+    output_json: bool = typer.Option(False, "--json"),
+) -> None:
+    """Stop running agent(s)."""
+    from rich.console import Console
+
+    console = Console()
     orchestrator = Orchestrator()
     orchestrator.load_state()
 
-    if not output_json:
-        status = orchestrator.get_status()
-        print("Orchestrator starting")
-        print(f"  Tick interval: {tick}s")
-        print(f"  Agents: {', '.join(status.keys())}")
-        for name, s in status.items():
-            last = s.get("last_run") or "never"
-            print(
-                f"    {name}: every {s['interval_minutes']}min "
-                f"(last: {last})"
-            )
-        print()
+    if agent:
+        if agent not in VALID_AGENTS:
+            emit_error(f"Unknown agent: {agent}", as_json=output_json)
+            return
+        result = orchestrator.stop_agent(agent)
+    else:
+        result = orchestrator.stop_all()
 
-    orchestrator.start(tick_seconds=tick)
+    if output_json:
+        emit_json(result)
+    else:
+        stopped = result.get("stopped", [])
+        already = result.get("already_stopped", [])
+        if stopped:
+            console.print(f"  Stopped: {', '.join(stopped)}", style="green")
+        if already:
+            console.print(f"  Not running: {', '.join(already)}", style="dim")
 
 
 @agents_app.command(name="report")

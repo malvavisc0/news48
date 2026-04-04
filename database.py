@@ -81,6 +81,9 @@ CREATE TABLE IF NOT EXISTS articles (
     fact_check_status TEXT,
     fact_check_result TEXT,
     fact_checked_at DATETIME,
+    processing_status TEXT,
+    processing_owner TEXT,
+    processing_started_at DATETIME,
     created_at DATETIME NOT NULL,
     FOREIGN KEY (fetch_id) REFERENCES fetches(id),
     FOREIGN KEY (feed_id) REFERENCES feeds(id)
@@ -106,7 +109,20 @@ _MIGRATIONS = [
     "ALTER TABLE articles ADD COLUMN fact_check_status TEXT",
     "ALTER TABLE articles ADD COLUMN fact_check_result TEXT",
     "ALTER TABLE articles ADD COLUMN fact_checked_at DATETIME",
+    "ALTER TABLE articles ADD COLUMN processing_status TEXT",
+    "ALTER TABLE articles ADD COLUMN processing_owner TEXT",
+    "ALTER TABLE articles ADD COLUMN processing_started_at DATETIME",
 ]
+
+_VALID_PROCESSING_ACTIONS = {"download", "parse", "fact_check"}
+_CLAIM_TIMEOUT_MINUTES = 30
+
+
+def _claim_cutoff(minutes: int = _CLAIM_TIMEOUT_MINUTES) -> str:
+    """Return the cutoff timestamp for stale processing claims."""
+    return (
+        datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    ).isoformat()
 
 
 def init_database(db_path: Path) -> None:
@@ -534,6 +550,7 @@ def update_article_fact_check(
     article_id: int,
     status: str,
     result: str | None = None,
+    force: bool = False,
 ) -> bool:
     """Update the fact-check fields of an article.
 
@@ -555,16 +572,129 @@ def update_article_fact_check(
         )
     now = _utcnow()
     with get_connection(db_path) as db:
-        cursor = db.execute(
-            """UPDATE articles
-               SET fact_check_status = ?,
-                   fact_check_result = ?,
-                   fact_checked_at = ?
-               WHERE id = ?""",
-            (status.lower(), result, now, article_id),
-        )
+        if force:
+            cursor = db.execute(
+                """UPDATE articles
+                   SET fact_check_status = ?,
+                       fact_check_result = ?,
+                       fact_checked_at = ?
+                   WHERE id = ?""",
+                (status.lower(), result, now, article_id),
+            )
+        else:
+            cursor = db.execute(
+                """UPDATE articles
+                   SET fact_check_status = ?,
+                       fact_check_result = ?,
+                       fact_checked_at = ?
+                   WHERE id = ?
+                     AND fact_check_status IS NULL""",
+                (status.lower(), result, now, article_id),
+            )
         db.commit()
         return cursor.rowcount > 0
+
+
+def claim_articles_for_processing(
+    db_path: Path,
+    article_ids: list[int],
+    action: str,
+    owner: str,
+    *,
+    force: bool = False,
+    stale_after_minutes: int = _CLAIM_TIMEOUT_MINUTES,
+) -> list[int]:
+    """Claim articles for a processing action.
+
+    Claims are used to reduce duplicate work across concurrent processes.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        article_ids: Candidate article IDs to claim.
+        action: One of download, parse, or fact_check.
+        owner: Identifier for the claiming process.
+        force: If True, overwrite existing claims.
+        stale_after_minutes: Minutes after which a claim is considered stale.
+
+    Returns:
+        The subset of article IDs successfully claimed for the owner.
+    """
+    if not article_ids:
+        return []
+    if action not in _VALID_PROCESSING_ACTIONS:
+        raise ValueError(
+            f"Invalid processing action '{action}'. "
+            f"Valid: {', '.join(sorted(_VALID_PROCESSING_ACTIONS))}"
+        )
+
+    placeholders = ", ".join("?" for _ in article_ids)
+    now = _utcnow()
+    cutoff = _claim_cutoff(stale_after_minutes)
+
+    with get_connection(db_path) as db:
+        db.execute("BEGIN IMMEDIATE")
+        params: list = [action, owner, now, *article_ids]
+        sql = f"""UPDATE articles
+                  SET processing_status = ?,
+                      processing_owner = ?,
+                      processing_started_at = ?
+                  WHERE id IN ({placeholders})"""
+        if not force:
+            sql += """
+                    AND (
+                        processing_status IS NULL
+                        OR processing_started_at IS NULL
+                        OR processing_started_at < ?
+                        OR processing_owner = ?
+                    )"""
+            params.extend([cutoff, owner])
+        db.execute(sql, params)
+
+        cursor = db.execute(
+            f"""SELECT id FROM articles
+                   WHERE id IN ({placeholders})
+                     AND processing_status = ?
+                     AND processing_owner = ?""",
+            [*article_ids, action, owner],
+        )
+        claimed = [int(row[0]) for row in cursor.fetchall()]
+        db.commit()
+        return claimed
+
+
+def clear_article_processing_claim(
+    db_path: Path,
+    article_id: int,
+    owner: str | None = None,
+) -> None:
+    """Clear the processing claim for an article.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        article_id: Article ID to release.
+        owner: Optional owner restriction. If provided, only release claims
+            currently held by that owner.
+    """
+    with get_connection(db_path) as db:
+        if owner is None:
+            db.execute(
+                """UPDATE articles
+                   SET processing_status = NULL,
+                       processing_owner = NULL,
+                       processing_started_at = NULL
+                   WHERE id = ?""",
+                (article_id,),
+            )
+        else:
+            db.execute(
+                """UPDATE articles
+                   SET processing_status = NULL,
+                       processing_owner = NULL,
+                       processing_started_at = NULL
+                   WHERE id = ? AND processing_owner = ?""",
+                (article_id, owner),
+            )
+        db.commit()
 
 
 def get_unparsed_articles(
@@ -820,6 +950,9 @@ def get_articles_paginated(
                        a.parsed_at IS NOT NULL as is_parsed,
                        a.download_failed, a.parse_failed,
                        a.fact_check_status,
+                       a.processing_status,
+                       a.processing_owner,
+                       a.processing_started_at,
                        a.created_at, a.published_at
                 FROM articles a
                 JOIN feeds f ON a.feed_id = f.id
