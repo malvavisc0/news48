@@ -34,7 +34,6 @@ class _LazyEnv:
         self._attr = f"_lazy_{name}"
 
     def __get__(self, obj: Any, objtype: type | None = None) -> Any:
-        # Class-level access (e.g. ParserAgent.model)
         sentinel = object()
         cached = getattr(objtype, self._attr, sentinel)
         if cached is not sentinel:
@@ -45,14 +44,6 @@ class _LazyEnv:
             value = _get_optional_env(self._key, self._cast)
         setattr(objtype, self._attr, value)
         return value
-
-
-class ParserAgent:
-    model = _LazyEnv("MODEL")
-    api_base = _LazyEnv("API_BASE")
-    api_key = _LazyEnv("API_KEY")
-    context_window = _LazyEnv("CONTEXT_WINDOW", int)
-    parsers_path = _LazyEnv("PARSERS_PATH", Path)
 
 
 class Database:

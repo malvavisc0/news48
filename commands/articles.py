@@ -13,10 +13,12 @@ from database import (
     get_article_by_url,
     get_articles_paginated,
     init_database,
+    mark_article_parse_failed,
     reset_article_download,
     reset_article_parse,
     set_article_breaking,
     set_article_featured,
+    update_article,
     update_article_fact_check,
 )
 
@@ -649,3 +651,115 @@ def breaking_article(
     else:
         action = "Marked breaking" if breaking else "Unmarked breaking"
         print(f"{action}: {article['title'] or 'Untitled'}")
+
+
+@articles_app.command(name="update")
+def update_article_cmd(
+    article_id: int = typer.Argument(..., help="Article ID to update"),
+    title: str = typer.Option(None, "--title", help="Improved title"),
+    content_file: str = typer.Option(
+        None, "--content-file", help="File containing parsed content"
+    ),
+    categories: str = typer.Option(
+        None, "--categories", help="Comma-separated categories"
+    ),
+    tags: str = typer.Option(None, "--tags", help="Comma-separated tags"),
+    summary: str = typer.Option(None, "--summary", help="Article summary"),
+    countries: str = typer.Option(
+        None, "--countries", help="Comma-separated countries"
+    ),
+    sentiment: str = typer.Option(
+        None, "--sentiment", help="positive|negative|neutral"
+    ),
+    image_url: str = typer.Option(None, "--image-url", help="Image URL"),
+    language: str = typer.Option(
+        None, "--language", help="ISO 639-1 language code"
+    ),
+    published_at: str = typer.Option(
+        None, "--published-at", help="Publication date"
+    ),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Update article with parsed content and metadata.
+
+    Content MUST be provided via --content-file (no inline content).
+    Sets parsed_at automatically when content-file is provided.
+    """
+    db_path = require_db()
+    init_database(db_path)
+
+    article = get_article_by_id(db_path, article_id)
+    if not article:
+        emit_error(f"Article not found: {article_id}", as_json=output_json)
+
+    # Read content from file
+    actual_content = None
+    if content_file:
+        with open(content_file, "r") as f:
+            actual_content = f.read()
+
+    # Auto-set parsed_at when content is provided
+    parsed_at = None
+    if actual_content:
+        from datetime import datetime, timezone
+
+        parsed_at = datetime.now(timezone.utc).isoformat()
+
+    # Normalize published_at if provided
+    normalized_published_at = None
+    if published_at:
+        from helpers.feed import normalize_published_date
+
+        normalized_published_at = normalize_published_date(published_at)
+
+    update_article(
+        db_path=db_path,
+        article_id=article_id,
+        content=actual_content or article.get("content", ""),
+        title=title,
+        categories=categories,
+        tags=tags,
+        summary=summary,
+        countries=countries,
+        sentiment=sentiment,
+        image_url=image_url,
+        language=language,
+        published_at=normalized_published_at,
+        parsed_at=parsed_at,
+    )
+
+    data = {
+        "updated": True,
+        "id": article_id,
+        "title": title or article["title"],
+        "parsed_at": parsed_at,
+    }
+
+    if output_json:
+        emit_json(data)
+    else:
+        print(f"Updated article {article_id}: {title or article['title']}")
+
+
+@articles_app.command(name="fail")
+def fail_article_cmd(
+    article_id: int = typer.Argument(..., help="Article ID to mark as failed"),
+    error: str = typer.Option(..., "--error", "-e", help="Reason for failure"),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Mark an article as parse-failed with an error message."""
+    db_path = require_db()
+    init_database(db_path)
+
+    article = get_article_by_id(db_path, article_id)
+    if not article:
+        emit_error(f"Article not found: {article_id}", as_json=output_json)
+
+    mark_article_parse_failed(db_path, article_id, error)
+
+    data = {"failed": True, "id": article_id, "error": error}
+
+    if output_json:
+        emit_json(data)
+    else:
+        print(f"Marked article {article_id} as parse-failed: {error}")

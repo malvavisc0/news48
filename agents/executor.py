@@ -22,7 +22,9 @@ def get_agent() -> FunctionAgent:
 
     from agents.tools import (
         claim_plan,
+        fetch_webpage_content,
         get_system_info,
+        perform_web_search,
         read_file,
         run_shell_command,
         update_plan,
@@ -48,6 +50,8 @@ def get_agent() -> FunctionAgent:
             run_shell_command,
             read_file,
             get_system_info,
+            perform_web_search,
+            fetch_webpage_content,
         ],
         system_prompt=load_agent_instructions("executor"),
         verbose=False,

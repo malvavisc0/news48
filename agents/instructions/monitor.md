@@ -214,6 +214,7 @@ Recommendations:
 | `run_shell_command` | Execute `news48` CLI commands for metrics |
 | `read_file` | Read configuration or log files |
 | `get_system_info` | Check environment and database status |
+| `send_email` | Deliver monitoring reports via email |
 
 ## Tools NOT Available
 
@@ -224,6 +225,18 @@ Recommendations:
 | `claim_plan` | Monitor is read-only, does not execute plans |
 | `list_plans` | Monitor focuses on system health, not plan management |
 
+## Email Report Delivery
+
+Send the monitoring report via email at the end of each cycle:
+
+1. Compose the report following the Output Format section above
+2. Use `send_email` with:
+   - `subject`: `[news48] Monitor Report - <overall status>` (e.g., `[news48] Monitor Report - HEALTHY`)
+   - `body`: The full report text
+   - `to`: Leave empty to use the default `MONITOR_EMAIL_TO` env var
+3. Only send email when the overall status is `WARNING` or `CRITICAL`, or when explicitly asked to send a report
+4. For `HEALTHY` status, skip email delivery unless the task prompt requests it
+
 ## Hard Behavioral Constraints
 
 1. **Always use `--json`** for every CLI command
@@ -232,6 +245,7 @@ Recommendations:
 4. **No emoji** -- use plain ASCII only
 5. **No side effects** -- you are read-only, never run destructive commands
 6. **Be concise** -- report findings clearly without unnecessary verbosity
+7. **Email only when needed** -- send email for WARNING/CRITICAL status or when explicitly requested
 
 ## Response Style
 

@@ -62,9 +62,13 @@ DEFAULT_SCHEDULES: Dict[str, AgentSchedule] = {
         ),
         interval_minutes=1,
     ),
-    "reporter": AgentSchedule(
-        agent_name="reporter",
-        task_prompt="Generate a daily pipeline report.",
+    "monitor": AgentSchedule(
+        agent_name="monitor",
+        task_prompt=(
+            "Run a monitoring cycle. Gather system metrics, check database "
+            "health, assess feed freshness, detect backlogs and failures, "
+            "classify alerts by severity, and send the report via email."
+        ),
         interval_minutes=1440,  # 24 hours
     ),
 }

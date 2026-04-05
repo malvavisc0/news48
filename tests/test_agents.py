@@ -38,13 +38,13 @@ class TestOrchestrator:
         orchestrator = Orchestrator()
         assert "planner" in orchestrator.schedules
         assert "executor" in orchestrator.schedules
-        assert "reporter" in orchestrator.schedules
+        assert "monitor" in orchestrator.schedules
 
     def test_default_schedule_intervals(self):
         orchestrator = Orchestrator()
         assert orchestrator.schedules["planner"].interval_minutes == 1
         assert orchestrator.schedules["executor"].interval_minutes == 1
-        assert orchestrator.schedules["reporter"].interval_minutes == 1440
+        assert orchestrator.schedules["monitor"].interval_minutes == 1440
 
     def test_should_run_when_never_run(self):
         schedule = AgentSchedule(
@@ -97,7 +97,7 @@ class TestOrchestrator:
         orchestrator = Orchestrator()
         status = orchestrator.get_status()
 
-        for name in ["planner", "executor", "reporter"]:
+        for name in ["planner", "executor", "monitor"]:
             assert name in status
             assert "enabled" in status[name]
             assert "interval_minutes" in status[name]

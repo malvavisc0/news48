@@ -4,7 +4,7 @@ import re
 import threading
 import time
 from collections import deque
-from typing import Dict
+from typing import Dict, List, Optional
 
 from rich.align import Align
 from rich.layout import Layout
@@ -14,13 +14,10 @@ from rich.text import Text
 
 from agents.streaming import format_log_line
 
-_AGENT_NAMES = ["pipeline", "monitor", "checker", "reporter"]
-
 _AGENT_COLORS = {
-    "pipeline": "blue",
-    "monitor": "green",
-    "reporter": "yellow",
-    "checker": "red",
+    "planner": "blue",
+    "executor": "green",
+    "monitor": "yellow",
 }
 
 _HEADER_ROWS = 3
@@ -126,13 +123,42 @@ class Dashboard:
     resized.
     """
 
-    def __init__(self, tick_seconds: int):
+    def __init__(
+        self,
+        tick_seconds: int,
+        agents: Optional[List[str]] = None,
+    ):
         from rich.console import Console
 
         self.console = Console()
         self.buffers: Dict[str, EventBuffer] = {}
         self.agent_status: Dict[str, str] = {}
         self.tick_seconds = tick_seconds
+        self.agents = agents or ["planner", "executor"]
+
+    def _build_panel(self, name: str, lines_per_panel: int) -> Panel:
+        """Build a single agent panel."""
+        color = _AGENT_COLORS.get(name, "white")
+        buffer = self.buffers.get(name)
+        if buffer:
+            lines = buffer.get_lines()
+            content = Text()
+            for line in lines[-lines_per_panel:]:
+                formatted = format_log_line(line)
+                normalized = _normalize_line(formatted)
+                if not normalized:
+                    continue
+                content.append(normalized + "\n", style=f"{color} dim")
+        else:
+            content = Text("Waiting...", style="dim")
+
+        status = self.agent_status.get(name, "idle")
+        title_extra = f" [{status}]" if status != "idle" else ""
+        return Panel(
+            content,
+            title=f"[bold {color}]{name}{title_extra}[/]",
+            border_style=color,
+        )
 
     def render(self) -> Align:
         # Read current terminal size (supports live resize)
@@ -140,11 +166,17 @@ class Dashboard:
         usable_width = int(term_width * 0.9)
         usable_height = int(term_height * 0.9)
 
-        # Calculate how many log lines fit per panel:
-        # usable_height - header - footer = agent area
-        # agent area / 2 rows of panels - panel border = content lines
+        # Calculate how many log lines fit per panel
+        num_agents = len(self.agents)
+        if num_agents <= 2:
+            panel_rows = 2
+        else:
+            panel_rows = 2  # top row + bottom row
+
         agent_area = usable_height - _HEADER_ROWS - _FOOTER_ROWS
-        lines_per_panel = max(3, (agent_area // 2) - _PANEL_BORDER_ROWS)
+        lines_per_panel = max(
+            3, (agent_area // panel_rows) - _PANEL_BORDER_ROWS
+        )
 
         layout = Layout(size=usable_height)
         layout.split_column(
@@ -160,44 +192,25 @@ class Dashboard:
         header.add_row(" news48 dashboard", f"Tick: {self.tick_seconds}s")
         layout["header"].update(header)
 
-        # Agent panels - 2x2 grid via nested Layout splits
-        panels = []
-        for name in _AGENT_NAMES:
-            color = _AGENT_COLORS.get(name, "white")
-            buffer = self.buffers.get(name)
-            if buffer:
-                lines = buffer.get_lines()
-                content = Text()
-                for line in lines[-lines_per_panel:]:
-                    formatted = format_log_line(line)
-                    normalized = _normalize_line(formatted)
-                    if not normalized:
-                        continue
-                    content.append(normalized + "\n", style=f"{color} dim")
-            else:
-                content = Text("Waiting...", style="dim")
-
-            status = self.agent_status.get(name, "idle")
-            title_extra = f" [{status}]" if status != "idle" else ""
-            panels.append(
-                Panel(
-                    content,
-                    title=f"[bold {color}]{name}{title_extra}[/]",
-                    border_style=color,
-                )
-            )
+        # Agent panels - dynamic layout based on agent count
+        panels = [
+            self._build_panel(name, lines_per_panel) for name in self.agents
+        ]
 
         agents_layout = Layout()
-        agents_layout.split_column(
-            Layout(name="top_row"),
-            Layout(name="bottom_row"),
-        )
-        agents_layout["top_row"].split_row(
-            Layout(panels[0]), Layout(panels[1])
-        )
-        agents_layout["bottom_row"].split_row(
-            Layout(panels[2]), Layout(panels[3])
-        )
+        if len(panels) == 1:
+            agents_layout.update(panels[0])
+        elif len(panels) == 2:
+            agents_layout.split_row(Layout(panels[0]), Layout(panels[1]))
+        elif len(panels) >= 3:
+            agents_layout.split_column(
+                Layout(name="top_row"),
+                Layout(name="bottom_row"),
+            )
+            agents_layout["top_row"].update(panels[0])
+            agents_layout["bottom_row"].split_row(
+                *[Layout(p) for p in panels[1:]]
+            )
         layout["agents"].update(agents_layout)
 
         # Footer - status summary

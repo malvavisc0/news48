@@ -6,13 +6,17 @@ process restarts.
 """
 
 import json
+import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from agents.tools._helpers import _safe_json
 
 _PLANS_DIR = Path(".plans")
+_STALE_PLAN_TIMEOUT_MINUTES = 60
+
+logger = logging.getLogger(__name__)
 
 
 def _ensure_plans_dir() -> Path:
@@ -166,6 +170,9 @@ def create_plan(
             "created_at": timestamp,
             "updated_at": timestamp,
             "steps": plan_steps,
+            "requeue_count": 0,
+            "requeued_at": None,
+            "requeue_reason": None,
         }
 
         _write_plan(plan)
@@ -335,7 +342,63 @@ def _serialize_plan(plan: dict) -> dict:
         },
         "created_at": plan["created_at"],
         "updated_at": plan["updated_at"],
+        "requeue_count": plan.get("requeue_count", 0),
+        "requeued_at": plan.get("requeued_at"),
+        "requeue_reason": plan.get("requeue_reason"),
     }
+
+
+def _is_plan_stale(plan: dict) -> bool:
+    """Check if an executing plan is stale (timed out).
+
+    Args:
+        plan: The plan dict.
+
+    Returns:
+        True if the plan is executing and its updated_at is older
+        than the stale timeout threshold.
+    """
+    if plan.get("status") != "executing":
+        return False
+    updated_at = plan.get("updated_at", "")
+    if not updated_at:
+        return True
+    try:
+        updated = datetime.fromisoformat(updated_at)
+        threshold = timedelta(minutes=_STALE_PLAN_TIMEOUT_MINUTES)
+        return datetime.now(timezone.utc) - updated > threshold
+    except (ValueError, TypeError):
+        return True
+
+
+def _requeue_stale_plan(plan: dict) -> None:
+    """Reset a stale executing plan back to pending.
+
+    Reverts all in_progress steps to pending, increments requeue_count,
+    and sets requeued_at and requeue_reason.
+
+    Args:
+        plan: The plan dict to requeue.
+    """
+    timestamp = _now()
+    plan["status"] = "pending"
+    plan["requeue_count"] = plan.get("requeue_count", 0) + 1
+    plan["requeued_at"] = timestamp
+    plan["requeue_reason"] = (
+        f"Plan was stale: no update for "
+        f"{_STALE_PLAN_TIMEOUT_MINUTES} minutes"
+    )
+    plan["updated_at"] = timestamp
+    for step in plan.get("steps", []):
+        if step.get("status") == "in_progress":
+            step["status"] = "pending"
+            step["updated_at"] = timestamp
+    _write_plan(plan)
+    logger.info(
+        "Requeued stale plan %s (requeue_count=%d)",
+        plan["id"],
+        plan["requeue_count"],
+    )
 
 
 def claim_plan(reason: str) -> str:
@@ -350,6 +413,9 @@ def claim_plan(reason: str) -> str:
     A plan is eligible when:
     - Its status is ``pending``
     - It has no ``parent_id``, OR the parent plan's status is ``completed``
+
+    Stale executing plans (no update for 60 minutes) are automatically
+    requeued to pending before claiming.
 
     The oldest eligible plan (by ``created_at``) is claimed first.
 
@@ -374,6 +440,11 @@ def claim_plan(reason: str) -> str:
                 continue
 
             all_plans[plan["id"]] = plan
+
+            # Requeue stale executing plans
+            if _is_plan_stale(plan):
+                _requeue_stale_plan(plan)
+
             if plan.get("status") == "pending":
                 pending_plans.append(plan)
 
@@ -440,6 +511,8 @@ def list_plans(reason: str, status: str = "") -> str:
                     "total_steps": len(plan.get("steps", [])),
                     "created_at": plan["created_at"],
                     "updated_at": plan["updated_at"],
+                    "stale": _is_plan_stale(plan),
+                    "requeue_count": plan.get("requeue_count", 0),
                 }
             )
 

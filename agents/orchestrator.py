@@ -153,14 +153,14 @@ class Orchestrator:
 
     async def run_agent(
         self,
-        name: Literal["planner", "executor", "reporter"],
+        name: Literal["planner", "executor", "monitor"],
         task: str,
     ) -> Dict[str, Any]:
         """Run a specific agent inline (one-shot mode)."""
         _AGENT_MODULES = {
             "planner": "agents.planner",
             "executor": "agents.executor",
-            "reporter": "agents.reporter",
+            "monitor": "agents.monitor",
         }
         if name not in _AGENT_MODULES:
             return {
@@ -208,7 +208,10 @@ class Orchestrator:
             if not self._should_run(schedule):
                 continue
             result = await self.run_agent(
-                cast(Literal["planner", "executor", "reporter"], name),
+                cast(
+                    Literal["planner", "executor", "monitor"],
+                    name,
+                ),
                 schedule.task_prompt,
             )
             results[name] = result

@@ -1,4 +1,4 @@
-"""Reporter agent for natural language report generation."""
+"""Monitor agent for system health observation and reporting."""
 
 from os import getenv
 
@@ -11,32 +11,33 @@ from agents.instructions import load_agent_instructions
 
 
 def get_agent() -> FunctionAgent:
-    """Create and return the Reporter Agent."""
+    """Create and return the Monitor Agent."""
     load_dotenv()
 
     api_base = getenv("API_BASE", "")
+    api_key = getenv("API_KEY", "")
+    model = getenv("MODEL", "")
     if not api_base:
         raise ValueError("Missing API_BASE env.")
 
     from agents.tools import (
-        create_plan,
         get_system_info,
         read_file,
         run_shell_command,
-        update_plan,
+        send_email,
     )
 
     return FunctionAgent(
-        name="Reporter",
+        name="Monitor",
         description=(
-            "Natural language report generator that gathers pipeline "
-            "data, analyzes performance trends, tracks retention "
-            "compliance, and writes executive-style summaries with "
-            "concrete metrics."
+            "System health observer that gathers metrics via CLI commands, "
+            "reasons about patterns and anomalies, classifies alerts by "
+            "severity, and delivers reports via email."
         ),
         llm=OpenAILike(
-            model="enfuse/smol-tools-4b-32k",
+            model=model,
             api_base=api_base,
+            api_key=api_key,
             is_chat_model=True,
             is_function_calling_model=True,
         ),
@@ -44,20 +45,19 @@ def get_agent() -> FunctionAgent:
             run_shell_command,
             read_file,
             get_system_info,
-            create_plan,
-            update_plan,
+            send_email,
         ],
-        system_prompt=load_agent_instructions("reporter"),
+        system_prompt=load_agent_instructions("monitor"),
         verbose=False,
         streaming=True,
     )
 
 
 async def run(task: str):
-    """Run the Reporter Agent with a task prompt.
+    """Run the Monitor Agent with a task prompt.
 
     Args:
-        task: What to do, e.g., "Generate a daily pipeline report"
-              or "Write a weekly summary of system activity".
+        task: What to do, e.g., "Run a monitoring cycle and send report"
+              or "Check database health and alert if critical".
     """
     return await run_agent(get_agent, task)

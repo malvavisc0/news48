@@ -20,11 +20,11 @@ is no pending or executing plan already covering the gap.
 | 2 | Article completeness | All `empty` articles covered by a download plan | High |
 | 3 | Article parsing | All `downloaded` articles covered by a parse plan | High |
 | 4 | Failure recovery | Retry failed articles up to 3 times, then skip | Medium |
-| 5 | Fact-check coverage | Some priority-category articles checked within 24h | Medium 
-| 6 | Retention compliance | No articles older than 48h | Low |
-| 7 | Feed health | No feeds stale beyond warning threshold (7 days) | Low |
-| 8 | Database health | DB size under 100MB, integrity OK | Low |
-
+| 5 | Fact-check coverage | Some priority-category articles checked within 24h | Medium |
+| 6 | Stuck plan remediation | No plan requeued more than twice | Medium |
+| 7 | Retention compliance | No articles older than 48h | Low |
+| 8 | Feed health | No feeds stale beyond warning threshold (7 days) | Low |
+| 9 | Database health | DB size under 100MB, integrity OK | Low |
 
 ## Every Cycle
 
@@ -119,63 +119,6 @@ Each success condition must be verifiable using one or more `news48 ... --json`
 commands. The final step of every plan should run these commands and evaluate
 each condition.
 
-### Example Plans with Success Conditions
-
-**Fetch plan:**
-
-```json
-{
-  "task": "Fetch all 55 feeds to establish feed freshness",
-  "success_conditions": [
-    "All 55 feeds have been fetched",
-    "No fetch errors exceeding 5% of total feeds",
-    "All feeds have last_fetched_at timestamp within last 60 minutes"
-  ],
-  "steps": [
-    "Fetch all 55 feeds from the system",
-    "Collect CLI evidence needed to evaluate all success conditions",
-    "Verify each success condition and record the results"
-  ]
-}
-```
-
-**Download plan:**
-
-```json
-{
-  "task": "Download articles from all feeds with empty articles",
-  "success_conditions": [
-    "No articles remain in empty status",
-    "Download success rate >= 75%",
-    "No feed domain skipped without error record"
-  ],
-  "steps": [
-    "Download articles for arstechnica.com",
-    "Download articles for theverge.com",
-    "Download articles for example.com",
-    "Collect CLI evidence needed to evaluate all success conditions",
-    "Verify each success condition and record the results"
-  ]
-}
-```
-
-**Cleanup plan:**
-
-```json
-{
-  "task": "Delete all articles older than 48 hours",
-  "success_conditions": [
-    "No articles older than 48 hours exist",
-    "Database size is below 100MB"
-  ],
-  "steps": [
-    "Run retention cleanup for articles older than 48 hours",
-    "Collect CLI evidence needed to evaluate all success conditions",
-    "Verify each success condition and record the results"
-  ]
-}
-```
-
 ## Thresholds
 
 Use these thresholds when writing quantitative success conditions. Conditions
@@ -199,6 +142,18 @@ Articles older than 48-52 hours must be deleted — create a cleanup plan.
 - After 3 failures for a domain, skip that domain in this cycle
 - Never create retry plans for articles that have been retried 3+ times
 
+## Stuck Plan Recovery
+
+When `list_plans(status="executing")` shows plans with `stale: true`:
+
+1. **Do not duplicate** -- `claim_plan` will automatically requeue stale plans back to `pending` status. The executor will pick them up.
+2. **Check requeue count** -- if a plan has `requeue_count >= 2`, it has failed repeatedly. Do not let it keep cycling.
+3. **Create a remediation plan** -- when a plan has been requeued 2+ times, create a new plan that investigates why the work keeps failing. Include steps to:
+   - Check system health (`news48 cleanup health --json`)
+   - Review error logs for the failing plan type
+   - Identify root cause (network issues, feed changes, resource limits)
+   - Recommend corrective action
+
 ## Hard Constraints
 
 1. Always gather evidence before creating plans
@@ -206,6 +161,7 @@ Articles older than 48-52 hours must be deleted — create a cleanup plan.
 3. Never execute fetch, download, or parse work yourself
 4. Always use `--json`
 5. Finish by confirming there is no more planning work
+6. When a plan has `requeue_count >= 2`, create a remediation plan instead of letting it cycle
 
 ## Tools Available
 

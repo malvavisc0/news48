@@ -103,6 +103,8 @@ success condition:
 | Retention compliance | `news48 cleanup status --json` |
 | Database health | `news48 cleanup health --json` |
 | Fetch operation details | `news48 fetches list --json` |
+| Fact-check coverage | `news48 articles list --status fact-checked --json` |
+| Fact-check verdict | `news48 articles info <id> --json` |
 
 ### Example Verifications
 
@@ -150,6 +152,8 @@ Then the verification step must:
 - `run_shell_command` -- execute CLI commands
 - `read_file` -- read files
 - `get_system_info` -- check system info
+- `perform_web_search` -- search the web via SearXNG
+- `fetch_webpage_content` -- fetch and read web pages
 
 ## Tools NOT Available
 
@@ -166,3 +170,76 @@ Then the verification step must:
 6. Always pass `--json` to every `news48` command
 7. Never run download or parse without `--feed` when executing per-domain steps
 8. If `claim_plan` returns no plan, exit immediately
+9. Never assign a fact-check verdict without searching for evidence first
+10. Require 2+ independent sources before marking an article `verified`
+11. Never run `news48 cleanup purge` without checking `news48 cleanup status` first
+
+## Execution Patterns by Plan Type
+
+### Fact-Check Execution Pattern
+
+For plans with task descriptions involving fact-checking or verification:
+
+1. **Select articles**: Run `news48 articles list --status parsed --json` to find unchecked articles. Pick the articles specified in the plan steps.
+2. **Read article content**: For each article, run `news48 articles content <id> --json` to get the full text.
+3. **Extract key claims**: Identify 2-5 factual claims from the article (numbers, named events, attributed quotes, dates).
+4. **Search for evidence**: Use `perform_web_search` to find independent sources for each claim. Use neutral search language.
+5. **Fetch verification pages**: Use `fetch_webpage_content` to read the most promising sources found via search.
+6. **Compare claims against evidence**: Check if numbers match, timelines align, quotes are accurate, context is preserved.
+7. **Record verdict**: Run `news48 articles check <id> --status <verdict> --result "<summary>" --json`.
+
+Fact-check status values:
+
+| Status | When to Use |
+|--------|-------------|
+| `verified` | Key claims corroborated by 2+ independent sources |
+| `disputed` | Key claims contradicted by reliable sources |
+| `unverifiable` | Cannot find independent sources to confirm or deny |
+| `mixed` | Some claims verified, others disputed or unverifiable |
+
+**Verification**: Run `news48 articles list --status fact-checked --json` and confirm all selected articles have a fact-check status set.
+
+### Cleanup and Retention Execution Pattern
+
+For plans with task descriptions involving cleanup, retention, or purging:
+
+1. **Check current state**: Run `news48 cleanup status --json` to see how many articles are expired.
+2. **Run cleanup**: Execute `news48 cleanup run --json` to delete expired articles.
+3. **Purge if required**: Only if the plan explicitly says to purge, run `news48 cleanup purge --force --json`.
+4. **Verify**: Run `news48 cleanup status --json` again to confirm no articles older than 48h remain.
+
+**Verification**: `news48 cleanup status --json` shows zero articles older than 48h. Optionally check DB size with `news48 cleanup health --json`.
+
+### Feed Health Execution Pattern
+
+For plans with task descriptions involving feed health, stale feeds, or feed maintenance:
+
+1. **List all feeds**: Run `news48 feeds list --json` to get all feeds with `last_fetched_at` timestamps.
+2. **Identify stale feeds**: Compare `last_fetched_at` against the threshold (7 days). Flag feeds stale beyond the threshold.
+3. **Re-fetch stale feeds**: For each stale feed, run `news48 fetch --json` to trigger a fresh fetch.
+4. **Verify**: Run `news48 feeds list --json` again and confirm all feeds have `last_fetched_at` within the threshold.
+
+**Verification**: All feeds have `last_fetched_at` within the plan's specified threshold. No feed is stale beyond 7 days.
+
+### Database Health Execution Pattern
+
+For plans with task descriptions involving database health, integrity, or size:
+
+1. **Run health check**: Execute `news48 cleanup health --json` for integrity and size metrics.
+2. **Get overall stats**: Run `news48 stats --json` for article and feed counts.
+3. **Act on findings**: If integrity check fails or size exceeds threshold, run `news48 cleanup run --json` to reduce size.
+4. **Verify**: Run `news48 cleanup health --json` again to confirm integrity passes and size is under threshold.
+
+**Verification**: Integrity check passes, database size is below the plan's specified threshold.
+
+### Failure Recovery Execution Pattern
+
+For plans with task descriptions involving retry, recovery, or failed articles:
+
+1. **List failed articles**: Run `news48 articles list --status download-failed --json` and `news48 articles list --status parse-failed --json`.
+2. **Group by domain**: Identify which domains have failures and how many.
+3. **Retry downloads**: For each domain with download failures, run `news48 download --feed <domain> --retry --json`.
+4. **Retry parses**: For each domain with parse failures, run `news48 parse --feed <domain> --retry --json`.
+5. **Verify**: Re-check failure counts and confirm no domain has more than 3 consecutive failures.
+
+**Verification**: Reduced failure counts compared to before the plan. No domain with more than 3 consecutive failures.

@@ -11,7 +11,7 @@ from ._common import emit_error, emit_json
 
 agents_app = typer.Typer(help="Manage autonomous agents.")
 
-VALID_AGENTS = ["planner", "executor", "reporter"]
+VALID_AGENTS = ["planner", "executor", "monitor"]
 
 DEFAULT_TASKS = {
     "planner": (
@@ -24,14 +24,11 @@ DEFAULT_TASKS = {
         "as background processes, execute the final verification step, and "
         "set plan status when done."
     ),
-    "reporter": "Generate a daily pipeline report.",
-}
-
-REPORT_TASKS = {
-    "daily": "Generate a daily pipeline report.",
-    "weekly": "Generate a weekly summary of system activity and "
-    "performance.",
-    "monthly": "Generate a monthly compliance and performance report.",
+    "monitor": (
+        "Run a monitoring cycle. Gather system metrics, check database "
+        "health, assess feed freshness, detect backlogs and failures, "
+        "classify alerts by severity, and send the report via email."
+    ),
 }
 
 
@@ -82,11 +79,13 @@ def agents_status(
 
 @agents_app.command(name="run")
 def agents_run(
-    agent: Literal["planner", "executor", "reporter"] = typer.Option(
-        None,
-        "--agent",
-        "-a",
-        help="Specific agent to run (planner|executor|reporter)",
+    agent: Literal["planner", "executor", "monitor"] = (
+        typer.Option(
+            None,
+            "--agent",
+            "-a",
+            help="Specific agent to run (planner|executor|monitor)",
+        )
     ),
     task: str = typer.Option(
         None,
@@ -116,7 +115,7 @@ def agents_run(
 
 
 async def _run_single_agent(
-    agent_name: Literal["planner", "executor", "reporter"],
+    agent_name: Literal["planner", "executor", "monitor"],
     task: str,
 ):
     """Run a single agent."""
@@ -203,11 +202,11 @@ def agents_dashboard(
         "-r",
         help="Dashboard refresh interval in seconds",
     ),
-    agent: str = typer.Option(
+    agent: list[str] = typer.Option(
         None,
         "--agent",
         "-a",
-        help="Filter to one agent",
+        help="Agent(s) to show, repeatable; default: planner executor",
     ),
 ) -> None:
     """Live dashboard showing agent output (read-only).
@@ -226,7 +225,8 @@ def agents_dashboard(
 
     STATE_FILE = Path(".orchestrator.json")
 
-    dashboard = Dashboard(tick_seconds=tick)
+    selected = agent if agent else ["planner", "executor"]
+    dashboard = Dashboard(tick_seconds=tick, agents=selected)
     tailers: dict[str, tuple[threading.Thread, threading.Event]] = {}
 
     def sync_state() -> None:
@@ -242,7 +242,7 @@ def agents_dashboard(
 
         # Start tailers for new agents
         for name, info in current_running.items():
-            if agent and name != agent:
+            if name not in selected:
                 continue
             log_file = info.get("log_file", "")
             if name not in tailers and log_file:

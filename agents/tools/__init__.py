@@ -1,4 +1,5 @@
 from .bypass import fetch_webpage_content
+from .email import send_email
 from .files import read_file
 from .planner import claim_plan, create_plan, list_plans, update_plan
 from .searxng import perform_web_search
@@ -15,4 +16,5 @@ __all__ = [
     "update_plan",
     "perform_web_search",
     "fetch_webpage_content",
+    "send_email",
 ]
