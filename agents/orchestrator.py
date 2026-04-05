@@ -30,16 +30,11 @@ logger = logging.getLogger(__name__)
 
 
 class Orchestrator:
-    """Python dispatcher that invokes agents with predefined task prompts.
+    """Python dispatcher that runs agents on a timer with predefined prompts.
 
-    The orchestrator is NOT an LLM agent. It runs agents on a timer
-    with predefined task prompts. This is a scheduling problem, not a
-    reasoning problem.
-
-    In daemon mode (``start``), each agent is forked as its own
-    subprocess via ``uv run news48 agents run --agent <name>``.
-    The orchestrator tracks PIDs, polls for completion, reads exit
-    codes, and persists schedule state to ``.orchestrator.json``.
+    In daemon mode each agent is forked as a subprocess; the orchestrator
+    tracks PIDs, polls for completion, and persists state to
+    ``.orchestrator.json``.
     """
 
     def __init__(
@@ -146,23 +141,29 @@ class Orchestrator:
         except (ValueError, TypeError):
             return True
 
+    def _update_schedule(
+        self, name: str, result: str, error: Optional[str] = None
+    ) -> None:
+        """Update schedule state after an agent run."""
+        schedule = self.schedules.get(name)
+        if schedule:
+            schedule.last_run = datetime.now(timezone.utc).isoformat()
+            schedule.last_result = result
+            schedule.last_error = error
+
     async def run_agent(
         self,
         name: Literal["pipeline", "monitor", "reporter", "checker"],
         task: str,
     ) -> Dict[str, Any]:
-        """Run a specific agent inline with a task prompt.
-
-        This is the one-shot mode used by ``agents run --agent <name>``.
-
-        Args:
-            name: Agent name (pipeline, monitor, reporter, checker).
-            task: Task prompt to send to the agent.
-
-        Returns:
-            Dict with agent name, result, and error (if any).
-        """
-        if name not in ["pipeline", "monitor", "reporter", "checker"]:
+        """Run a specific agent inline (one-shot mode)."""
+        _AGENT_MODULES = {
+            "pipeline": "agents.pipeline",
+            "monitor": "agents.monitor",
+            "reporter": "agents.reporter",
+            "checker": "agents.checker",
+        }
+        if name not in _AGENT_MODULES:
             return {
                 "agent": name,
                 "result": None,
@@ -170,43 +171,28 @@ class Orchestrator:
             }
 
         if name in self.running:
-            running_info = self.running[name]
-            pid = running_info.pid
-            started = running_info.started_at
+            r = self.running[name]
             return {
                 "agent": name,
                 "result": None,
                 "error": (
                     f"Agent '{name}' is already running "
-                    f"(PID {pid}, started at {started})"
+                    f"(PID {r.pid}, started at {r.started_at})"
                 ),
             }
 
-        if name == "pipeline":
-            from agents.pipeline import run as agent_run
-        elif name == "monitor":
-            from agents.monitor import run as agent_run
-        elif name == "reporter":
-            from agents.reporter import run as agent_run
-        elif name == "checker":
-            from agents.checker import run as agent_run
+        import importlib
+
+        module = importlib.import_module(_AGENT_MODULES[name])
 
         try:
-            result = await agent_run(task)
-            schedule = self.schedules.get(name)
-            if schedule:
-                schedule.last_run = datetime.now(timezone.utc).isoformat()
-                schedule.last_result = "success"
-                schedule.last_error = None
+            result = await module.run(task)
+            self._update_schedule(name, "success")
             self.save_state()
             return {"agent": name, "result": result, "error": None}
         except Exception as e:
             logger.error(f"Agent {name} failed: {e}")
-            schedule = self.schedules.get(name)
-            if schedule:
-                schedule.last_run = datetime.now(timezone.utc).isoformat()
-                schedule.last_result = "error"
-                schedule.last_error = str(e)
+            self._update_schedule(name, "error", str(e))
             self.save_state()
             return {"agent": name, "result": None, "error": str(e)}
 
@@ -389,44 +375,27 @@ class Orchestrator:
         }
 
     def start(self, tick_seconds: int = 60) -> None:
-        """Run the orchestrator in a continuous loop.
-
-        Each tick:
-        1. Loads persisted state.
-        2. Checks running processes for completion.
-        3. Forks due agents as subprocesses.
-        4. Saves state.
-        5. Sleeps for ``tick_seconds``.
-
-        Args:
-            tick_seconds: Seconds between each tick (default: 60).
-        """
+        """Run the orchestrator in a continuous loop."""
         logger.info(f"Orchestrator starting (tick every {tick_seconds}s)")
         self.load_state()
 
         try:
             while True:
                 result = self.tick()
+                n_c = len(result["completed"])
+                n_f = len(result["forked"])
+                n_r = len(result["running"])
 
-                # Log tick summary
-                n_completed = len(result["completed"])
-                n_forked = len(result["forked"])
-                n_running = len(result["running"])
-
-                if n_completed or n_forked:
+                if n_c or n_f:
                     logger.info(
-                        f"Tick: {n_forked} forked, "
-                        f"{n_completed} completed, "
-                        f"{n_running} running"
+                        f"Tick: {n_f} forked, {n_c} completed, "
+                        f"{n_r} running"
                     )
-                    # Log details for completed agents
                     for name, info in result["completed"].items():
-                        status = info["result"]
-                        duration = info.get("duration", "?")
                         logger.info(
-                            f"  {name}: {status} "
+                            f"  {name}: {info['result']} "
                             f"(exit={info.get('exit_code')}, "
-                            f"duration={duration})"
+                            f"duration={info.get('duration', '?')})"
                         )
                     for name in result["forked"]:
                         logger.info(
