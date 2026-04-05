@@ -17,13 +17,13 @@ uv run news48 --help
 
 ### 1.1 Seed -- text output
 ```bash
-uv run news48 seed newsfeeds.seed.txt
+uv run news48 seed seed.txt
 ```
 Expected: `Seeded N new feeds (M skipped, 55 total)`
 
 ### 1.2 Seed -- JSON output
 ```bash
-uv run news48 seed newsfeeds.seed.txt --json
+uv run news48 seed seed.txt --json
 ```
 Expected: `{"seeded": 0, "total_urls": 55, "skipped": 55}` (all skipped on second run)
 
@@ -496,7 +496,7 @@ Expected: `{"error": "..."}` to stdout, exit code 1
 
 ```bash
 # 1. Start fresh
-uv run news48 seed newsfeeds.seed.txt --json
+uv run news48 seed seed.txt --json
 
 # 2. Check stats
 uv run news48 stats --json

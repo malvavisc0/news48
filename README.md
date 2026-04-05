@@ -80,7 +80,7 @@ Autonomous news ingestion and verification pipeline with a planner-executor-moni
 
  ```bash
  # seed feeds
- uv run news48 seed newsfeeds.seed.txt
+ uv run news48 seed seed.txt
 
  # run pipeline stages
  uv run news48 fetch
