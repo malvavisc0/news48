@@ -15,18 +15,20 @@ This module provides a Typer-based CLI with commands:
 
 import typer
 
-from commands.agents import agents_app
-from commands.articles import articles_app
-from commands.cleanup import cleanup_app
-from commands.download import download
-from commands.feeds import feeds_app
-from commands.fetch import fetch
-from commands.fetches import fetches_app
-from commands.parse import parse
-from commands.search import search_app
-from commands.seed import seed
-from commands.sitemap import sitemap_app
-from commands.stats import stats
+from commands import (
+    agents_app,
+    articles_app,
+    cleanup_app,
+    download,
+    feeds_app,
+    fetch,
+    fetches_app,
+    parse,
+    search_app,
+    seed,
+    sitemap_app,
+    stats,
+)
 
 app = typer.Typer()
 app.command()(fetch)

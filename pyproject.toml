@@ -5,7 +5,6 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "aiosqlite",
     "dateparser",
     "feedparser",
     "html-to-markdown",
@@ -22,8 +21,8 @@ dependencies = [
 news48 = "main:main"
 
 [tool.setuptools]
-packages = ["agents", "commands"]
-py-modules = ["config", "database", "helpers", "models", "main"]
+packages = ["agents", "commands", "database"]
+py-modules = ["config", "helpers", "models", "main"]
 
 [tool.uv]
 package = true

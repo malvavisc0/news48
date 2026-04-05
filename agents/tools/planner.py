@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from agents.tools._helpers import _get_function_name, _safe_json
+from agents.tools._helpers import _safe_json
 
 _PLANS_DIR = Path(".plans")
 
@@ -94,10 +94,9 @@ def create_plan(reason: str, task: str, steps: list[str]) -> str:
     - `result`: Plan object with id, task, steps, progress
     - `error`: Empty on success
     """
-    timestamp = _now()
-
     try:
         plan_id = str(uuid.uuid4())
+        timestamp = _now()
 
         plan_steps = []
         for i, step_desc in enumerate(steps, 1):
@@ -123,34 +122,9 @@ def create_plan(reason: str, task: str, steps: list[str]) -> str:
 
         _write_plan(plan)
 
-        return _safe_json(
-            {
-                "result": _serialize_plan(plan),
-                "error": "",
-                "metadata": {
-                    "timestamp": timestamp,
-                    "reason": reason,
-                    "params": {"task": task, "steps": steps},
-                    "operation": _get_function_name(),
-                    "plan_id": plan_id,
-                    "success": True,
-                },
-            }
-        )
+        return _safe_json({"result": _serialize_plan(plan), "error": ""})
     except Exception as exc:
-        return _safe_json(
-            {
-                "result": "",
-                "error": str(exc),
-                "metadata": {
-                    "timestamp": timestamp,
-                    "reason": reason,
-                    "params": {"task": task, "steps": steps},
-                    "operation": _get_function_name(),
-                    "success": False,
-                },
-            }
-        )
+        return _safe_json({"result": "", "error": str(exc)})
 
 
 def update_plan(
@@ -201,16 +175,6 @@ def update_plan(
                     "result": "",
                     "error": f"Plan '{plan_id}' not found. "
                     f"Use create_plan first.",
-                    "metadata": {
-                        "timestamp": timestamp,
-                        "reason": reason,
-                        "params": {
-                            "plan_id": plan_id,
-                            "step_id": step_id,
-                        },
-                        "operation": _get_function_name(),
-                        "success": False,
-                    },
                 }
             )
 
@@ -223,13 +187,6 @@ def update_plan(
                         f"Invalid status '{status}'. "
                         f"Valid: {', '.join(sorted(valid_statuses))}"
                     ),
-                    "metadata": {
-                        "timestamp": timestamp,
-                        "reason": reason,
-                        "params": {"step_id": step_id, "status": status},
-                        "operation": _get_function_name(),
-                        "success": False,
-                    },
                 }
             )
 
@@ -249,13 +206,6 @@ def update_plan(
                 {
                     "result": "",
                     "error": f"Step '{step_id}' not found in plan.",
-                    "metadata": {
-                        "timestamp": timestamp,
-                        "reason": reason,
-                        "params": {"step_id": step_id, "status": status},
-                        "operation": _get_function_name(),
-                        "success": False,
-                    },
                 }
             )
 
@@ -294,44 +244,9 @@ def update_plan(
         plan["updated_at"] = timestamp
         _write_plan(plan)
 
-        return _safe_json(
-            {
-                "result": _serialize_plan(plan),
-                "error": "",
-                "metadata": {
-                    "timestamp": timestamp,
-                    "reason": reason,
-                    "params": {
-                        "plan_id": plan_id,
-                        "step_id": step_id,
-                        "status": status,
-                        "result": result,
-                        "add_steps": add_steps,
-                        "remove_steps": remove_steps,
-                    },
-                    "operation": _get_function_name(),
-                    "success": True,
-                },
-            }
-        )
+        return _safe_json({"result": _serialize_plan(plan), "error": ""})
     except Exception as exc:
-        return _safe_json(
-            {
-                "result": "",
-                "error": str(exc),
-                "metadata": {
-                    "timestamp": timestamp,
-                    "reason": reason,
-                    "params": {
-                        "plan_id": plan_id,
-                        "step_id": step_id,
-                        "status": status,
-                    },
-                    "operation": _get_function_name(),
-                    "success": False,
-                },
-            }
-        )
+        return _safe_json({"result": "", "error": str(exc)})
 
 
 def _serialize_plan(plan: dict) -> dict:

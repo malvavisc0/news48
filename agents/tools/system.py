@@ -5,7 +5,7 @@ import platform
 import sys
 from datetime import datetime, timezone
 
-from agents.tools._helpers import _get_function_name, _safe_json
+from agents.tools._helpers import _safe_json
 
 
 def get_system_info() -> str:
@@ -44,11 +44,7 @@ def get_system_info() -> str:
     - `result.news48.searxng_configured`: Whether SEARXNG_URL is set
     - `result.news48.api_base_configured`: Whether API_BASE is set
     """
-    timestamp = datetime.now(timezone.utc).isoformat()
-    reason = "Retrieve current runtime and host environment details."
-
     try:
-        # Gather news48-specific info
         news48_info = _get_news48_info()
 
         result = {
@@ -59,39 +55,15 @@ def get_system_info() -> str:
             "platform_release": platform.release(),
             "default_shell": os.getenv("SHELL", "/bin/bash"),
             "home_directory": os.getenv("HOME", ""),
-            "current_datetime": timestamp,
+            "current_datetime": datetime.now(timezone.utc).isoformat(),
             "local_datetime": datetime.now().isoformat(),
             "architecture": platform.machine(),
             "processor": platform.processor(),
             "news48": news48_info,
         }
-        return _safe_json(
-            {
-                "result": result,
-                "error": "",
-                "metadata": {
-                    "timestamp": timestamp,
-                    "reason": reason,
-                    "params": {},
-                    "operation": _get_function_name(),
-                    "success": True,
-                },
-            }
-        )
+        return _safe_json({"result": result, "error": ""})
     except Exception as exc:
-        return _safe_json(
-            {
-                "result": "",
-                "error": str(exc),
-                "metadata": {
-                    "timestamp": timestamp,
-                    "reason": reason,
-                    "params": {},
-                    "operation": _get_function_name(),
-                    "success": False,
-                },
-            }
-        )
+        return _safe_json({"result": "", "error": str(exc)})
 
 
 def _get_news48_info() -> dict:

@@ -1,11 +1,10 @@
-from datetime import datetime, timezone
 from os import getenv
 from typing import Any, Dict, Literal, TypedDict
 from urllib.parse import urlencode
 
 import httpx
 
-from agents.tools._helpers import _clean_text, _get_function_name, _safe_json
+from agents.tools._helpers import _clean_text, _safe_json
 
 SEARXNG_URL = getenv("SEARXNG_URL", "").rstrip("/")
 _REQUEST_TIMEOUT_SECONDS = 10.0
@@ -104,7 +103,6 @@ def perform_web_search(
     JSON with:
     - `result.count`: Number of results returned
     - `result.findings`: Array of normalized results by category
-    - `metadata.page_stats`: Requested/succeeded/failed page counts
     - `error`: Empty on success, or partial failure message
 
     ## Note
@@ -117,7 +115,6 @@ def perform_web_search(
     if pages < 1:
         raise ValueError("pages must be a positive integer")
 
-    timestamp = datetime.now(timezone.utc).isoformat()
     results: list[dict[str, Any]] = []
     page_errors: list[dict[str, Any]] = []
     dropped_results = 0
@@ -153,7 +150,6 @@ def perform_web_search(
             stats["succeeded"] += 1
             results.extend(page_result)
 
-    success = stats["succeeded"] > 0
     error_message = _build_error_message(stats=stats, page_errors=page_errors)
 
     return _safe_json(
@@ -161,24 +157,11 @@ def perform_web_search(
             "result": {
                 "count": len(results),
                 "findings": results,
-            },
-            "error": error_message,
-            "metadata": {
-                "timestamp": timestamp,
-                "reason": reason,
-                "params": {
-                    "query": query,
-                    "category": category,
-                    "time_range": time_range,
-                    "pages": pages,
-                },
-                "operation": _get_function_name(),
-                "success": success,
-                "partial_success": success and stats["failed"] > 0,
                 "page_stats": stats,
                 "dropped_results": dropped_results,
                 "page_errors": page_errors,
             },
+            "error": error_message,
         }
     )
 

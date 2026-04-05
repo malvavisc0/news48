@@ -3,11 +3,10 @@ import shlex
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from agents.tools._helpers import _get_function_name, _safe_json
+from agents.tools._helpers import _safe_json
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _MAIN_MODULE_PATH = _PROJECT_ROOT / "main.py"
@@ -66,7 +65,6 @@ def run_shell_command(
     - `result.execution_time`: Time taken in seconds
     - `error`: Empty on success, "Operation Timeout" or exception message
     """
-    timestamp = datetime.now(timezone.utc).isoformat()
     env_vars = dict(os.environ)
     start_time = time.time()
     working_dir = os.getcwd()
@@ -90,44 +88,8 @@ def run_shell_command(
             "resolved_command": resolved_command,
             "python_executable": sys.executable,
         }
-        return _safe_json(
-            {
-                "result": response,
-                "error": "",
-                "metadata": {
-                    "timestamp": timestamp,
-                    "reason": reason,
-                    "params": {"command": command, "timeout": timeout},
-                    "success": True,
-                },
-                "operation": _get_function_name(),
-            }
-        )
+        return _safe_json({"result": response, "error": ""})
     except subprocess.TimeoutExpired:
-        return _safe_json(
-            {
-                "result": "",
-                "error": "Operation Timeout",
-                "metadata": {
-                    "timestamp": timestamp,
-                    "reason": reason,
-                    "params": {"command": command, "timeout": timeout},
-                    "success": False,
-                },
-                "operation": _get_function_name(),
-            }
-        )
+        return _safe_json({"result": "", "error": "Operation Timeout"})
     except Exception as exc:
-        return _safe_json(
-            {
-                "result": "",
-                "error": str(exc),
-                "metadata": {
-                    "timestamp": timestamp,
-                    "reason": reason,
-                    "params": {"command": command, "timeout": timeout},
-                    "success": False,
-                },
-                "operation": _get_function_name(),
-            }
-        )
+        return _safe_json({"result": "", "error": str(exc)})

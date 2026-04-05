@@ -5,11 +5,11 @@ get_file_info, get_file_content, read_file_chunk, and list_directory tools.
 """
 
 import stat
-from datetime import datetime, timezone
+from datetime import datetime
 from itertools import islice
 from pathlib import Path
 
-from agents.tools._helpers import _get_function_name, _is_binary, _safe_json
+from agents.tools._helpers import _is_binary, _safe_json
 
 _BINARY_SAMPLE_SIZE = 4096
 
@@ -51,47 +51,15 @@ def read_file(
     - `result`: File content, metadata dict, or chunk depending on mode
     - `error`: Empty on success, or error description
     """
-    timestamp = datetime.now(timezone.utc).isoformat()
-
     try:
         file = Path(file_path)
 
         if not file.exists():
-            return _safe_json(
-                {
-                    "result": "",
-                    "error": "File not found",
-                    "metadata": {
-                        "timestamp": timestamp,
-                        "reason": reason,
-                        "params": {
-                            "file_path": file_path,
-                            "offset": offset,
-                            "limit": limit,
-                            "metadata_only": metadata_only,
-                        },
-                        "operation": _get_function_name(),
-                        "success": False,
-                    },
-                }
-            )
+            return _safe_json({"result": "", "error": "File not found"})
 
         if metadata_only:
             return _safe_json(
-                {
-                    "result": _get_file_metadata(file),
-                    "error": "",
-                    "metadata": {
-                        "timestamp": timestamp,
-                        "reason": reason,
-                        "params": {
-                            "file_path": file_path,
-                            "metadata_only": True,
-                        },
-                        "operation": _get_function_name(),
-                        "success": True,
-                    },
-                }
+                {"result": _get_file_metadata(file), "error": ""}
             )
 
         # Check for binary file
@@ -100,21 +68,7 @@ def read_file(
 
         if _is_binary(sample):
             return _safe_json(
-                {
-                    "result": "",
-                    "error": "Binary file not supported",
-                    "metadata": {
-                        "timestamp": timestamp,
-                        "reason": reason,
-                        "params": {
-                            "file_path": file_path,
-                            "offset": offset,
-                            "limit": limit,
-                        },
-                        "operation": _get_function_name(),
-                        "success": False,
-                    },
-                }
+                {"result": "", "error": "Binary file not supported"}
             )
 
         # Read file content
@@ -135,17 +89,6 @@ def read_file(
                         "total_lines": total_lines,
                     },
                     "error": "",
-                    "metadata": {
-                        "timestamp": timestamp,
-                        "reason": reason,
-                        "params": {
-                            "file_path": file_path,
-                            "offset": offset,
-                            "limit": limit,
-                        },
-                        "operation": _get_function_name(),
-                        "success": True,
-                    },
                 }
             )
         else:
@@ -160,54 +103,13 @@ def read_file(
                         "size_bytes": file.stat().st_size,
                     },
                     "error": "",
-                    "metadata": {
-                        "timestamp": timestamp,
-                        "reason": reason,
-                        "params": {"file_path": file_path},
-                        "operation": _get_function_name(),
-                        "success": True,
-                    },
                 }
             )
 
     except PermissionError:
-        return _safe_json(
-            {
-                "result": "",
-                "error": "Permission denied",
-                "metadata": {
-                    "timestamp": timestamp,
-                    "reason": reason,
-                    "params": {
-                        "file_path": file_path,
-                        "offset": offset,
-                        "limit": limit,
-                        "metadata_only": metadata_only,
-                    },
-                    "operation": _get_function_name(),
-                    "success": False,
-                },
-            }
-        )
+        return _safe_json({"result": "", "error": "Permission denied"})
     except Exception as exc:
-        return _safe_json(
-            {
-                "result": "",
-                "error": str(exc),
-                "metadata": {
-                    "timestamp": timestamp,
-                    "reason": reason,
-                    "params": {
-                        "file_path": file_path,
-                        "offset": offset,
-                        "limit": limit,
-                        "metadata_only": metadata_only,
-                    },
-                    "operation": _get_function_name(),
-                    "success": False,
-                },
-            }
-        )
+        return _safe_json({"result": "", "error": str(exc)})
 
 
 def _get_file_metadata(file: Path) -> dict:

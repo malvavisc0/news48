@@ -1,7 +1,5 @@
 """Seed command - seed the database with feed URLs from a file."""
 
-import asyncio
-
 import typer
 
 from database import init_database, seed_feeds
@@ -10,7 +8,7 @@ from helpers import load_urls
 from ._common import emit_error, emit_json, require_db, status_msg
 
 
-async def _seed(seed_file: str) -> dict:
+def _seed(seed_file: str) -> dict:
     """Seed the database with feed URLs from a file.
 
     Args:
@@ -47,7 +45,7 @@ def seed(
         output_json: Output as JSON instead of human-readable text.
     """
     try:
-        data = asyncio.run(_seed(seed_file))
+        data = _seed(seed_file)
     except SystemExit:
         raise
     except Exception as e:

@@ -1,12 +1,11 @@
 """Agent tool for fetching webpage content using bypass solutions."""
 
 import asyncio
-from datetime import datetime, timezone
 from typing import Any
 
 from html_to_markdown import convert
 
-from agents.tools._helpers import _get_function_name, _safe_json
+from agents.tools._helpers import _safe_json
 from config import Services
 from helpers.bypass import fetch_url_content, get_byparr_solution
 from helpers.url import get_base_url
@@ -39,7 +38,6 @@ async def fetch_webpage_content(
     - `result.results`: List of {url, content, success} for each fetch
     - `result.errors`: List of {url, error} for failed fetches
     - `error`: Empty on success, summary message if any fetches failed
-    - `metadata`: Timestamp, reason, success flags
 
     ## Example
     ```python
@@ -49,7 +47,6 @@ async def fetch_webpage_content(
     )
     ```
     """
-    timestamp = datetime.now(timezone.utc).isoformat()
     results: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
 
@@ -114,18 +111,10 @@ async def fetch_webpage_content(
             "result": {
                 "results": results,
                 "errors": errors,
-            },
-            "error": error,
-            "metadata": {
-                "timestamp": timestamp,
-                "reason": reason,
-                "params": {"urls": urls, "markdown": markdown},
-                "operation": _get_function_name(),
                 "requested": len(urls),
                 "succeeded": len(results),
                 "failed": len(errors),
-                "success": success,
-                "partial_success": len(results) > 0 and len(errors) > 0,
             },
+            "error": error,
         }
     )

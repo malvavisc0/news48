@@ -13,8 +13,7 @@ from llama_index.core.agent.workflow import (
 )
 from pydantic import BaseModel
 
-from agents import get_news_parser_agent
-from agents.parser import NewsParsingResult
+from agents import NewsParsingResult, get_news_parser_agent
 from config import ParserAgent as ParserAgentConfig
 from database import (
     claim_articles_for_processing,

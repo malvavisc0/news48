@@ -1,6 +1,5 @@
 """Feeds sub-app - manage feeds in the database (list, add, delete, info)."""
 
-import asyncio
 import sys
 from pathlib import Path
 
@@ -24,7 +23,7 @@ from ._common import _fmt_date, emit_error, emit_json, require_db
 feeds_app = typer.Typer(help="Manage feeds in the database.")
 
 
-async def _list_feeds(limit: int, offset: int) -> dict:
+def _list_feeds(limit: int, offset: int) -> dict:
     """List all feeds in the database.
 
     Args:
@@ -71,7 +70,7 @@ def list_feeds(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """List all feeds in the database."""
-    data = asyncio.run(_list_feeds(limit, offset))
+    data = _list_feeds(limit, offset)
     if output_json:
         emit_json(data)
     else:
@@ -82,7 +81,7 @@ def list_feeds(
             print(f"    {f['url']}")
 
 
-async def _add_feed(url: str) -> dict:
+def _add_feed(url: str) -> dict:
     """Add a new feed by URL.
 
     Args:
@@ -130,7 +129,7 @@ def add_feed(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Add a new feed by URL."""
-    data = asyncio.run(_add_feed(url))
+    data = _add_feed(url)
     if output_json:
         emit_json(data)
     else:
@@ -238,7 +237,7 @@ def delete_feed_cmd(
             raise typer.Exit(code=1)
 
 
-async def _feed_info(identifier: str) -> dict:
+def _feed_info(identifier: str) -> dict:
     """Show detailed information about a feed.
 
     Args:
@@ -287,7 +286,7 @@ def feed_info(
 ) -> None:
     """Show detailed information about a feed."""
     try:
-        data = asyncio.run(_feed_info(identifier))
+        data = _feed_info(identifier)
     except SystemExit:
         raise
     except Exception as e:

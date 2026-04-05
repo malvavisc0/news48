@@ -1,20 +1,13 @@
 """Pipeline agent for autonomous news48 pipeline execution."""
 
-import json
 from os import getenv
 
 from dotenv import load_dotenv
-from llama_index.core.agent.workflow import (
-    AgentStream,
-    FunctionAgent,
-    ToolCall,
-    ToolCallResult,
-)
+from llama_index.core.agent.workflow import FunctionAgent
 from llama_index.llms.openai_like import OpenAILike
-from loguru import logger
 
+from agents._run import run_agent
 from agents.instructions import load_agent_instructions
-from agents.streaming import flush_remaining_stream, flush_sentence_chunks
 
 
 def get_agent() -> FunctionAgent:
@@ -71,35 +64,4 @@ async def run(task: str):
         task: What to do, e.g., "Run a full pipeline cycle" or
               "Fetch and download articles from arstechnica.com"
     """
-
-    final_response = ""
-    stream_buffer = ""
-    handler = get_agent().run(user_msg=task, max_iterations=500)
-    async for event in handler.stream_events():
-        if isinstance(event, ToolCall):
-            logger.info(
-                f"Executing tool: {event.tool_name}. "
-                f"Reason: {event.tool_kwargs.get('reason', 'Unknown')}"
-            )
-        elif isinstance(event, ToolCallResult):
-            if event.tool_output.is_error:
-                logger.error(
-                    f"System error while executing tool: {event.tool_name}."
-                )
-                continue
-            output: dict = json.loads(event.tool_output.raw_output)
-            error = output.get("error", None)
-            if error:
-                logger.error(
-                    f"Unsuccessfully execution of the tool: {event.tool_name}."
-                    f" Error: {error}."
-                )
-                continue
-            logger.info(f"Completed execution of tool: {event.tool_name}.")
-        elif isinstance(event, AgentStream):
-            final_response += event.delta
-            stream_buffer, _ = flush_sentence_chunks(
-                stream_buffer, event.delta
-            )
-
-    flush_remaining_stream(stream_buffer)
+    return await run_agent(get_agent, task)

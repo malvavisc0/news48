@@ -1061,7 +1061,6 @@ name = "news48"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "aiosqlite" },
     { name = "dateparser" },
     { name = "feedparser" },
     { name = "html-to-markdown" },
@@ -1083,7 +1082,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiosqlite" },
     { name = "dateparser" },
     { name = "feedparser" },
     { name = "html-to-markdown" },
