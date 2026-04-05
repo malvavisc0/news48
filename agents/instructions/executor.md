@@ -173,6 +173,7 @@ Then the verification step must:
 9. Never assign a fact-check verdict without searching for evidence first
 10. Require 2+ independent sources before marking an article `verified`
 11. Never run `news48 cleanup purge` without checking `news48 cleanup status` first
+12. For fact-check plans, use deterministic target selection and record explicit PASS/FAIL verification evidence for each selected target
 
 ## Execution Patterns by Plan Type
 
@@ -180,13 +181,19 @@ Then the verification step must:
 
 For plans with task descriptions involving fact-checking or verification:
 
-1. **Select articles**: Run `news48 articles list --status parsed --json` to find unchecked articles. Pick the articles specified in the plan steps.
+1. **Select articles deterministically**: Use article IDs explicitly listed in the plan steps when provided. If IDs are not provided, run `news48 articles list --status fact-unchecked --json` and select a deterministic ordered batch (lowest IDs first) capped to the plan target count.
 2. **Read article content**: For each article, run `news48 articles content <id> --json` to get the full text.
 3. **Extract key claims**: Identify 2-5 factual claims from the article (numbers, named events, attributed quotes, dates).
 4. **Search for evidence**: Use `perform_web_search` to find independent sources for each claim. Use neutral search language.
 5. **Fetch verification pages**: Use `fetch_webpage_content` to read the most promising sources found via search.
 6. **Compare claims against evidence**: Check if numbers match, timelines align, quotes are accurate, context is preserved.
 7. **Record verdict**: Run `news48 articles check <id> --status <verdict> --result "<summary>" --json`.
+
+Fact-check execution reliability rules:
+
+- Use bounded retries for transient external lookup failures: up to 2 additional attempts per claim search/fetch path.
+- If evidence remains insufficient after retries, set verdict to `unverifiable` and record specific missing evidence in `--result`.
+- Never skip selected targets silently: each selected target must end with a verdict or an explicit failed-step record.
 
 Fact-check status values:
 
@@ -198,6 +205,15 @@ Fact-check status values:
 | `mixed` | Some claims verified, others disputed or unverifiable |
 
 **Verification**: Run `news48 articles list --status fact-checked --json` and confirm all selected articles have a fact-check status set.
+
+Fact-check verification must include all checks below:
+
+1. Every selected article has a fact-check status set.
+2. Every selected article has non-empty fact-check result text.
+3. Every verdict is one of `verified`, `disputed`, `unverifiable`, `mixed`.
+4. If `verified` is used, evidence log demonstrates 2+ independent sources.
+
+Record these checks using the required PASS/FAIL condition evidence format.
 
 ### Cleanup and Retention Execution Pattern
 

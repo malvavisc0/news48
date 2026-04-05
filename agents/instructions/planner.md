@@ -20,7 +20,7 @@ is no pending or executing plan already covering the gap.
 | 2 | Article completeness | All `empty` articles covered by a download plan | High |
 | 3 | Article parsing | All `downloaded` articles covered by a parse plan | High |
 | 4 | Failure recovery | Retry failed articles up to 3 times, then skip | Medium |
-| 5 | Fact-check coverage | Some priority-category articles checked within 24h | Medium |
+| 5 | Fact-check coverage | Eligible priority articles always covered by a fact-check plan within 1 cycle and completed within 24h policy window | Medium |
 | 6 | Stuck plan remediation | No plan requeued more than twice | Medium |
 | 7 | Retention compliance | No articles older than 48h | Low |
 | 8 | Feed health | No feeds stale beyond warning threshold (7 days) | Low |
@@ -42,6 +42,8 @@ news48 stats --json
 news48 feeds list --json
 news48 articles list --status empty --json
 news48 articles list --status downloaded --json
+news48 articles list --status parsed --json
+news48 articles list --status fact-unchecked --json
 news48 articles list --status download-failed --json
 news48 articles list --status parse-failed --json
 news48 cleanup status --json
@@ -108,7 +110,7 @@ Use these patterns when writing conditions for each goal type:
 | Article completeness | `No articles remain in empty status`, `Download success rate >= 75%` |
 | Article parsing | `No articles remain in downloaded status`, `Parse failure rate is below 10%` |
 | Failure recovery | `All retry-eligible articles have been re-attempted`, `No domain has more than 3 consecutive failures` |
-| Fact-check coverage | `At least one priority-category article has been fact-checked within 24 hours` |
+| Fact-check coverage | `All eligible priority-category candidates are covered by pending/executing fact-check plans within the same planning cycle`, `At least 3 eligible priority-category articles are fact-checked in 24 hours when 3+ eligible items exist`, `Oldest eligible priority-category item age is below 24 hours` |
 | Retention compliance | `No articles older than 48 hours exist`, `Cleanup deleted N articles` |
 | Feed health | `No feeds have last_fetched_at older than 7 days` |
 | Database health | `Database size is below 100MB`, `Integrity check reports no errors` |
@@ -133,6 +135,25 @@ should target the **warning** level or better.
 | Articles older than 48h | present | 100+ articles |
 
 Articles older than 48-52 hours must be deleted — create a cleanup plan.
+
+## Fact-Check Coverage Policy
+
+For deterministic recurring fact-check autonomy, apply this policy every cycle:
+
+1. **Eligibility** -- candidates are articles that are:
+   - `parsed`
+   - `fact-unchecked`
+   - in priority categories: politics, health, science, conflict
+2. **Mandatory planning trigger** -- if one or more eligible candidates exist and
+   no pending or executing fact-check plan covers them, create a fact-check plan
+   in this same cycle.
+3. **Throughput floor** -- each fact-check plan must target at least 3 eligible
+   items when 3+ are available; otherwise target all available eligible items.
+4. **Anti-starvation** -- if eligible fact-check backlog exists for 2 consecutive
+   planner cycles, fact-check planning takes precedence over low-priority goals
+   (retention/feed/db optimization) until coverage returns inside policy window.
+5. **Policy window** -- success conditions for fact-check plans must verify that
+   targeted eligible items are completed within 24 hours.
 
 ## Failure Recovery Rules
 
@@ -162,6 +183,7 @@ When `list_plans(status="executing")` shows plans with `stale: true`:
 4. Always use `--json`
 5. Finish by confirming there is no more planning work
 6. When a plan has `requeue_count >= 2`, create a remediation plan instead of letting it cycle
+7. If eligible fact-check candidates exist and are not already covered by a pending or executing fact-check plan, create a fact-check plan in the same cycle
 
 ## Tools Available
 

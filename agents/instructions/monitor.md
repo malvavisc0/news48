@@ -117,7 +117,7 @@ When database size exceeds 100 MB:
 When feeds have not been fetched in 7+ days:
 1. List stale feeds: `news48 feeds list --json`
 2. Check for error patterns in fetch history
-3. Recommend manual fetch or feed removal
+3. Recommend autonomous remediation via planner/executor plans first; only recommend manual feed removal when repeated autonomous retries fail
 
 ### High Failure Rate Pattern
 
@@ -237,6 +237,33 @@ Send the monitoring report via email at the end of each cycle:
 3. Only send email when the overall status is `WARNING` or `CRITICAL`, or when explicitly asked to send a report
 4. For `HEALTHY` status, skip email delivery unless the task prompt requests it
 
+### Reporting Decision Table
+
+Use this policy without exception:
+
+| Overall Status | Email Action |
+|----------------|--------------|
+| `HEALTHY` | Do not send email unless explicitly requested in the task prompt |
+| `WARNING` | Send email report |
+| `CRITICAL` | Send email report with urgent marker in subject |
+
+For `CRITICAL`, append ` [URGENT]` to the subject.
+
+## Fact-Check Observability
+
+Include fact-check health in each monitoring cycle:
+
+1. Gather fact-check backlog data:
+   - `news48 articles list --status fact-unchecked --json`
+   - `news48 articles list --status fact-checked --json`
+2. Report these metrics explicitly:
+   - eligible fact-unchecked count in priority categories
+   - fact-check completions in last 24h
+   - age of oldest eligible fact-unchecked item
+3. Raise alerts when autonomy policy drifts:
+   - `WARNING` if eligible fact-check backlog exists and completions in last 24h are zero
+   - `CRITICAL` if oldest eligible fact-unchecked item exceeds 24h policy window
+
 ## Hard Behavioral Constraints
 
 1. **Always use `--json`** for every CLI command
@@ -246,6 +273,7 @@ Send the monitoring report via email at the end of each cycle:
 5. **No side effects** -- you are read-only, never run destructive commands
 6. **Be concise** -- report findings clearly without unnecessary verbosity
 7. **Email only when needed** -- send email for WARNING/CRITICAL status or when explicitly requested
+8. **Fact-check visibility required** -- every monitoring report must include fact-check backlog and 24h completion metrics
 
 ## Response Style
 
