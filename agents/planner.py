@@ -1,4 +1,4 @@
-"""Pipeline agent for autonomous news48 pipeline execution."""
+"""Planner agent for autonomous news48 work planning."""
 
 from os import getenv
 
@@ -11,7 +11,7 @@ from agents.instructions import load_agent_instructions
 
 
 def get_agent() -> FunctionAgent:
-    """Create and return the Pipeline Agent."""
+    """Create and return the Planner Agent."""
     load_dotenv()
 
     api_base = getenv("API_BASE", "")
@@ -23,19 +23,18 @@ def get_agent() -> FunctionAgent:
     from agents.tools import (
         create_plan,
         get_system_info,
+        list_plans,
         read_file,
         run_shell_command,
         update_plan,
     )
 
     return FunctionAgent(
-        name="Pipeline",
+        name="Planner",
         description=(
-            "Autonomous pipeline agent that runs the news48 pipeline: "
-            "fetch feeds, download articles, parse content, and purge "
-            "expired. Runs stages one at a time, inspects results between "
-            "stages, handles failures with retries, and enforces retention "
-            "policy."
+            "Goal-driven planning agent that gathers evidence, assesses "
+            "system gaps, and creates the minimum execution plans needed "
+            "for the executor to carry out."
         ),
         llm=OpenAILike(
             model=model,
@@ -50,18 +49,14 @@ def get_agent() -> FunctionAgent:
             get_system_info,
             create_plan,
             update_plan,
+            list_plans,
         ],
-        system_prompt=load_agent_instructions("pipeline"),
+        system_prompt=load_agent_instructions("planner"),
         verbose=False,
         streaming=True,
     )
 
 
 async def run(task: str):
-    """Run the Pipeline Agent with a task prompt.
-
-    Args:
-        task: What to do, e.g., "Run a full pipeline cycle" or
-              "Fetch and download articles from arstechnica.com"
-    """
+    """Run the Planner Agent with a task prompt."""
     return await run_agent(get_agent, task)

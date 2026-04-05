@@ -70,7 +70,13 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def create_plan(reason: str, task: str, steps: list[str]) -> str:
+def create_plan(
+    reason: str,
+    task: str,
+    steps: list[str],
+    success_conditions: list[str],
+    parent_id: str = "",
+) -> str:
     """Create a new execution plan, persist to .plans/{id}.json.
 
     ## When to Use
@@ -86,15 +92,55 @@ def create_plan(reason: str, task: str, steps: list[str]) -> str:
 
     ## Parameters
     - `reason` (str): Why planning is needed for this task
-    - `task` (str): Overall task description
+    - `task` (str): Overall task description (required, non-empty)
     - `steps` (list[str]): Ordered list of step descriptions
+    - `success_conditions` (list[str]): Non-empty list of verifiable outcome
+      statements. Each condition must describe an outcome (not an action)
+      that can be verified using CLI commands like `news48 ... --json`.
+    - `parent_id` (str): Optional parent plan ID for sequencing
+
+    ## Validation
+    - `task` must be a non-empty string (whitespace-only is rejected)
+    - `success_conditions` must be a non-empty list
+    - Each condition must be a non-empty string (blank entries rejected)
 
     ## Returns
     JSON with:
-    - `result`: Plan object with id, task, steps, progress
-    - `error`: Empty on success
+    - `result`: Plan object with id, task, success_conditions, steps, progress
+    - `error`: Empty on success, or validation error message
     """
     try:
+        # Validate task
+        if not task or not task.strip():
+            return _safe_json(
+                {
+                    "result": "",
+                    "error": "task is required and must be non-empty",
+                }
+            )
+
+        # Validate success_conditions
+        if not success_conditions:
+            return _safe_json(
+                {"result": "", "error": "success_conditions is required"}
+            )
+
+        for i, condition in enumerate(success_conditions):
+            if not isinstance(condition, str):
+                return _safe_json(
+                    {
+                        "result": "",
+                        "error": f"success_conditions[{i}] must be a string",
+                    }
+                )
+            if not condition.strip():
+                return _safe_json(
+                    {
+                        "result": "",
+                        "error": f"success_conditions[{i}] cannot be blank",
+                    }
+                )
+
         plan_id = str(uuid.uuid4())
         timestamp = _now()
 
@@ -114,7 +160,9 @@ def create_plan(reason: str, task: str, steps: list[str]) -> str:
         plan = {
             "id": plan_id,
             "task": task,
-            "status": "in_progress",
+            "status": "pending",
+            "parent_id": parent_id or None,
+            "success_conditions": success_conditions,
             "created_at": timestamp,
             "updated_at": timestamp,
             "steps": plan_steps,
@@ -135,6 +183,7 @@ def update_plan(
     result: str = "",
     add_steps: list[str] | None = None,
     remove_steps: list[str] | None = None,
+    plan_status: str = "",
 ) -> str:
     """Update a step status and optionally add/remove steps.
 
@@ -164,6 +213,7 @@ def update_plan(
     """
     timestamp = _now()
     valid_statuses = {"pending", "in_progress", "completed", "failed"}
+    valid_plan_statuses = {"pending", "executing", "completed", "failed"}
 
     try:
         # Read existing plan
@@ -232,14 +282,18 @@ def update_plan(
                 )
                 next_num += 1
 
-        # Update plan status based on steps
-        statuses = [s["status"] for s in plan["steps"]]
-        if all(s == "completed" for s in statuses):
-            plan["status"] = "completed"
-        elif any(s == "failed" for s in statuses):
-            plan["status"] = "has_failures"
-        else:
-            plan["status"] = "in_progress"
+        if plan_status:
+            if plan_status.lower() not in valid_plan_statuses:
+                return _safe_json(
+                    {
+                        "result": "",
+                        "error": (
+                            "Invalid plan_status. Valid: "
+                            f"{', '.join(sorted(valid_plan_statuses))}"
+                        ),
+                    }
+                )
+            plan["status"] = plan_status.lower()
 
         plan["updated_at"] = timestamp
         _write_plan(plan)
@@ -268,6 +322,8 @@ def _serialize_plan(plan: dict) -> dict:
         "plan_id": plan["id"],
         "task": plan["task"],
         "status": plan["status"],
+        "parent_id": plan.get("parent_id"),
+        "success_conditions": plan.get("success_conditions", []),
         "steps": steps,
         "total_steps": len(steps),
         "progress": {
@@ -280,3 +336,114 @@ def _serialize_plan(plan: dict) -> dict:
         "created_at": plan["created_at"],
         "updated_at": plan["updated_at"],
     }
+
+
+def claim_plan(reason: str) -> str:
+    """Find and claim the oldest eligible pending plan.
+
+    ## When to Use
+    Use this tool at the start of an executor cycle to pick up the next
+    piece of work. It atomically selects and claims one plan so no other
+    executor can grab the same plan.
+
+    ## How It Works
+    A plan is eligible when:
+    - Its status is ``pending``
+    - It has no ``parent_id``, OR the parent plan's status is ``completed``
+
+    The oldest eligible plan (by ``created_at``) is claimed first.
+
+    ## Parameters
+    - ``reason`` (str): Why you are claiming a plan
+
+    ## Returns
+    JSON with:
+    - ``result``: The claimed plan object (status set to ``executing``),
+      or empty string if no eligible plans exist
+    - ``error``: Empty on success
+    """
+    try:
+        plans_dir = _ensure_plans_dir()
+        all_plans = {}
+        pending_plans = []
+
+        for plan_file in plans_dir.glob("*.json"):
+            try:
+                plan = json.loads(plan_file.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+
+            all_plans[plan["id"]] = plan
+            if plan.get("status") == "pending":
+                pending_plans.append(plan)
+
+        if not pending_plans:
+            return _safe_json({"result": "", "error": ""})
+
+        pending_plans.sort(key=lambda p: p.get("created_at", ""))
+
+        for plan in pending_plans:
+            parent_id = plan.get("parent_id")
+            if parent_id:
+                parent = all_plans.get(parent_id)
+                if not parent or parent.get("status") != "completed":
+                    continue
+
+            plan["status"] = "executing"
+            plan["updated_at"] = _now()
+            _write_plan(plan)
+            return _safe_json({"result": _serialize_plan(plan), "error": ""})
+
+        return _safe_json({"result": "", "error": ""})
+    except Exception as exc:
+        return _safe_json({"result": "", "error": str(exc)})
+
+
+def list_plans(reason: str, status: str = "") -> str:
+    """List all plans, optionally filtered by status.
+
+    ## When to Use
+    Use this tool to check what plans already exist before creating new
+    ones. The planner should call this every cycle to avoid duplicating
+    work that is already pending or executing.
+
+    ## Parameters
+    - ``reason`` (str): Why you are listing plans
+    - ``status`` (str): Optional filter — ``pending``, ``executing``,
+      ``completed``, or ``failed``. Omit to list all plans.
+
+    ## Returns
+    JSON with:
+    - ``result``: List of plan summaries (plan_id, task, status,
+      parent_id, total_steps, created_at, updated_at)
+    - ``error``: Empty on success
+    """
+    try:
+        plans_dir = _ensure_plans_dir()
+        plans = []
+
+        for plan_file in plans_dir.glob("*.json"):
+            try:
+                plan = json.loads(plan_file.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+
+            if status and plan.get("status") != status.lower():
+                continue
+
+            plans.append(
+                {
+                    "plan_id": plan["id"],
+                    "task": plan["task"],
+                    "status": plan["status"],
+                    "parent_id": plan.get("parent_id"),
+                    "total_steps": len(plan.get("steps", [])),
+                    "created_at": plan["created_at"],
+                    "updated_at": plan["updated_at"],
+                }
+            )
+
+        plans.sort(key=lambda p: p.get("created_at", ""))
+        return _safe_json({"result": plans, "error": ""})
+    except Exception as exc:
+        return _safe_json({"result": "", "error": str(exc)})

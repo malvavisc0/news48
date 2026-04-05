@@ -8,6 +8,7 @@ from .feeds import feeds_app
 from .fetch import fetch
 from .fetches import fetches_app
 from .parse import parse
+from .plans import plans_app
 from .search import search_app
 from .seed import seed
 from .sitemap import sitemap_app

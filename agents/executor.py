@@ -1,4 +1,4 @@
-"""Fact Checker agent for selective article verification."""
+"""Executor agent for autonomous news48 plan execution."""
 
 from os import getenv
 
@@ -11,57 +11,50 @@ from agents.instructions import load_agent_instructions
 
 
 def get_agent() -> FunctionAgent:
-    """Create and return the Fact Checker Agent."""
+    """Create and return the Executor Agent."""
     load_dotenv()
 
     api_base = getenv("API_BASE", "")
+    api_key = getenv("API_KEY", "")
+    model = getenv("MODEL", "")
     if not api_base:
         raise ValueError("Missing API_BASE env.")
 
     from agents.tools import (
-        create_plan,
-        fetch_webpage_content,
+        claim_plan,
         get_system_info,
-        perform_web_search,
         read_file,
         run_shell_command,
         update_plan,
     )
 
     return FunctionAgent(
-        name="Checker",
+        name="Executor",
         description=(
-            "Fact-checking agent that selectively verifies parsed news "
-            "articles by searching for corroborating or contradicting "
-            "sources, then records a verdict (verified, disputed, "
-            "unverifiable, mixed) in the database."
+            "Execution agent that claims one eligible pending plan, runs its "
+            "steps, performs background fetch/download/parse waves, and "
+            "marks the plan completed or failed."
         ),
         llm=OpenAILike(
-            model="enfuse/smol-tools-4b-32k",
+            model=model,
             api_base=api_base,
+            api_key=api_key,
             is_chat_model=True,
             is_function_calling_model=True,
         ),
         tools=[
+            claim_plan,
+            update_plan,
             run_shell_command,
             read_file,
             get_system_info,
-            perform_web_search,
-            fetch_webpage_content,
-            create_plan,
-            update_plan,
         ],
-        system_prompt=load_agent_instructions("checker"),
+        system_prompt=load_agent_instructions("executor"),
         verbose=False,
         streaming=True,
     )
 
 
 async def run(task: str):
-    """Run the Fact Checker Agent with a task prompt.
-
-    Args:
-        task: What to do, e.g., "Fact-check 3 recently parsed articles"
-              or "Verify articles about politics from the last 24 hours".
-    """
+    """Run the Executor Agent with a task prompt."""
     return await run_agent(get_agent, task)

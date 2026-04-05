@@ -11,22 +11,20 @@ from ._common import emit_error, emit_json
 
 agents_app = typer.Typer(help="Manage autonomous agents.")
 
-VALID_AGENTS = ["pipeline", "monitor", "reporter", "checker"]
+VALID_AGENTS = ["planner", "executor", "reporter"]
 
 DEFAULT_TASKS = {
-    "pipeline": (
-        "Run a full pipeline cycle: fetch all feeds to update article "
-        "metadata, then for each feed domain check for empty articles "
-        "and fork a download process per domain, then for each feed "
-        "domain check for downloaded-but-unparsed articles and fork a "
-        "parse process per domain, then purge expired articles."
+    "planner": (
+        "Run a full planning cycle. Gather evidence, check existing plans, "
+        "identify all needed work, create plans with dependencies, and "
+        "confirm nothing else needs planning."
     ),
-    "monitor": "Perform a full system health check and report any issues.",
+    "executor": (
+        "Claim and execute one pending plan. Run fetch, download, and parse "
+        "as background processes, execute the final verification step, and "
+        "set plan status when done."
+    ),
     "reporter": "Generate a daily pipeline report.",
-    "checker": (
-        "Fact-check up to 5 recently parsed articles, focusing on "
-        "politics, health, science, and conflict categories."
-    ),
 }
 
 REPORT_TASKS = {
@@ -84,13 +82,11 @@ def agents_status(
 
 @agents_app.command(name="run")
 def agents_run(
-    agent: Literal[
-        "pipeline", "monitor", "reporter", "checker"
-    ] = typer.Option(
+    agent: Literal["planner", "executor", "reporter"] = typer.Option(
         None,
         "--agent",
         "-a",
-        help="Specific agent to run (pipeline|monitor|reporter|checker)",
+        help="Specific agent to run (planner|executor|reporter)",
     ),
     task: str = typer.Option(
         None,
@@ -120,7 +116,7 @@ def agents_run(
 
 
 async def _run_single_agent(
-    agent_name: Literal["pipeline", "monitor", "reporter", "checker"],
+    agent_name: Literal["planner", "executor", "reporter"],
     task: str,
 ):
     """Run a single agent."""
@@ -207,6 +203,12 @@ def agents_dashboard(
         "-r",
         help="Dashboard refresh interval in seconds",
     ),
+    agent: str = typer.Option(
+        None,
+        "--agent",
+        "-a",
+        help="Filter to one agent",
+    ),
 ) -> None:
     """Live dashboard showing agent output (read-only).
 
@@ -240,6 +242,8 @@ def agents_dashboard(
 
         # Start tailers for new agents
         for name, info in current_running.items():
+            if agent and name != agent:
+                continue
             log_file = info.get("log_file", "")
             if name not in tailers and log_file:
                 buffer = EventBuffer(max_lines=100)

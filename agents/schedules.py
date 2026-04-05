@@ -43,35 +43,29 @@ class RunningAgent:
 
 # Default schedules
 DEFAULT_SCHEDULES: Dict[str, AgentSchedule] = {
-    "pipeline": AgentSchedule(
-        agent_name="pipeline",
+    "planner": AgentSchedule(
+        agent_name="planner",
         task_prompt=(
-            "Run a full pipeline cycle: fetch all feeds to update article "
-            "metadata, then for each feed domain check for empty articles "
-            "and fork a download process per domain, then for each feed "
-            "domain check for downloaded-but-unparsed articles and fork a "
-            "parse process per domain, then purge expired articles."
+            "Run a full planning cycle. Gather evidence, check existing "
+            "plans, identify all needed work across pipeline, health, "
+            "fact-checking, and feed maintenance, create plans with proper "
+            "dependencies, and confirm nothing else needs planning."
         ),
         interval_minutes=1,
     ),
-    "monitor": AgentSchedule(
-        agent_name="monitor",
-        task_prompt="Perform a full system health check and report any "
-        "issues.",
-        interval_minutes=10,
+    "executor": AgentSchedule(
+        agent_name="executor",
+        task_prompt=(
+            "Claim and execute one pending plan. Run fetch, download, and "
+            "parse as background processes, complete the final verification "
+            "step, and set the plan status when done."
+        ),
+        interval_minutes=1,
     ),
     "reporter": AgentSchedule(
         agent_name="reporter",
         task_prompt="Generate a daily pipeline report.",
         interval_minutes=1440,  # 24 hours
-    ),
-    "checker": AgentSchedule(
-        agent_name="checker",
-        task_prompt=(
-            "Fact-check up to 5 recently parsed articles, focusing on "
-            "politics, health, science, and conflict categories."
-        ),
-        interval_minutes=360,  # 6 hours
     ),
 }
 

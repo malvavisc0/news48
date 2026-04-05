@@ -13,7 +13,7 @@ import signal
 import subprocess
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional, cast
 
 from agents.schedules import (
     _LOGS_DIR,
@@ -153,15 +153,14 @@ class Orchestrator:
 
     async def run_agent(
         self,
-        name: Literal["pipeline", "monitor", "reporter", "checker"],
+        name: Literal["planner", "executor", "reporter"],
         task: str,
     ) -> Dict[str, Any]:
         """Run a specific agent inline (one-shot mode)."""
         _AGENT_MODULES = {
-            "pipeline": "agents.pipeline",
-            "monitor": "agents.monitor",
+            "planner": "agents.planner",
+            "executor": "agents.executor",
             "reporter": "agents.reporter",
-            "checker": "agents.checker",
         }
         if name not in _AGENT_MODULES:
             return {
@@ -208,7 +207,10 @@ class Orchestrator:
         for name, schedule in self.schedules.items():
             if not self._should_run(schedule):
                 continue
-            result = await self.run_agent(name, schedule.task_prompt)
+            result = await self.run_agent(
+                cast(Literal["planner", "executor", "reporter"], name),
+                schedule.task_prompt,
+            )
             results[name] = result
             agents_run.append(name)
 

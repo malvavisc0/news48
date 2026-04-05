@@ -9,11 +9,11 @@ class TestAgentSchedule:
 
     def test_default_values(self):
         schedule = AgentSchedule(
-            agent_name="monitor",
+            agent_name="planner",
             task_prompt="Check health",
             interval_minutes=15,
         )
-        assert schedule.agent_name == "monitor"
+        assert schedule.agent_name == "planner"
         assert schedule.task_prompt == "Check health"
         assert schedule.interval_minutes == 15
         assert schedule.enabled is True
@@ -21,8 +21,8 @@ class TestAgentSchedule:
 
     def test_custom_values(self):
         schedule = AgentSchedule(
-            agent_name="pipeline",
-            task_prompt="Run pipeline",
+            agent_name="planner",
+            task_prompt="Run planner",
             interval_minutes=60,
             enabled=False,
             last_run="2024-01-01T00:00:00+00:00",
@@ -36,21 +36,19 @@ class TestOrchestrator:
 
     def test_default_schedules(self):
         orchestrator = Orchestrator()
-        assert "pipeline" in orchestrator.schedules
-        assert "monitor" in orchestrator.schedules
+        assert "planner" in orchestrator.schedules
+        assert "executor" in orchestrator.schedules
         assert "reporter" in orchestrator.schedules
-        assert "checker" in orchestrator.schedules
 
     def test_default_schedule_intervals(self):
         orchestrator = Orchestrator()
-        assert orchestrator.schedules["pipeline"].interval_minutes == 1
-        assert orchestrator.schedules["monitor"].interval_minutes == 10
+        assert orchestrator.schedules["planner"].interval_minutes == 1
+        assert orchestrator.schedules["executor"].interval_minutes == 1
         assert orchestrator.schedules["reporter"].interval_minutes == 1440
-        assert orchestrator.schedules["checker"].interval_minutes == 360
 
     def test_should_run_when_never_run(self):
         schedule = AgentSchedule(
-            agent_name="monitor",
+            agent_name="planner",
             task_prompt="Check",
             interval_minutes=15,
         )
@@ -59,7 +57,7 @@ class TestOrchestrator:
 
     def test_should_not_run_when_disabled(self):
         schedule = AgentSchedule(
-            agent_name="monitor",
+            agent_name="planner",
             task_prompt="Check",
             interval_minutes=15,
             enabled=False,
@@ -71,7 +69,7 @@ class TestOrchestrator:
         from datetime import datetime, timedelta, timezone
 
         schedule = AgentSchedule(
-            agent_name="monitor",
+            agent_name="planner",
             task_prompt="Check",
             interval_minutes=15,
             last_run=(
@@ -85,7 +83,7 @@ class TestOrchestrator:
         from datetime import datetime, timedelta, timezone
 
         schedule = AgentSchedule(
-            agent_name="monitor",
+            agent_name="planner",
             task_prompt="Check",
             interval_minutes=15,
             last_run=(
@@ -99,7 +97,7 @@ class TestOrchestrator:
         orchestrator = Orchestrator()
         status = orchestrator.get_status()
 
-        for name in ["pipeline", "monitor", "reporter", "checker"]:
+        for name in ["planner", "executor", "reporter"]:
             assert name in status
             assert "enabled" in status[name]
             assert "interval_minutes" in status[name]
@@ -109,8 +107,8 @@ class TestOrchestrator:
 
     def test_get_status_disabled_agent(self):
         schedules = {
-            "monitor": AgentSchedule(
-                agent_name="monitor",
+            "planner": AgentSchedule(
+                agent_name="planner",
                 task_prompt="Check",
                 interval_minutes=15,
                 enabled=False,
@@ -118,20 +116,20 @@ class TestOrchestrator:
         }
         orchestrator = Orchestrator(schedules=schedules)
         status = orchestrator.get_status()
-        assert status["monitor"]["next_run"] == "disabled"
+        assert status["planner"]["next_run"] == "disabled"
 
     def test_get_status_never_run(self):
         schedules = {
-            "monitor": AgentSchedule(
-                agent_name="monitor",
+            "planner": AgentSchedule(
+                agent_name="planner",
                 task_prompt="Check",
                 interval_minutes=15,
             ),
         }
         orchestrator = Orchestrator(schedules=schedules)
         status = orchestrator.get_status()
-        assert status["monitor"]["last_run"] is None
-        assert status["monitor"]["next_run"] == "immediate"
+        assert status["planner"]["last_run"] is None
+        assert status["planner"]["next_run"] == "immediate"
 
     def test_run_agent_unknown(self):
         import asyncio
@@ -147,8 +145,8 @@ class TestOrchestrator:
         from datetime import datetime, timedelta, timezone
 
         schedules = {
-            "monitor": AgentSchedule(
-                agent_name="monitor",
+            "planner": AgentSchedule(
+                agent_name="planner",
                 task_prompt="Check",
                 interval_minutes=15,
                 last_run=(

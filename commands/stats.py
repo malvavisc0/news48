@@ -1,11 +1,13 @@
 """Stats command - show system statistics."""
 
+import json
 import os
 import sqlite3
 from pathlib import Path
 
 import typer
 
+from agents.tools.planner import _ensure_plans_dir
 from database import (
     check_database_health,
     get_article_stats,
@@ -71,6 +73,16 @@ def _collect_stats(db_path: Path, stale_days: int) -> dict:
     retention = get_retention_policy_stats(db_path)
     health = check_database_health(db_path)
 
+    plans = {"pending": 0, "executing": 0, "completed": 0, "failed": 0}
+    for plan_file in _ensure_plans_dir().glob("*.json"):
+        try:
+            plan = json.loads(plan_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        status = plan.get("status", "")
+        if status in plans:
+            plans[status] += 1
+
     return {
         "db_size_mb": round(db_size / (1024 * 1024), 2),
         "articles": {
@@ -119,6 +131,7 @@ def _collect_stats(db_path: Path, stale_days: int) -> dict:
             "integrity_ok": health["integrity_ok"],
             "table_counts": health["table_counts"],
         },
+        "plans": plans,
     }
 
 
@@ -132,6 +145,7 @@ def _render_text(data: dict) -> None:
     sent = data["sentiment"]
     feeds = data["feeds"]
     fetches = data["fetches"]
+    plans = data.get("plans", {})
 
     # Database
     print(f"Database: {data['db_size_mb']} MB")
@@ -201,6 +215,14 @@ def _render_text(data: dict) -> None:
                 f"({r.get('feeds_fetched', 0)} feeds, "
                 f"{r.get('articles_found', 0)} articles)"
             )
+
+    total_plans = sum(plans.values())
+    if total_plans > 0:
+        print(
+            f"Plans: {total_plans} total, {plans['pending']} pending, "
+            f"{plans['executing']} executing, {plans['completed']} completed, "
+            f"{plans['failed']} failed"
+        )
 
     # Retention Policy
     ret = data["retention"]
