@@ -32,7 +32,7 @@ Before you can fetch articles, you need to add RSS/Atom feed URLs to the databas
 Create a text file with one feed URL per line:
 
 ```bash
-# newsfeeds.seed.txt
+# seed.txt
 https://feeds.arstechnica.com/arstechnica/index
 https://feeds.bbci.co.uk/news/rss.xml
 https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
@@ -42,7 +42,7 @@ https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
 
 ```bash
 # Add feeds from the seed file
-uv run news48 seed newsfeeds.seed.txt
+uv run news48 seed seed.txt
 
 # Output: Seeded 3 new feeds (0 skipped, 3 total)
 ```
@@ -456,7 +456,7 @@ uv run news48 parse --article 42
 
 ## Autonomous Agents and Scheduling
 
-The news48 system uses LlamaIndex `FunctionAgent` instances for autonomous pipeline execution, monitoring, and reporting. All agents share a consistent interface: `get_agent()` returns the configured agent, and `run(task)` executes it with a task prompt.
+The news48 system uses LlamaIndex `FunctionAgent` instances for autonomous planning, execution, and monitoring. All agents share a consistent interface: `get_agent()` returns the configured agent, and `run(task)` executes it with a task prompt.
 
 ### Check Agent Status
 
@@ -475,40 +475,31 @@ uv run news48 agents status --json
 uv run news48 agents run
 
 # Run specific agent
-uv run news48 agents run --agent pipeline
+uv run news48 agents run --agent planner
+uv run news48 agents run --agent executor
 uv run news48 agents run --agent monitor
-uv run news48 agents run --agent reporter
-uv run news48 agents run --agent checker
 
 # Run agent with custom task prompt
-uv run news48 agents run --agent pipeline --task "Fetch bbc.co.uk feeds and download 5 articles"
-uv run news48 agents run --agent checker --task "Fact-check articles about politics from the last 24 hours"
+uv run news48 agents run --agent planner --task "Run a full planning cycle and ensure fact-check coverage goals are planned"
+uv run news48 agents run --agent executor --task "Claim and execute one pending plan with verification"
 
 # JSON output
 uv run news48 agents run --agent monitor --json
 ```
 
-### Generate Reports
-
-```bash
-# Daily report
-uv run news48 agents report --type daily
-
-# Weekly report as JSON
-uv run news48 agents report --type weekly --json
-
-# Monthly report
-uv run news48 agents report --type monthly
-```
-
 ### What Each Agent Does
 
-#### Pipeline Agent
-- Reviews system status before planning or execution
-- Runs the full news48 pipeline: fetch, download, parse, cleanup
-- Executes stages one at a time, inspects results between stages
-- Handles failures with retries
-- Enforces 48-hour retention policy (absorbs former Maintainer duties)
+#### Planner Agent
+- Gathers evidence from CLI metrics and current plan state
+- Detects unmet goals across pipeline flow, retries, fact-check coverage, and health
+- Creates minimum plans with explicit success conditions
+- Avoids duplicate work already covered by pending or executing plans
+
+#### Executor Agent
+- Claims one eligible pending plan and executes steps in order
+- Runs fetch/download/parse in background waves where required
+- Performs final verification against plan success conditions
+- Marks each plan completed or failed with evidence
 
 #### Monitor Agent
 - Intelligent system health observation with LLM reasoning
@@ -517,18 +508,7 @@ uv run news48 agents report --type monthly
 - Suggests concrete corrective actions
 - Read-only (no side effects)
 
-#### Reporter Agent
-- Generates natural language reports (daily/weekly/monthly)
-- Analyzes pipeline performance with concrete metrics
-- Tracks retention compliance
-- Provides trend analysis and executive-style summaries
-
-#### Checker Agent (Fact Checker)
-- Selectively verifies parsed articles by searching for independent sources
-- Focuses on high-impact categories: politics, health, science, conflict
-- Extracts key claims and searches for corroborating or contradicting evidence
-- Records verdicts in the database: `verified`, `disputed`, `unverifiable`, `mixed`
-- Uses web search (`perform_web_search`) and page fetching (`fetch_webpage_content`)
+Fact-checking is executed by the Executor when the Planner creates fact-check plans. It is not a separate scheduled agent in the current architecture.
 
 ### Agent Architecture
 
@@ -538,14 +518,14 @@ uv run news48 agents report --type monthly
               Runs agents on a schedule
                          |
          ┌───────────┬───┴───┬───────────┐
-         |           |       |           |
-         v           v       v           v
-  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
-  | Pipeline | | Monitor  | | Reporter | | Checker  |
-  | (Worker) | |(Observer)| |(Summary) | |(Verifier)|
-  └──────────┘ └──────────┘ └──────────┘ └──────────┘
-         |           |       |           |
-         v           v       v           v
+         |           |       |
+         v           v       v
+  ┌──────────┐ ┌──────────┐ ┌──────────┐
+  | Planner  | | Executor | | Monitor  |
+  | (Plans)  | | (Worker) | |(Observer)|
+  └──────────┘ └──────────┘ └──────────┘
+         |           |       |
+         v           v       v
   ┌──────────────────────────────────────────────────┐
   │             Shared Tool Library                   │
   │  shell / files / planner / search / bypass / sys  │
@@ -558,10 +538,9 @@ All agents are LlamaIndex `FunctionAgent` instances except the Orchestrator, whi
 
 The orchestrator runs agents on a schedule:
 
-- **Pipeline**: Every 60 minutes
-- **Monitor**: Every 15 minutes
-- **Reporter**: Every 24 hours (daily)
-- **Checker**: Every 6 hours
+- **Planner**: Every 1 minute
+- **Executor**: Every 1 minute
+- **Monitor**: Every 24 hours
 
 > **Note**: Agent schedules are currently configured in code. A future
 > enhancement will add persistent schedule management via CLI commands.
@@ -570,14 +549,14 @@ The orchestrator runs agents on a schedule:
 
 | Operation | Manual CLI Command | Autonomous Agent |
 |-----------|-------------------|------------------|
-| Run recurring pipeline cycle | `uv run news48 fetch && uv run news48 download --limit 10 && uv run news48 parse --limit 10 && uv run news48 cleanup purge --force` | Pipeline Agent (every 60 min) |
-| Purge old articles | `uv run news48 cleanup purge --force` | Pipeline Agent (end of cycle) |
-| Check database health | `uv run news48 cleanup health` | Monitor Agent (every 15 min) |
+| Run recurring pipeline cycle | `uv run news48 fetch && uv run news48 download --limit 10 && uv run news48 parse --limit 10 && uv run news48 cleanup run` | Planner + Executor loop |
+| Purge old articles | `uv run news48 cleanup purge --force` | Executor via explicit cleanup plan steps |
+| Check database health | `uv run news48 cleanup health` | Monitor Agent (every 24h) |
 | View retention status | `uv run news48 cleanup status` | Monitor Agent (alerts) |
-| View system stats | `uv run news48 stats` | Reporter Agent (daily reports) |
-| Read stored article content | `uv run news48 articles content <id> --json` | Pipeline Agent or Checker Agent during investigation |
-| Set fact-check verdict | `uv run news48 articles check <id> --status verified --result "..." --json` | Checker Agent (every 6 hours) |
-| List fact-checked articles | `uv run news48 articles list --status fact-checked` | Checker Agent (automatic) |
+| View system stats | `uv run news48 stats` | Monitor Agent report context |
+| Read stored article content | `uv run news48 articles content <id> --json` | Executor during fact-check plan execution |
+| Set fact-check verdict | `uv run news48 articles check <id> --status verified --result "..." --json` | Executor during fact-check plan execution |
+| List fact-checked articles | `uv run news48 articles list --status fact-checked` | Planner + Executor recurring planning and execution |
 
 **Key Principle**: Use Manual CLI for one-off operations and troubleshooting. Use Autonomous Agents for scheduled, recurring maintenance.
 
@@ -623,8 +602,9 @@ uv run news48 cleanup health
 Or run the entire pipeline autonomously:
 
 ```bash
-# Run the Pipeline Agent
-uv run news48 agents run --agent pipeline
+# Run Planner then Executor explicitly
+uv run news48 agents run --agent planner
+uv run news48 agents run --agent executor
 
 # Or let the Orchestrator handle it on schedule
 uv run news48 agents run
@@ -637,7 +617,6 @@ uv run news48 agents run
 - See [CLI Testing Guide](cli-testing-guide.md) for detailed command reference
 - Check [README.md](../README.md) for installation and configuration
 - Review [pyproject.toml](../pyproject.toml) for project dependencies
-- See [Pipeline Agent Instructions](../agents/instructions/pipeline.md) for pipeline details
+- See [Planner Agent Instructions](../agents/instructions/planner.md) for planning details
+- See [Executor Agent Instructions](../agents/instructions/executor.md) for execution details
 - See [Monitor Agent Instructions](../agents/instructions/monitor.md) for monitoring details
-- See [Reporter Agent Instructions](../agents/instructions/reporter.md) for reporting details
-- See [Checker Agent Instructions](../agents/instructions/checker.md) for fact-checking details
