@@ -1,6 +1,7 @@
 """Non-LLM tests for orchestrator scheduling behavior."""
 
-from agents.orchestrator import AgentSchedule, Orchestrator
+from agents.orchestrator import Orchestrator
+from agents.schedules import AgentSchedule
 
 
 class TestAgentSchedule:
