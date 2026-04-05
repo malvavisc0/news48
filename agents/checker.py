@@ -14,6 +14,7 @@ from llama_index.llms.openai_like import OpenAILike
 from loguru import logger
 
 from agents.instructions import load_agent_instructions
+from agents.streaming import flush_remaining_stream, flush_sentence_chunks
 
 
 def get_agent() -> FunctionAgent:
@@ -72,6 +73,7 @@ async def run(task: str):
     """
 
     final_response = ""
+    stream_buffer = ""
     handler = get_agent().run(user_msg=task, max_iterations=500)
     async for event in handler.stream_events():
         if isinstance(event, ToolCall):
@@ -96,6 +98,10 @@ async def run(task: str):
             logger.info(f"Completed execution of tool: {event.tool_name}.")
         elif isinstance(event, AgentStream):
             final_response += event.delta
-            print(event.delta, end="", flush=True)
+            stream_buffer, _ = flush_sentence_chunks(
+                stream_buffer, event.delta
+            )
+
+    flush_remaining_stream(stream_buffer)
 
     return final_response

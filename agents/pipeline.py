@@ -14,6 +14,7 @@ from llama_index.llms.openai_like import OpenAILike
 from loguru import logger
 
 from agents.instructions import load_agent_instructions
+from agents.streaming import flush_remaining_stream, flush_sentence_chunks
 
 
 def get_agent() -> FunctionAgent:
@@ -21,6 +22,8 @@ def get_agent() -> FunctionAgent:
     load_dotenv()
 
     api_base = getenv("API_BASE", "")
+    api_key = getenv("API_KEY", "")
+    model = getenv("MODEL", "")
     if not api_base:
         raise ValueError("Missing API_BASE env.")
 
@@ -42,8 +45,9 @@ def get_agent() -> FunctionAgent:
             "policy."
         ),
         llm=OpenAILike(
-            model="enfuse/smol-tools-4b-32k",
+            model=model,
             api_base=api_base,
+            api_key=api_key,
             is_chat_model=True,
             is_function_calling_model=True,
         ),
@@ -66,12 +70,10 @@ async def run(task: str):
     Args:
         task: What to do, e.g., "Run a full pipeline cycle" or
               "Fetch and download articles from arstechnica.com"
-
-    Returns:
-        The agent final response text.
     """
 
     final_response = ""
+    stream_buffer = ""
     handler = get_agent().run(user_msg=task, max_iterations=500)
     async for event in handler.stream_events():
         if isinstance(event, ToolCall):
@@ -81,14 +83,14 @@ async def run(task: str):
             )
         elif isinstance(event, ToolCallResult):
             if event.tool_output.is_error:
-                logger.info(
+                logger.error(
                     f"System error while executing tool: {event.tool_name}."
                 )
                 continue
             output: dict = json.loads(event.tool_output.raw_output)
             error = output.get("error", None)
             if error:
-                logger.info(
+                logger.error(
                     f"Unsuccessfully execution of the tool: {event.tool_name}."
                     f" Error: {error}."
                 )
@@ -96,6 +98,8 @@ async def run(task: str):
             logger.info(f"Completed execution of tool: {event.tool_name}.")
         elif isinstance(event, AgentStream):
             final_response += event.delta
-            print(event.delta, end="", flush=True)
+            stream_buffer, _ = flush_sentence_chunks(
+                stream_buffer, event.delta
+            )
 
-    return final_response
+    flush_remaining_stream(stream_buffer)

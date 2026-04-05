@@ -22,6 +22,8 @@ Your output must match the structured schema expected by the parser runtime.
 | `tags` | list[string] | Yes | JSON-style list of specific keywords or tags extracted from the article. |
 | `summary` | string | Yes | Brief summary of the article, up to 3 sentences. |
 | `countries` | list[string] | Yes | JSON-style list of countries mentioned or involved in the article. |
+| `image_url` | string or null | No | Primary/hero image URL. Prefer og:image or large hero images. Skip icons, logos, and tiny thumbnails. |
+| `language` | string or null | No | ISO 639-1 language code (en, de, fr, es, etc.). Default null if uncertain. |
 | `success` | bool | Yes | `true` when parsing succeeds and the extracted fields are usable. |
 | `error` | string | Yes | Empty string on success. On failure, explain what went wrong clearly and factually. |
 

@@ -28,6 +28,7 @@ from database import (
     update_article,
 )
 from helpers import get_llm
+from helpers.feed import normalize_published_date
 
 from ._common import emit_error, emit_json, require_db, status_msg
 
@@ -268,7 +269,9 @@ async def _parse(
                     db_path=db_path,
                     article_id=article["id"],
                     content=parse_result.content,
-                    published_at=parse_result.published_date,
+                    published_at=normalize_published_date(
+                        parse_result.published_date
+                    ),
                     sentiment=parse_result.sentiment,
                     categories=categories_str,
                     tags=tags_str,
@@ -276,6 +279,8 @@ async def _parse(
                     parsed_at=parsed_at,
                     countries=countries_str,
                     title=parse_result.new_title,
+                    image_url=parse_result.image_url,
+                    language=parse_result.language,
                 )
                 status_msg(f"  Parsed: {parse_result.new_title}")
                 parsed += 1

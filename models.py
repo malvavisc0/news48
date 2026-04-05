@@ -28,6 +28,10 @@ class FeedEntry(BaseModel):
     published_at: str | None = Field(
         default=None, description="Publication date"
     )
+    image_url: str | None = Field(
+        default=None,
+        description="Primary image URL from feed enclosure/media",
+    )
 
 
 class FeedResult(BaseModel):
@@ -71,6 +75,18 @@ class Feed(BaseModel):
     title: str | None = Field(default=None, description="Title of the feed")
     description: str | None = Field(
         default=None, description="Description of the feed"
+    )
+    icon_url: str | None = Field(
+        default=None, description="URL of the feed icon/logo"
+    )
+    favicon_url: str | None = Field(
+        default=None, description="URL of the feed favicon"
+    )
+    language: str | None = Field(
+        default="en", description="ISO 639-1 language code of the feed"
+    )
+    category: str | None = Field(
+        default=None, description="Category/topic of the feed"
     )
     last_fetched_at: datetime | None = Field(
         default=None, description="Last time the feed was fetched"
@@ -162,6 +178,26 @@ class Article(BaseModel):
     countries: list[str] = Field(
         default_factory=list,
         description="List of countries mentioned in the article",
+    )
+    image_url: str | None = Field(
+        default=None, description="Primary image URL for the article"
+    )
+    view_count: int = Field(
+        default=0,
+        ge=0,
+        description="Number of times the article has been viewed",
+    )
+    is_featured: bool = Field(
+        default=False, description="Whether the article is editor-featured"
+    )
+    is_breaking: bool = Field(
+        default=False, description="Whether the article is breaking news"
+    )
+    source_name: str | None = Field(
+        default=None, description="Denormalized feed/source name"
+    )
+    language: str | None = Field(
+        default="en", description="ISO 639-1 language code of the article"
     )
     download_failed: bool = Field(
         default=False,

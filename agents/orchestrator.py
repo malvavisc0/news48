@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -60,13 +60,13 @@ DEFAULT_SCHEDULES: Dict[str, AgentSchedule] = {
             "domain check for downloaded-but-unparsed articles and fork a "
             "parse process per domain, then purge expired articles."
         ),
-        interval_minutes=120,
+        interval_minutes=1,
     ),
     "monitor": AgentSchedule(
         agent_name="monitor",
         task_prompt="Perform a full system health check and report any "
         "issues.",
-        interval_minutes=5,
+        interval_minutes=10,
     ),
     "reporter": AgentSchedule(
         agent_name="reporter",
@@ -201,7 +201,11 @@ class Orchestrator:
         except (ValueError, TypeError):
             return True
 
-    async def run_agent(self, name: str, task: str) -> Dict[str, Any]:
+    async def run_agent(
+        self,
+        name: Literal["pipeline", "monitor", "reporter", "checker"],
+        task: str,
+    ) -> Dict[str, Any]:
         """Run a specific agent inline with a task prompt.
 
         This is the one-shot mode used by ``agents run --agent <name>``.
@@ -213,6 +217,26 @@ class Orchestrator:
         Returns:
             Dict with agent name, result, and error (if any).
         """
+        if name not in ["pipeline", "monitor", "reporter", "checker"]:
+            return {
+                "agent": name,
+                "result": None,
+                "error": f"Unknown agent: {name}",
+            }
+
+        if name in self.running:
+            running_info = self.running[name]
+            pid = running_info.pid
+            started = running_info.started_at
+            return {
+                "agent": name,
+                "result": None,
+                "error": (
+                    f"Agent '{name}' is already running "
+                    f"(PID {pid}, started at {started})"
+                ),
+            }
+
         if name == "pipeline":
             from agents.pipeline import run as agent_run
         elif name == "monitor":
@@ -221,12 +245,6 @@ class Orchestrator:
             from agents.reporter import run as agent_run
         elif name == "checker":
             from agents.checker import run as agent_run
-        else:
-            return {
-                "agent": name,
-                "result": None,
-                "error": f"Unknown agent: {name}",
-            }
 
         try:
             result = await agent_run(task)
@@ -476,10 +494,6 @@ class Orchestrator:
             logger.info("Orchestrator stopped by user")
             self.save_state()
 
-    # ------------------------------------------------------------------
-    # Stop
-    # ------------------------------------------------------------------
-
     def stop_agent(self, name: str) -> Dict[str, Any]:
         """Stop a running agent: SIGTERM, wait 5s, then SIGKILL."""
         if name not in self.running:
@@ -525,10 +539,6 @@ class Orchestrator:
             already.extend(result["already_stopped"])
         return {"stopped": stopped, "already_stopped": already}
 
-    # ------------------------------------------------------------------
-    # Status
-    # ------------------------------------------------------------------
-
     def get_status(self) -> Dict[str, Any]:
         """Get status of all agent schedules.
 
@@ -570,11 +580,6 @@ class Orchestrator:
                 "running_info": running_info,
             }
         return status
-
-
-# ------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------
 
 
 def _is_process_alive(pid: int) -> bool:

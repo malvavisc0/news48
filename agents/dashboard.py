@@ -1,5 +1,6 @@
 """Rich Live dashboard that tails agent log files."""
 
+import re
 import threading
 import time
 from collections import deque
@@ -10,6 +11,8 @@ from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+
+from agents.streaming import format_log_line
 
 _AGENT_NAMES = ["pipeline", "monitor", "checker", "reporter"]
 
@@ -45,7 +48,36 @@ class EventBuffer:
             self._buffer.clear()
 
 
-_FLUSH_INTERVAL = 1.0  # seconds before flushing partial line
+_SENTENCE_BOUNDARY_RE = re.compile(r"(?:[.!?][\"')\]]*\s+|\n{2,})")
+_MAX_PARTIAL_CHARS = 4000
+
+
+def _append_complete_chunks(buffer: EventBuffer, partial: str) -> str:
+    """Emit complete line/sentence chunks from partial text and return rest."""
+    while "\n" in partial:
+        line, partial = partial.split("\n", 1)
+        if line.strip():
+            buffer.append(line)
+
+    while True:
+        match = _SENTENCE_BOUNDARY_RE.search(partial)
+        if not match:
+            break
+        end = match.end()
+        chunk = partial[:end].strip()
+        if chunk:
+            buffer.append(chunk)
+        partial = partial[end:]
+
+    return partial
+
+
+def _normalize_line(line: str) -> str:
+    """Normalize noisy stream fragments for panel readability."""
+    compact = " ".join(line.replace("\t", " ").split())
+    if len(compact) > 500:
+        return compact[:497] + "..."
+    return compact
 
 
 def tail_file_stream(
@@ -56,38 +88,32 @@ def tail_file_stream(
     Reads from the start (fresh per-run logs). Runs until stop_event
     is set or the file is deleted.
 
-    Buffers partial lines (tokens flushed without newlines) and only
-    emits a line when a real newline arrives or after
-    ``_FLUSH_INTERVAL`` seconds so the dashboard shows coherent
-    sentences instead of individual tokens.
+    Buffers partial stream tokens and emits finalized chunks only:
+    newline-terminated lines first, then sentence-like chunks as a
+    fallback. This keeps panels readable while still near-live.
     """
     try:
         with open(log_file, "r", encoding="utf-8") as f:
             partial = ""
-            partial_start: float = 0.0
             while not stop_event.is_set():
-                line = f.readline()
-                if line:
-                    if line.endswith("\n"):
-                        full = partial + line.rstrip("\n")
-                        partial = ""
-                        partial_start = 0.0
-                        if full:
-                            buffer.append(full)
-                    else:
-                        if not partial:
-                            partial_start = time.monotonic()
-                        partial += line
+                chunk = f.read(1024)
+                if chunk:
+                    partial += chunk
+                    partial = _append_complete_chunks(buffer, partial)
+
+                    if len(partial) > _MAX_PARTIAL_CHARS:
+                        cutoff = partial.rfind(" ")
+                        if cutoff <= 0:
+                            cutoff = _MAX_PARTIAL_CHARS
+                        forced = partial[:cutoff].strip()
+                        if forced:
+                            buffer.append(forced)
+                        partial = partial[cutoff:].lstrip()
                 else:
                     time.sleep(0.1)
 
-                # Time-based flush for streaming tokens
-                if partial and partial_start:
-                    elapsed = time.monotonic() - partial_start
-                    if elapsed >= _FLUSH_INTERVAL:
-                        buffer.append(partial)
-                        partial = ""
-                        partial_start = 0.0
+            if partial.strip():
+                buffer.append(partial.strip())
     except (OSError, FileNotFoundError):
         pass
 
@@ -143,7 +169,11 @@ class Dashboard:
                 lines = buffer.get_lines()
                 content = Text()
                 for line in lines[-lines_per_panel:]:
-                    content.append(line + "\n", style=f"{color} dim")
+                    formatted = format_log_line(line)
+                    normalized = _normalize_line(formatted)
+                    if not normalized:
+                        continue
+                    content.append(normalized + "\n", style=f"{color} dim")
             else:
                 content = Text("Waiting...", style="dim")
 

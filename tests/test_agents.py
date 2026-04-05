@@ -42,8 +42,8 @@ class TestOrchestrator:
 
     def test_default_schedule_intervals(self):
         orchestrator = Orchestrator()
-        assert orchestrator.schedules["pipeline"].interval_minutes == 120
-        assert orchestrator.schedules["monitor"].interval_minutes == 5
+        assert orchestrator.schedules["pipeline"].interval_minutes == 1
+        assert orchestrator.schedules["monitor"].interval_minutes == 10
         assert orchestrator.schedules["reporter"].interval_minutes == 1440
         assert orchestrator.schedules["checker"].interval_minutes == 360
 

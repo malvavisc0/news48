@@ -73,6 +73,25 @@ def _parse_feed_date(date_str: str) -> datetime | None:
     return dt
 
 
+def normalize_published_date(date_str: str | None) -> str | None:
+    """Parse various date formats and normalize to UTC ISO 8601.
+
+    Wraps the existing _parse_feed_date() but returns ISO string.
+    Uses dateparser (already a project dependency) with UTC timezone
+    setting.
+
+    Handles:
+    - RFC 822 / RFC 3339
+    - ISO 8601 with/without timezone
+    - Relative dates
+    - Various locale formats
+    """
+    if not date_str:
+        return None
+    dt = _parse_feed_date(date_str)
+    return dt.isoformat() if dt else None
+
+
 def load_urls(filepath: str) -> List[str]:
     """Load URLs from a file, one per line.
 
@@ -123,7 +142,10 @@ async def get_fetch_summary(
                 feed = get_feed_by_url(db_path, url)
                 if feed:
                     update_feed_metadata(
-                        db_path, feed["id"], result.title or "Unknown"
+                        db_path,
+                        feed["id"],
+                        result.title or "Unknown",
+                        favicon_url=extract_favicon(url),
                     )
                     # Filter: only articles from current month or later
                     articles = [
@@ -132,7 +154,13 @@ async def get_fetch_summary(
                         if is_article_from_last_48_hours(entry.published_at)
                     ]
                     # Each function manages its own connection
-                    insert_articles(db_path, fetch_id, feed["id"], articles)
+                    insert_articles(
+                        db_path,
+                        fetch_id,
+                        feed["id"],
+                        articles,
+                        source_name=result.title,
+                    )
 
         if db_path and fetch_id:
             complete_fetch(
@@ -189,6 +217,32 @@ def _process_feed(feed: feedparser.FeedParserDict, url: str) -> FeedResult:
 
     entries = []
     for entry in feed.entries:
+        # Extract image from media:content, enclosures, or media:thumbnail
+        image_url: str | None = None
+        media = entry.get("media_content")
+        if media and isinstance(media, list) and media:
+            image_url = media[0].get("url")  # type: ignore[union-attr]
+        if not image_url:
+            enclosures = entry.get("enclosures")
+            if enclosures and isinstance(enclosures, list):
+                for enc in enclosures:
+                    enc_type = (
+                        enc.get("type", "") if isinstance(enc, dict) else ""
+                    )
+                    if isinstance(enc_type, str) and enc_type.startswith(
+                        "image/"
+                    ):
+                        image_url = enc.get(
+                            "href"
+                        ) or enc.get(  # type: ignore[union-attr]
+                            "url"
+                        )  # type: ignore[union-attr]
+                        break
+        if not image_url:
+            thumb = entry.get("media_thumbnail")
+            if thumb and isinstance(thumb, list) and thumb:
+                image_url = thumb[0].get("url")  # type: ignore[union-attr]
+
         entries.append(
             FeedEntry(
                 url=entry.get("link", ""),  # type: ignore[arg-type]
@@ -196,6 +250,7 @@ def _process_feed(feed: feedparser.FeedParserDict, url: str) -> FeedResult:
                 summary=entry.get("summary"),  # type: ignore[arg-type]
                 author=entry.get("author"),  # type: ignore[arg-type]
                 published_at=entry.get("published"),  # type: ignore[arg-type]
+                image_url=image_url,
             )
         )
 
@@ -212,3 +267,86 @@ def _process_feed(feed: feedparser.FeedParserDict, url: str) -> FeedResult:
         entries=entries,
         success=True,
     )
+
+
+def extract_favicon(feed_url: str) -> str:
+    """Construct favicon URL from feed URL domain using Google's service."""
+    from helpers.url import get_base_url
+
+    domain = get_base_url(feed_url)
+    return f"https://www.google.com/s2/favicons?domain={domain}&sz=64"
+
+
+def generate_rss_feed(
+    articles: list[dict],
+    site_title: str = "news48",
+    site_url: str = "https://news48.io",
+    site_description: str = "News from the last 48 hours",
+) -> str:
+    """Generate RSS 2.0 XML from a list of article dicts.
+
+    Uses the standard library xml.etree.ElementTree.
+    Includes:
+    - Article title, link, description/summary
+    - Published date (RFC 822)
+    - Author
+    - Categories (from comma-separated string)
+    - Enclosure for image_url if present
+    """
+    from email.utils import formatdate
+    from xml.etree.ElementTree import Element, SubElement, tostring
+
+    rss = Element("rss", version="2.0")
+    channel = SubElement(rss, "channel")
+
+    SubElement(channel, "title").text = site_title
+    SubElement(channel, "link").text = site_url
+    SubElement(channel, "description").text = site_description
+    SubElement(channel, "language").text = "en"
+
+    for article in articles:
+        item = SubElement(channel, "item")
+
+        title = article.get("title") or "Untitled"
+        SubElement(item, "title").text = title
+
+        url = article.get("url", "")
+        if url:
+            SubElement(item, "link").text = url
+
+        summary = article.get("summary") or ""
+        if summary:
+            SubElement(item, "description").text = summary
+
+        author = article.get("author")
+        if author:
+            SubElement(item, "author").text = author
+
+        published = article.get("published_at")
+        if published:
+            try:
+                dt_obj = datetime.fromisoformat(published)
+                timestamp = dt_obj.timestamp()
+                SubElement(item, "pubDate").text = formatdate(timestamp)
+            except (ValueError, TypeError):
+                pass
+
+        categories = article.get("categories")
+        if categories:
+            for cat in categories.split(","):
+                cat = cat.strip()
+                if cat:
+                    SubElement(item, "category").text = cat
+
+        image_url = article.get("image_url")
+        if image_url:
+            SubElement(
+                item,
+                "enclosure",
+                url=image_url,
+                type="image/jpeg",
+                length="0",
+            )
+
+    xml_str = tostring(rss, encoding="unicode", xml_declaration=True)
+    return xml_str

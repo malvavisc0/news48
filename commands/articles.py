@@ -15,6 +15,8 @@ from database import (
     init_database,
     reset_article_download,
     reset_article_parse,
+    set_article_breaking,
+    set_article_featured,
     update_article_fact_check,
 )
 
@@ -82,6 +84,9 @@ def list_articles(
         "-s",
         help="Filter: empty|downloaded|parsed|download-failed|parse-failed",
     ),
+    language: str = typer.Option(
+        None, "--language", "-L", help="Filter by language code"
+    ),
     limit: int = typer.Option(20, "--limit", "-l", help="Number of articles"),
     offset: int = typer.Option(0, "--offset", "-o", help="Number to skip"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -101,6 +106,7 @@ def list_articles(
             offset=offset,
             feed_domain=feed,
             status=status_filter,
+            language=language,
         )
     except SystemExit:
         raise
@@ -559,3 +565,87 @@ def check_article(
                 print(f"  Result: {result}")
         else:
             print(f"Error: Failed to update article {article['id']}")
+
+
+@articles_app.command(name="feature")
+def feature_article(
+    identifier: str = typer.Argument(..., help="Article ID or URL"),
+    remove: bool = typer.Option(
+        False, "--remove", help="Remove featured status"
+    ),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Mark an article as featured."""
+    db_path = require_db()
+    init_database(db_path)
+
+    article = None
+    try:
+        article_id = int(identifier)
+        article = get_article_by_id(db_path, article_id)
+    except ValueError:
+        article = get_article_by_url(db_path, identifier)
+
+    if not article:
+        emit_error(
+            f"Article not found: {identifier}",
+            as_json=output_json,
+        )
+
+    featured = not remove
+    set_article_featured(db_path, article["id"], featured=featured)
+
+    data = {
+        "id": article["id"],
+        "url": article["url"],
+        "title": article["title"],
+        "is_featured": featured,
+    }
+
+    if output_json:
+        emit_json(data)
+    else:
+        action = "Featured" if featured else "Unfeatured"
+        print(f"{action} article: {article['title'] or 'Untitled'}")
+
+
+@articles_app.command(name="breaking")
+def breaking_article(
+    identifier: str = typer.Argument(..., help="Article ID or URL"),
+    remove: bool = typer.Option(
+        False, "--remove", help="Remove breaking status"
+    ),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Mark an article as breaking news."""
+    db_path = require_db()
+    init_database(db_path)
+
+    article = None
+    try:
+        article_id = int(identifier)
+        article = get_article_by_id(db_path, article_id)
+    except ValueError:
+        article = get_article_by_url(db_path, identifier)
+
+    if not article:
+        emit_error(
+            f"Article not found: {identifier}",
+            as_json=output_json,
+        )
+
+    breaking = not remove
+    set_article_breaking(db_path, article["id"], breaking=breaking)
+
+    data = {
+        "id": article["id"],
+        "url": article["url"],
+        "title": article["title"],
+        "is_breaking": breaking,
+    }
+
+    if output_json:
+        emit_json(data)
+    else:
+        action = "Marked breaking" if breaking else "Unmarked breaking"
+        print(f"{action}: {article['title'] or 'Untitled'}")

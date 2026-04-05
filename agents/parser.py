@@ -76,6 +76,20 @@ class NewsParsingResult(BaseModel):
             "(e.g., Pakistan, Afghanistan, United States)"
         ),
     )
+    image_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "Primary/hero image URL from the article "
+            "(prefer large, high-quality images over icons/logos)"
+        ),
+    )
+    language: Optional[str] = Field(
+        default=None,
+        description=(
+            "ISO 639-1 language code of the article content "
+            "(e.g., en, de, fr)"
+        ),
+    )
 
     success: bool = Field(
         default=True, description="Whether the parsing was successful or not"

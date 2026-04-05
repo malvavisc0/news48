@@ -19,6 +19,7 @@ from database import (
     update_article,
 )
 from helpers import fetch_url_content, get_base_url, get_byparr_solution
+from helpers.url import extract_og_image
 from models import ByparrSolution
 
 from ._common import emit_error, emit_json, require_db, status_msg
@@ -97,10 +98,12 @@ async def _download_article(
                 url=url,
                 solution=solution,
             )
+            image_url = extract_og_image(content)
             update_article(
                 db_path,
                 article["id"],
                 content=content,
+                image_url=image_url,
             )
             return True
 

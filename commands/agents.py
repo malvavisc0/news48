@@ -1,6 +1,7 @@
 """Agents command - manage autonomous agents."""
 
 import asyncio
+from typing import Literal
 
 import typer
 
@@ -83,11 +84,13 @@ def agents_status(
 
 @agents_app.command(name="run")
 def agents_run(
-    agent: str = typer.Option(
+    agent: Literal[
+        "pipeline", "monitor", "reporter", "checker"
+    ] = typer.Option(
         None,
         "--agent",
         "-a",
-        help="Specific agent to run (pipeline|monitor|reporter)",
+        help="Specific agent to run (pipeline|monitor|reporter|checker)",
     ),
     task: str = typer.Option(
         None,
@@ -108,36 +111,20 @@ def agents_run(
             return
 
         task_prompt = task or DEFAULT_TASKS[agent]
-        result = asyncio.run(_run_single_agent(agent, task_prompt))
+        asyncio.run(_run_single_agent(agent, task_prompt))
     else:
         # Run all due agents (loads persisted state for scheduling)
         orchestrator = Orchestrator()
         orchestrator.load_state()
-        result = asyncio.run(orchestrator.run_due_agents())
-
-    if output_json:
-        emit_json(result)
-    else:
-        agents_run_list = result.get("agents_run", [])
-        agents_str = ", ".join(agents_run_list) if agents_run_list else "none"
-        print(f"Agents run: {agents_str}")
-
-        for agent_name in agents_run_list:
-            agent_result = result["results"].get(agent_name, {})
-            if agent_result.get("error"):
-                print(f"\n{agent_name}: ERROR - " f"{agent_result['error']}")
-            else:
-                print(f"\n{agent_name}: completed")
+        asyncio.run(orchestrator.run_due_agents())
 
 
-async def _run_single_agent(agent_name: str, task: str) -> dict:
-    """Run a single agent and return result dict."""
-    orchestrator = Orchestrator()
-    result = await orchestrator.run_agent(agent_name, task)
-    return {
-        "agents_run": [agent_name],
-        "results": {agent_name: result},
-    }
+async def _run_single_agent(
+    agent_name: Literal["pipeline", "monitor", "reporter", "checker"],
+    task: str,
+):
+    """Run a single agent."""
+    await Orchestrator().run_agent(agent_name, task)
 
 
 @agents_app.command(name="start")
@@ -329,35 +316,3 @@ def agents_stop(
             console.print(f"  Stopped: {', '.join(stopped)}", style="green")
         if already:
             console.print(f"  Not running: {', '.join(already)}", style="dim")
-
-
-@agents_app.command(name="report")
-def agents_report(
-    report_type: str = typer.Option(
-        "daily", "--type", "-t", help="Report type: daily|weekly|monthly"
-    ),
-    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
-) -> None:
-    """Generate a report."""
-    if report_type not in REPORT_TASKS:
-        emit_error(
-            f"Invalid report type: {report_type}. "
-            f"Valid: {', '.join(REPORT_TASKS.keys())}",
-            as_json=output_json,
-        )
-        return
-
-    result = asyncio.run(
-        _run_single_agent("reporter", REPORT_TASKS[report_type])
-    )
-
-    if output_json:
-        emit_json(result)
-    else:
-        agent_result = result["results"].get("reporter", {})
-        if agent_result.get("error"):
-            print(f"Error: {agent_result['error']}")
-        else:
-            print(f"Report: {report_type}")
-            print("=" * 50)
-            print(agent_result.get("result", "No output"))

@@ -8,6 +8,7 @@ import typer
 
 from database import (
     delete_feed,
+    get_articles_paginated,
     get_feed_article_count,
     get_feed_by_id,
     get_feed_by_url,
@@ -376,3 +377,37 @@ def update_feed_cmd(
         print(f"  ID: {data['id']}")
         print(f"  Title: {data['title'] or 'N/A'}")
         print(f"  Description: {data['description'] or 'N/A'}")
+
+
+@feeds_app.command(name="rss")
+def generate_rss(
+    hours: int = typer.Option(48, "--hours", help="Time window"),
+    category: str = typer.Option(
+        None, "--category", help="Filter by category"
+    ),
+    output: str = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+) -> None:
+    """Generate RSS feed XML for the website."""
+    db_path = require_db()
+    init_database(db_path)
+
+    from helpers.feed import generate_rss_feed
+
+    articles, total = get_articles_paginated(
+        db_path,
+        limit=1000,
+        hours=hours,
+        category=category,
+        include_source=True,
+    )
+
+    xml = generate_rss_feed(articles)
+
+    if output:
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(xml)
+        print(f"Generated RSS feed: {output} ({total} articles)")
+    else:
+        print(xml)

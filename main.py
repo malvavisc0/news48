@@ -23,7 +23,9 @@ from commands.feeds import feeds_app
 from commands.fetch import fetch
 from commands.fetches import fetches_app
 from commands.parse import parse
+from commands.search import search_app
 from commands.seed import seed
+from commands.sitemap import sitemap_app
 from commands.stats import stats
 
 app = typer.Typer()
@@ -37,6 +39,8 @@ app.add_typer(fetches_app, name="fetches")
 app.add_typer(articles_app, name="articles")
 app.add_typer(cleanup_app, name="cleanup")
 app.add_typer(agents_app, name="agents")
+app.add_typer(search_app, name="search")
+app.add_typer(sitemap_app, name="sitemap")
 
 
 def main():
