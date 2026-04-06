@@ -82,3 +82,43 @@ def test_plans_show_json_includes_success_conditions(tmp_path, monkeypatch):
         "All articles downloaded",
         "Success rate >= 75%",
     ]
+
+
+def test_plans_remediate_preview_and_apply(tmp_path, monkeypatch):
+    from agents.tools import planner as planner_tools
+
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    json.loads(
+        planner_tools.create_plan(
+            "test",
+            "Download all empty articles",
+            ["Download", "Verify"],
+            ["No articles remain in empty status"],
+        )
+    )["result"]
+    second = json.loads(
+        planner_tools.create_plan(
+            "test",
+            "Download all empty articles now",
+            ["Download", "Verify"],
+            ["No articles remain in empty status"],
+        )
+    )["result"]
+
+    # Force second to be a true duplicate by directly writing
+    # its file as pending.
+    second_plan = planner_tools._read_plan(second["plan_id"])
+    second_plan["id"] = "duplicate-id"
+    second_plan["status"] = "pending"
+    planner_tools._write_plan(second_plan)
+
+    preview = runner.invoke(app, ["plans", "remediate", "--json"])
+    assert preview.exit_code == 0
+    preview_data = json.loads(preview.stdout)
+    assert preview_data["apply"] is False
+
+    applied = runner.invoke(app, ["plans", "remediate", "--apply", "--json"])
+    assert applied.exit_code == 0
+    applied_data = json.loads(applied.stdout)
+    assert applied_data["apply"] is True

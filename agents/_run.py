@@ -9,7 +9,7 @@ from llama_index.core.agent.workflow import (
     ToolCallResult,
 )
 
-from agents.streaming import flush_remaining_stream, flush_sentence_chunks
+from agents.streaming import emit_stream_delta, flush_remaining_stream
 
 # Configure logging for agent execution
 logging.basicConfig(
@@ -34,6 +34,9 @@ async def run_agent(get_agent_fn, task: str, max_iterations: int = 500) -> str:
     """
     final_response = ""
     stream_buffer = ""
+    repeated_error_count = 0
+    last_tool_error_signature = ""
+    repeated_error_limit = 5
     handler = get_agent_fn().run(user_msg=task, max_iterations=max_iterations)
     async for event in handler.stream_events():
         if isinstance(event, ToolCall):
@@ -50,17 +53,35 @@ async def run_agent(get_agent_fn, task: str, max_iterations: int = 500) -> str:
             output: dict = json.loads(event.tool_output.raw_output)
             error = output.get("error", None)
             if error:
+                signature = f"{event.tool_name}:{error}"
+                if signature == last_tool_error_signature:
+                    repeated_error_count += 1
+                else:
+                    repeated_error_count = 1
+                    last_tool_error_signature = signature
+
                 logger.info(
                     f"Unsuccessfully execution of the tool: "
                     f"{event.tool_name}. Error: {error}."
                 )
+                if repeated_error_count >= repeated_error_limit:
+                    logger.info(
+                        (
+                            "Aborting agent loop after %d repeated "
+                            "tool errors: %s"
+                        ),
+                        repeated_error_count,
+                        signature,
+                    )
+                    break
                 continue
+
+            repeated_error_count = 0
+            last_tool_error_signature = ""
             logger.info(f"Completed execution of tool: {event.tool_name}.")
         elif isinstance(event, AgentStream):
             final_response += event.delta
-            stream_buffer, _ = flush_sentence_chunks(
-                stream_buffer, event.delta
-            )
+            stream_buffer, _ = emit_stream_delta(stream_buffer, event.delta)
 
     flush_remaining_stream(stream_buffer)
     return final_response

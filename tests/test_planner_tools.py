@@ -285,3 +285,91 @@ def test_update_plan_rejects_invalid_plan_status(tmp_path, monkeypatch):
 
     assert payload["result"] == ""
     assert "Invalid plan_status" in payload["error"]
+
+
+def test_update_plan_rejects_step_regression(tmp_path, monkeypatch):
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    created = json.loads(
+        planner_tools.create_plan(
+            "test", "Task", ["Step 1", "Verify"], ["Condition 1"]
+        )
+    )["result"]
+
+    json.loads(
+        planner_tools.update_plan(
+            reason="start",
+            plan_id=created["plan_id"],
+            step_id="step-1",
+            status="in_progress",
+            plan_status="executing",
+        )
+    )
+
+    payload = json.loads(
+        planner_tools.update_plan(
+            reason="bad transition",
+            plan_id=created["plan_id"],
+            step_id="step-1",
+            status="pending",
+        )
+    )
+
+    assert payload["result"] == ""
+    assert "Invalid step status transition" in payload["error"]
+
+
+def test_update_plan_rejects_terminal_plan_mutation(tmp_path, monkeypatch):
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    created = json.loads(
+        planner_tools.create_plan(
+            "test", "Task", ["Step 1", "Verify"], ["Condition 1"]
+        )
+    )["result"]
+
+    json.loads(
+        planner_tools.update_plan(
+            reason="done",
+            plan_id=created["plan_id"],
+            step_id="step-1",
+            status="completed",
+            plan_status="completed",
+        )
+    )
+
+    payload = json.loads(
+        planner_tools.update_plan(
+            reason="illegal mutate",
+            plan_id=created["plan_id"],
+            step_id="step-1",
+            status="failed",
+        )
+    )
+
+    assert payload["result"] == ""
+    assert "already terminal" in payload["error"]
+
+
+def test_create_plan_dedupes_active_same_family(tmp_path, monkeypatch):
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    first = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download all empty articles",
+            steps=["Download", "Verify"],
+            success_conditions=["No empty articles"],
+        )
+    )["result"]
+
+    second = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download all empty articles now",
+            steps=["Download", "Verify"],
+            success_conditions=["No empty articles"],
+        )
+    )["result"]
+
+    assert second["plan_id"] == first["plan_id"]

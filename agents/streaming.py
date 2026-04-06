@@ -104,6 +104,33 @@ def _emit_chunk(chunk: str) -> None:
             logger.info(f"Agent: {line}")
 
 
+def emit_stream_delta(stream_buffer: str, delta: str) -> tuple[str, str]:
+    """Emit AgentStream deltas line-by-line as soon as newline is seen.
+
+    This keeps live logs visible even when content has no sentence-ending
+    punctuation for long stretches.
+
+    Returns:
+        tuple[remaining_buffer, emitted_text]
+    """
+    if not delta:
+        return stream_buffer, ""
+
+    working = stream_buffer + delta
+    emitted_parts: list[str] = []
+
+    while "\n" in working:
+        line, working = working.split("\n", 1)
+        if line.strip():
+            emitted_parts.append(line + "\n")
+
+    emitted_text = "".join(emitted_parts)
+    if emitted_text:
+        _emit_chunk(emitted_text)
+
+    return working, emitted_text
+
+
 def flush_sentence_chunks(
     stream_buffer: str, delta: str, *, max_buffer_chars: int = 2000
 ) -> tuple[str, str]:

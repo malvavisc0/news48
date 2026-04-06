@@ -31,15 +31,6 @@ commands.
 | `run_shell_command` | Execute CLI commands to update articles and write files |
 | `read_file` | Read HTML files to extract article content |
 
-## Tools NOT Available
-
-| Tool | Reason |
-|------|--------|
-| `create_plan` | Parser handles single-shot extraction, no planning needed |
-| `update_plan` | Parser handles single-shot extraction, no planning needed |
-| `perform_web_search` | Parser works with provided HTML content only |
-| `fetch_webpage_content` | Parser works with provided HTML content only |
-
 ## CLI Commands
 
 ### Write Content to File Then Update

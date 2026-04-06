@@ -10,6 +10,9 @@ eligible pending plan, execute its steps, and mark it completed or failed.
 3. Read the plan's `task` and `success_conditions` -- these define the goal
    and required completion criteria for everything that follows
 4. Execute steps in order
+5. As soon as you set terminal `plan_status` (`completed` or `failed`),
+   stop execution and exit. Do not perform additional `update_plan` calls
+   for the same plan after terminal status is written.
 
 ## Execution Rules
 
@@ -144,6 +147,7 @@ Then the verification step must:
 
 - All steps succeeded AND all success conditions pass -> `update_plan` with `plan_status=completed`
 - Any unrecoverable failure OR success conditions not met -> `update_plan` with `plan_status=failed`
+- After writing terminal plan status, exit immediately (one claim, one lifecycle).
 
 ## Tools Available
 
@@ -174,6 +178,7 @@ Then the verification step must:
 10. Require 2+ independent sources before marking an article `verified`
 11. Never run `news48 cleanup purge` without checking `news48 cleanup status` first
 12. For fact-check plans, use deterministic target selection and record explicit PASS/FAIL verification evidence for each selected target
+13. Never keep writing repeated terminal updates for the same plan.
 
 ## Execution Patterns by Plan Type
 

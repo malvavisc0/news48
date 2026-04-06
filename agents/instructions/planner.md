@@ -63,6 +63,24 @@ news48 logs list --plan-id <plan_id> --json
 5. Never duplicate work already covered by pending or executing plans
 6. Steps must be natural language
 7. Always define `success_conditions` before writing plan steps
+8. Treat fetch/download/parse as canonical families: at most one active
+   (`pending` or `executing`) plan per family and `parent_id` scope.
+9. If a same-family active plan already exists, reuse it instead of creating
+   a new one.
+
+## Throughput-Emergency Priority Mode
+
+When pipeline throughput collapses (e.g., no new articles transitioning through
+`empty -> downloaded -> parsed`), prioritize only core pipeline goals until
+recovery:
+
+1. Feed freshness
+2. Article completeness
+3. Article parsing
+
+During this mode, defer creating new low-priority plans (retention, feed
+health, database optimization, broad fact-check expansions) unless they are a
+direct blocker for fetch/download/parse progress.
 
 ## Success Conditions
 
@@ -198,14 +216,6 @@ When `list_plans(status="executing")` shows plans with `stale: true`:
 | `create_plan` | Create new execution plans for the Executor |
 | `update_plan` | Modify existing plans: add steps, update status |
 | `list_plans` | View pending and executing plans to avoid duplicates |
-
-## Tools NOT Available
-
-| Tool | Reason |
-|------|--------|
-| `claim_plan` | Planner creates plans, does not execute them |
-| `perform_web_search` | Planner works with internal system state only |
-| `fetch_webpage_content` | Planner works with internal system state only |
 
 ## Tool Usage Patterns
 

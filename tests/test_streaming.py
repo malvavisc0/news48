@@ -1,6 +1,7 @@
-"""Tests for agents/streaming.py log formatting functions."""
+"""Tests for agents/streaming.py functions."""
 
-from agents.streaming import _strip_prefix, format_log_line
+from agents import streaming
+from agents.streaming import _strip_prefix, emit_stream_delta, format_log_line
 
 
 class TestStripPrefix:
@@ -163,3 +164,49 @@ class TestFormatLogLine:
         line = "2026-04-06 08:30:00 [agents.streaming] Agent: Done."
         result = format_log_line(line)
         assert result == "08:30 💬 Done."
+
+
+class TestEmitStreamDelta:
+    """Tests for newline-driven streaming emission."""
+
+    def test_emits_complete_line_on_newline(self, monkeypatch):
+        emitted = []
+
+        def _fake_emit(chunk: str) -> None:
+            emitted.append(chunk)
+
+        monkeypatch.setattr(streaming, "_emit_chunk", _fake_emit)
+
+        buffer, text = emit_stream_delta("", "hello world\n")
+
+        assert buffer == ""
+        assert text == "hello world\n"
+        assert emitted == ["hello world\n"]
+
+    def test_keeps_partial_without_newline(self, monkeypatch):
+        emitted = []
+
+        def _fake_emit(chunk: str) -> None:
+            emitted.append(chunk)
+
+        monkeypatch.setattr(streaming, "_emit_chunk", _fake_emit)
+
+        buffer, text = emit_stream_delta("partial", " text")
+
+        assert buffer == "partial text"
+        assert text == ""
+        assert emitted == []
+
+    def test_emits_only_non_blank_lines(self, monkeypatch):
+        emitted = []
+
+        def _fake_emit(chunk: str) -> None:
+            emitted.append(chunk)
+
+        monkeypatch.setattr(streaming, "_emit_chunk", _fake_emit)
+
+        buffer, text = emit_stream_delta("", "\n  \nline\n")
+
+        assert buffer == ""
+        assert text == "line\n"
+        assert emitted == ["line\n"]

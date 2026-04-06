@@ -19,6 +19,125 @@ _STALE_PLAN_TIMEOUT_MINUTES = 60
 logger = logging.getLogger(__name__)
 
 
+_TERMINAL_STEP_STATUSES = {"completed", "failed"}
+_TERMINAL_PLAN_STATUSES = {"completed", "failed"}
+_ACTIVE_PLAN_STATUSES = {"pending", "executing"}
+
+
+def _task_family(task: str) -> str:
+    """Classify task text into a normalized family key."""
+    t = (task or "").strip().lower()
+    if "fetch" in t and "feed" in t:
+        return "fetch"
+    if "download" in t and "article" in t:
+        return "download"
+    if "parse" in t and "article" in t:
+        return "parse"
+    if "retry" in t and "article" in t:
+        return "retry"
+    if "fact-check" in t or "fact check" in t:
+        return "fact-check"
+    if "feed" in t and "stale" in t:
+        return "feed-health"
+    if "database" in t and ("health" in t or "integrity" in t):
+        return "db-health"
+    if "older than 48" in t or "retention" in t:
+        return "retention"
+    return t
+
+
+def _find_active_duplicate_plan(
+    task: str, parent_id: str | None
+) -> dict | None:
+    """Find an active plan in the same family to prevent duplicates."""
+    plans_dir = _ensure_plans_dir()
+    family = _task_family(task)
+    target_parent = parent_id or None
+    candidates = []
+
+    for plan_file in plans_dir.glob("*.json"):
+        try:
+            plan = json.loads(plan_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        if plan.get("status") not in _ACTIVE_PLAN_STATUSES:
+            continue
+
+        if _task_family(plan.get("task", "")) != family:
+            continue
+
+        if plan.get("parent_id") != target_parent:
+            continue
+
+        candidates.append(plan)
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda p: p.get("created_at", ""))
+    return candidates[0]
+
+
+def _derive_plan_status_from_steps(plan: dict) -> str | None:
+    """Derive terminal plan status from current step states when possible."""
+    steps = plan.get("steps", [])
+    if not steps:
+        return None
+
+    statuses = {s.get("status") for s in steps}
+    if statuses.issubset({"completed"}):
+        return "completed"
+    if statuses.issubset(_TERMINAL_STEP_STATUSES):
+        return "failed"
+    return None
+
+
+def _normalize_plan_for_consistency(plan: dict) -> bool:
+    """Normalize plan/step status mismatches.
+
+    Returns:
+        True when any field changed, else False.
+    """
+    changed = False
+    timestamp = _now()
+    status = plan.get("status")
+    steps = plan.get("steps", [])
+
+    # If a non-executing plan has in-progress steps,
+    # reset those steps to pending.
+    if status != "executing":
+        for step in steps:
+            if step.get("status") == "in_progress":
+                step["status"] = "pending"
+                step["updated_at"] = timestamp
+                changed = True
+
+    # If a plan is terminal, force all in_progress steps to terminal fallback.
+    if status in _TERMINAL_PLAN_STATUSES:
+        fallback = "failed" if status == "failed" else "completed"
+        for step in steps:
+            if step.get("status") == "in_progress":
+                step["status"] = fallback
+                step["updated_at"] = timestamp
+                changed = True
+
+    derived = _derive_plan_status_from_steps(plan)
+    if derived and status not in _TERMINAL_PLAN_STATUSES:
+        plan["status"] = derived
+        changed = True
+
+    # If all steps are terminal but the plan terminal status disagrees,
+    # prefer the derived status.
+    if derived and status in _TERMINAL_PLAN_STATUSES and status != derived:
+        plan["status"] = derived
+        changed = True
+
+    if changed:
+        plan["updated_at"] = timestamp
+    return changed
+
+
 def _ensure_plans_dir() -> Path:
     """Ensure the .plans directory exists.
 
@@ -145,6 +264,15 @@ def create_plan(
                     }
                 )
 
+        duplicate = _find_active_duplicate_plan(task, parent_id or None)
+        if duplicate:
+            return _safe_json(
+                {
+                    "result": _serialize_plan(duplicate),
+                    "error": "",
+                }
+            )
+
         plan_id = str(uuid.uuid4())
         timestamp = _now()
 
@@ -235,6 +363,11 @@ def update_plan(
                 }
             )
 
+        # Normalize persisted inconsistencies before applying changes.
+        normalized = _normalize_plan_for_consistency(plan)
+        if normalized:
+            _write_plan(plan)
+
         # Validate status
         if status.lower() not in valid_statuses:
             return _safe_json(
@@ -247,14 +380,62 @@ def update_plan(
                 }
             )
 
+        # Prevent mutating terminal plans except idempotent no-op updates.
+        plan_is_terminal = plan.get("status") in _TERMINAL_PLAN_STATUSES
+
         # Find and update the step
         step_found = False
+        changed = False
         for step in plan["steps"]:
             if step["id"] == step_id:
-                step["status"] = status.lower()
+                current_status = step.get("status", "pending")
+                next_status = status.lower()
+
+                prev_result = step.get("result")
+                result_changed = bool(result) and result != prev_result
+
+                if plan_is_terminal and (
+                    next_status != current_status or result_changed
+                ):
+                    return _safe_json(
+                        {
+                            "result": "",
+                            "error": (
+                                "Plan is already terminal and cannot be "
+                                "mutated"
+                            ),
+                        }
+                    )
+
+                # Allowed transitions protect against step regressions.
+                allowed = {
+                    "pending": {
+                        "pending",
+                        "in_progress",
+                        "completed",
+                        "failed",
+                    },
+                    "in_progress": {"in_progress", "completed", "failed"},
+                    "completed": {"completed"},
+                    "failed": {"failed"},
+                }
+                if next_status not in allowed.get(current_status, set()):
+                    return _safe_json(
+                        {
+                            "result": "",
+                            "error": (
+                                "Invalid step status transition "
+                                f"{current_status} -> {next_status}"
+                            ),
+                        }
+                    )
+
+                step["status"] = next_status
                 if result:
                     step["result"] = result
-                step["updated_at"] = timestamp
+                if next_status != current_status or result_changed:
+                    step["updated_at"] = timestamp
+                    changed = True
                 step_found = True
                 break
 
@@ -269,12 +450,31 @@ def update_plan(
         # Remove steps if requested
         if remove_steps:
             remove_set = set(remove_steps)
+            if plan_is_terminal:
+                return _safe_json(
+                    {
+                        "result": "",
+                        "error": (
+                            "Plan is already terminal and " "cannot be mutated"
+                        ),
+                    }
+                )
             plan["steps"] = [
                 s for s in plan["steps"] if s["id"] not in remove_set
             ]
+            changed = True
 
         # Add steps if requested
         if add_steps:
+            if plan_is_terminal:
+                return _safe_json(
+                    {
+                        "result": "",
+                        "error": (
+                            "Plan is already terminal and " "cannot be mutated"
+                        ),
+                    }
+                )
             next_num = len(plan["steps"]) + 1
             for step_desc in add_steps:
                 plan["steps"].append(
@@ -288,6 +488,7 @@ def update_plan(
                     }
                 )
                 next_num += 1
+            changed = True
 
         if plan_status:
             if plan_status.lower() not in valid_plan_statuses:
@@ -300,10 +501,33 @@ def update_plan(
                         ),
                     }
                 )
-            plan["status"] = plan_status.lower()
+            requested_status = plan_status.lower()
+            if plan.get(
+                "status"
+            ) in _TERMINAL_PLAN_STATUSES and requested_status != plan.get(
+                "status"
+            ):
+                return _safe_json(
+                    {
+                        "result": "",
+                        "error": (
+                            "Plan is already terminal and "
+                            "cannot change status"
+                        ),
+                    }
+                )
+            if plan.get("status") != requested_status:
+                plan["status"] = requested_status
+                changed = True
 
-        plan["updated_at"] = timestamp
-        _write_plan(plan)
+        derived_status = _derive_plan_status_from_steps(plan)
+        if derived_status and plan.get("status") != derived_status:
+            plan["status"] = derived_status
+            changed = True
+
+        if changed:
+            plan["updated_at"] = timestamp
+            _write_plan(plan)
 
         return _safe_json({"result": _serialize_plan(plan), "error": ""})
     except Exception as exc:
@@ -438,6 +662,9 @@ def claim_plan(reason: str) -> str:
                 plan = json.loads(plan_file.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 continue
+
+            if _normalize_plan_for_consistency(plan):
+                _write_plan(plan)
 
             all_plans[plan["id"]] = plan
 
