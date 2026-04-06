@@ -129,3 +129,37 @@ class TestFormatLogLine:
         )
         result = format_log_line(line)
         assert result == "12:38 ⚙ Executing: check"
+
+    def test_httpx_line_compact(self):
+        """Should compact httpx HTTP Request lines to minimal output."""
+        line = (
+            "2026-04-06 13:12:17 [httpx] HTTP Request: POST "
+            "http://skynet.tago.lan:9090/v1/chat/completions "
+            '"HTTP/1.1 200 OK"'
+        )
+        result = format_log_line(line)
+        assert result == "13:12 🌐 API call"
+
+    def test_httpx_line_different_method(self):
+        """Should compact any httpx line regardless of HTTP method."""
+        line = (
+            "2026-04-06 09:00:01 [httpx] HTTP Request: GET "
+            'http://example.com/api "HTTP/1.1 404 Not Found"'
+        )
+        result = format_log_line(line)
+        assert result == "09:00 🌐 API call"
+
+    def test_agent_stream_content(self):
+        """Should format Agent stream lines with speech icon."""
+        line = (
+            "2026-04-06 13:12:18 [agents.streaming] "
+            "Agent: The analysis shows three key findings."
+        )
+        result = format_log_line(line)
+        assert result == "13:12 💬 The analysis shows three key findings."
+
+    def test_agent_stream_short_content(self):
+        """Should handle short Agent stream content."""
+        line = "2026-04-06 08:30:00 [agents.streaming] Agent: Done."
+        result = format_log_line(line)
+        assert result == "08:30 💬 Done."

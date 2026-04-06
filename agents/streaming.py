@@ -1,6 +1,9 @@
 """Utilities for readable agent stream output."""
 
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 _SENTENCE_BOUNDARY_RE = re.compile(r"(?:[.!?][\"')\]]*\s+|\n{2,})")
 
@@ -18,6 +21,7 @@ _PREFIX_EXEC = "Executing tool:"
 _PREFIX_COMPLETE = "Completed execution of tool:"
 _PREFIX_SYS_ERR = "System error while executing tool:"
 _PREFIX_FAIL = "Unsuccessfully execution of the tool:"
+_PREFIX_AGENT = "Agent:"
 
 
 def _strip_prefix(message: str, prefix: str) -> str:
@@ -47,7 +51,17 @@ def format_log_line(line: str) -> str:
         return line
 
     time = match.group(2)
+    logger_name = match.group(3)
     message = match.group(4).strip()
+
+    # Compact httpx lines — tool execution lines already show agent activity
+    if logger_name == "httpx":
+        return f"{time} 🌐 API call"
+
+    # Parse "Agent: <content>" from AgentStream chunks
+    if message.startswith(_PREFIX_AGENT):
+        content = _strip_prefix(message, _PREFIX_AGENT)
+        return f"{time} 💬 {content}"
 
     # Parse "Executing tool: <name>. Reason: <reason>"
     if message.startswith(_PREFIX_EXEC):
@@ -82,10 +96,12 @@ def format_log_line(line: str) -> str:
 
 
 def _emit_chunk(chunk: str) -> None:
-    """Write a chunk to stdout exactly once."""
+    """Log a chunk via the logging module for file-based consumers."""
     if not chunk:
         return
-    print(chunk, end="", flush=True)
+    for line in chunk.strip().splitlines():
+        if line.strip():
+            logger.info(f"Agent: {line}")
 
 
 def flush_sentence_chunks(
