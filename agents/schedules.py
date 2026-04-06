@@ -23,6 +23,7 @@ class AgentSchedule:
     task_prompt: str
     interval_minutes: int
     enabled: bool = True
+    max_concurrent: int = 1
     last_run: Optional[str] = None
     last_result: Optional[str] = None
     last_error: Optional[str] = None
@@ -61,6 +62,7 @@ DEFAULT_SCHEDULES: Dict[str, AgentSchedule] = {
             "step, and set the plan status when done."
         ),
         interval_minutes=1,
+        max_concurrent=3,
     ),
     "monitor": AgentSchedule(
         agent_name="monitor",

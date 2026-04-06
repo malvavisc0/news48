@@ -1,11 +1,12 @@
 """Non-LLM tests for orchestrator scheduling behavior."""
 
 import json
+from datetime import datetime, timezone
 from typing import Any, cast
 
 from agents import orchestrator as orchestrator_module
 from agents.orchestrator import Orchestrator
-from agents.schedules import AgentSchedule
+from agents.schedules import AgentSchedule, RunningAgent
 from agents.tools import planner as planner_tools
 
 
@@ -251,3 +252,144 @@ class TestOrchestrator:
         schedule = orchestrator.schedules["planner"]
         assert schedule.last_result == "unknown"
         assert "disappeared" in (schedule.last_error or "").lower()
+
+    def test_tick_forks_at_most_one_instance_per_agent_per_tick(self):
+        schedules = {
+            "executor": AgentSchedule(
+                agent_name="executor",
+                task_prompt="Run executor",
+                interval_minutes=1,
+                max_concurrent=3,
+            )
+        }
+        orchestrator = Orchestrator(schedules=schedules)
+
+        calls = {"forks": 0}
+
+        orchestrator.check_running = lambda: {}
+
+        def _fake_fork(name: str, task=None):
+            calls["forks"] += 1
+            return True
+
+        orchestrator.fork_agent = _fake_fork
+        orchestrator.save_state = lambda: None
+
+        result = orchestrator.tick()
+
+        assert calls["forks"] == 1
+        assert result["forked"] == ["executor"]
+
+    def test_run_agent_inline_ignores_daemon_running_slots(self, monkeypatch):
+        import asyncio
+        import importlib
+
+        orchestrator = Orchestrator()
+        orchestrator.running["executor"] = [
+            RunningAgent(
+                pid=111,
+                agent_name="executor",
+                started_at=datetime.now(timezone.utc).isoformat(),
+                log_file=".logs/executor-a.log",
+            ),
+            RunningAgent(
+                pid=222,
+                agent_name="executor",
+                started_at=datetime.now(timezone.utc).isoformat(),
+                log_file=".logs/executor-b.log",
+            ),
+            RunningAgent(
+                pid=333,
+                agent_name="executor",
+                started_at=datetime.now(timezone.utc).isoformat(),
+                log_file=".logs/executor-c.log",
+            ),
+        ]
+
+        class _FakeModule:
+            @staticmethod
+            async def run(task: str):
+                return f"ok:{task}"
+
+        monkeypatch.setattr(
+            importlib, "import_module", lambda _name: _FakeModule
+        )
+
+        result = asyncio.run(orchestrator.run_agent("executor", "inline"))
+        assert result["error"] is None
+        assert result["result"] == "ok:inline"
+
+    def test_stop_agent_returns_instance_details_and_release_counts(
+        self, monkeypatch
+    ):
+        orchestrator = Orchestrator(
+            schedules={
+                "executor": AgentSchedule(
+                    agent_name="executor",
+                    task_prompt="Run",
+                    interval_minutes=1,
+                    max_concurrent=3,
+                )
+            }
+        )
+
+        orchestrator.running["executor"] = [
+            RunningAgent(
+                pid=101,
+                agent_name="executor",
+                started_at="2026-01-01T00:00:00+00:00",
+                log_file=".logs/executor-101.log",
+            ),
+            RunningAgent(
+                pid=202,
+                agent_name="executor",
+                started_at="2026-01-01T00:00:01+00:00",
+                log_file=".logs/executor-202.log",
+            ),
+        ]
+
+        monkeypatch.setattr(
+            orchestrator_module, "_is_process_alive", lambda _pid: False
+        )
+        monkeypatch.setattr(
+            orchestrator_module.os, "killpg", lambda _pgid, _sig: None
+        )
+        monkeypatch.setattr(orchestrator_module.os, "getpgid", lambda pid: pid)
+        monkeypatch.setattr(orchestrator_module.time, "sleep", lambda _s: None)
+
+        released_calls = []
+
+        def _fake_release(pid: int):
+            released_calls.append(pid)
+            return {
+                "released": [f"plan-{pid}"],
+                "count": 1,
+            }
+
+        monkeypatch.setattr(
+            planner_tools, "release_plans_for_pid", _fake_release
+        )
+
+        result = orchestrator.stop_agent("executor")
+
+        assert result["stopped"] == ["executor"]
+        assert result["stopped_count"] == 2
+        assert len(result["stopped_instances"]) == 2
+        assert {entry["pid"] for entry in result["stopped_instances"]} == {
+            101,
+            202,
+        }
+        assert all(
+            entry["released_plan_count"] == 1
+            for entry in result["stopped_instances"]
+        )
+        assert released_calls == [101, 202]
+
+    def test_stop_agent_not_running_returns_empty_instance_payload(self):
+        orchestrator = Orchestrator()
+        result = orchestrator.stop_agent("executor")
+
+        assert result["stopped"] == []
+        assert result["already_stopped"] == ["executor"]
+        assert result["stopped_count"] == 0
+        assert result["stopped_instances"] == []

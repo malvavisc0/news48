@@ -5,6 +5,7 @@ Plans are stored as JSON files in the .plans/ directory and survive
 process restarts.
 """
 
+import fcntl
 import json
 import logging
 import os
@@ -833,8 +834,15 @@ def claim_plan(reason: str) -> str:
       or empty string if no eligible plans exist
     - ``error``: Empty on success
     """
+    lock_fd = None
     try:
+        # Serialize concurrent claim attempts with a file lock so two
+        # executors cannot claim the same plan.
         plans_dir = _ensure_plans_dir()
+        lock_path = plans_dir / ".claim.lock"
+        lock_fd = open(lock_path, "w")
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+
         all_plans = {}
         pending_plans = []
 
@@ -878,6 +886,10 @@ def claim_plan(reason: str) -> str:
         return _safe_json({"result": "", "error": ""})
     except Exception as exc:
         return _safe_json({"result": "", "error": str(exc)})
+    finally:
+        if lock_fd is not None:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            lock_fd.close()
 
 
 def list_plans(reason: str, status: str = "") -> str:

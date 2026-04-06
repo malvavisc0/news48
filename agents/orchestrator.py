@@ -13,7 +13,7 @@ import signal
 import subprocess
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Literal, Optional, cast
+from typing import Any, Dict, List, Literal, Optional, cast
 
 from agents.schedules import (
     _LOGS_DIR,
@@ -35,6 +35,9 @@ class Orchestrator:
     In daemon mode each agent is forked as a subprocess; the orchestrator
     tracks PIDs, polls for completion, and persists state to
     ``.orchestrator.json``.
+
+    Agents with ``max_concurrent > 1`` (e.g. executor) may have multiple
+    instances running simultaneously, each claiming a different plan.
     """
 
     def __init__(
@@ -46,7 +49,7 @@ class Orchestrator:
         self.schedules = schedules or {
             name: replace(s) for name, s in DEFAULT_SCHEDULES.items()
         }
-        self.running: Dict[str, RunningAgent] = {}
+        self.running: Dict[str, List[RunningAgent]] = {}
 
     def load_state(self) -> None:
         """Load schedule state from ``.orchestrator.json``.
@@ -54,6 +57,9 @@ class Orchestrator:
         Restores ``last_run``, ``last_result``, and ``last_error`` for
         each schedule, and any previously running agent entries (their
         processes will be checked on the next tick).
+
+        Handles both legacy (single-dict) and current (list) formats
+        for the ``running`` section.
         """
         if _STATE_FILE.exists():
             try:
@@ -76,25 +82,33 @@ class Orchestrator:
             # Restore running agent records (processes are gone after restart,
             # but we mark them as failed-unknown so we know they didn't finish)
             for name, run_data in data.get("running", {}).items():
-                pid = run_data.get("pid", 0)
-                if not _is_process_alive(pid):
-                    # Process is gone -- mark as completed with unknown result
-                    if name in self.schedules:
-                        self.schedules[name].last_run = run_data.get(
-                            "started_at"
+                # Support both legacy (dict) and current (list) formats
+                entries = (
+                    run_data if isinstance(run_data, list) else [run_data]
+                )
+                for entry in entries:
+                    pid = entry.get("pid", 0)
+                    if not _is_process_alive(pid):
+                        # Process is gone -- mark as completed with unknown
+                        if name in self.schedules:
+                            self.schedules[name].last_run = entry.get(
+                                "started_at"
+                            )
+                            self.schedules[name].last_result = "unknown"
+                            self.schedules[name].last_error = (
+                                "Process disappeared "
+                                "(orchestrator restarted?)"
+                            )
+                    else:
+                        # Process is still running from a previous session
+                        self.running.setdefault(name, []).append(
+                            RunningAgent(
+                                pid=pid,
+                                agent_name=name,
+                                started_at=entry.get("started_at", ""),
+                                log_file=entry.get("log_file", ""),
+                            )
                         )
-                        self.schedules[name].last_result = "unknown"
-                        self.schedules[name].last_error = (
-                            "Process disappeared (orchestrator restarted?)"
-                        )
-                else:
-                    # Process is still running from a previous session
-                    self.running[name] = RunningAgent(
-                        pid=pid,
-                        agent_name=name,
-                        started_at=run_data.get("started_at", ""),
-                        log_file=run_data.get("log_file", ""),
-                    )
 
         # Autonomous recovery pass: normalize/requeue stale executing plans
         # immediately on orchestrator startup.
@@ -134,12 +148,15 @@ class Orchestrator:
                 "last_result": schedule.last_result,
                 "last_error": schedule.last_error,
             }
-        for name, running in self.running.items():
-            data["running"][name] = {
-                "pid": running.pid,
-                "started_at": running.started_at,
-                "log_file": running.log_file,
-            }
+        for name, instances in self.running.items():
+            data["running"][name] = [
+                {
+                    "pid": r.pid,
+                    "started_at": r.started_at,
+                    "log_file": r.log_file,
+                }
+                for r in instances
+            ]
         try:
             _STATE_FILE.write_text(
                 json.dumps(data, indent=2, default=str),
@@ -152,8 +169,9 @@ class Orchestrator:
         """Check if an agent should run based on its schedule."""
         if not schedule.enabled:
             return False
-        if schedule.agent_name in self.running:
-            return False  # Already running
+        running_count = len(self.running.get(schedule.agent_name, []))
+        if running_count >= schedule.max_concurrent:
+            return False
         if schedule.last_run is None:
             return True
         try:
@@ -190,17 +208,6 @@ class Orchestrator:
                 "agent": name,
                 "result": None,
                 "error": f"Unknown agent: {name}",
-            }
-
-        if name in self.running:
-            r = self.running[name]
-            return {
-                "agent": name,
-                "result": None,
-                "error": (
-                    f"Agent '{name}' is already running "
-                    f"(PID {r.pid}, started at {r.started_at})"
-                ),
             }
 
         import importlib
@@ -259,17 +266,28 @@ class Orchestrator:
         Returns:
             True if the agent was forked, False on error.
         """
-        if name in self.running:
+        instances = self.running.get(name, [])
+        schedule = self.schedules.get(name)
+        max_concurrent = schedule.max_concurrent if schedule else 1
+        if len(instances) >= max_concurrent:
+            pids = ", ".join(str(r.pid) for r in instances)
             logger.warning(
-                f"Agent {name} is already running (PID "
-                f"{self.running[name].pid})"
+                f"Agent {name} at max concurrency "
+                f"({max_concurrent}): PIDs {pids}"
             )
             return False
 
         _LOGS_DIR.mkdir(exist_ok=True)
         now = datetime.now(timezone.utc)
         timestamp = now.strftime("%Y%m%d-%H%M%S")
-        log_file = str(_LOGS_DIR / f"{name}-{timestamp}.log")
+        # Add instance index to log filename for concurrent agents
+        instance_idx = len(instances)
+        if max_concurrent > 1:
+            log_file = str(
+                _LOGS_DIR / f"{name}-{timestamp}-{instance_idx}.log"
+            )
+        else:
+            log_file = str(_LOGS_DIR / f"{name}-{timestamp}.log")
 
         cmd = [
             "uv",
@@ -294,16 +312,16 @@ class Orchestrator:
                 start_new_session=True,  # Detach from parent
             )
             log_fh.close()  # Child inherited the fd
-            self.running[name] = RunningAgent(
-                pid=proc.pid,
-                agent_name=name,
-                started_at=now.isoformat(),
-                log_file=log_file,
-                process=proc,
+            self.running.setdefault(name, []).append(
+                RunningAgent(
+                    pid=proc.pid,
+                    agent_name=name,
+                    started_at=now.isoformat(),
+                    log_file=log_file,
+                    process=proc,
+                )
             )
-            logger.info(
-                f"Forked agent {name} as PID {proc.pid} " f"→ {log_file}"
-            )
+            logger.info(f"Forked agent {name} as PID {proc.pid} → {log_file}")
             return True
         except Exception as exc:
             logger.error(f"Failed to fork agent {name}: {exc}")
@@ -316,59 +334,70 @@ class Orchestrator:
         the exit code and cleans up the running tracker.
 
         Returns:
-            Dict of agent names that completed, with their results.
+            Dict of completion keys (``name`` or ``name:pid``) with results.
         """
         completed: Dict[str, Dict[str, Any]] = {}
-        finished_names: list[str] = []
 
-        for name, running in self.running.items():
-            proc = running.process
-            pid = running.pid
+        for name in list(self.running.keys()):
+            instances = self.running[name]
+            still_running: List[RunningAgent] = []
 
-            # If we don't have a process handle (e.g., restored from state
-            # after restart), check if the PID is still alive
-            if proc is None:
-                if not _is_process_alive(pid):
-                    finished_names.append(name)
-                    completed[name] = {
-                        "pid": pid,
-                        "exit_code": None,
-                        "result": "unknown",
-                        "log_file": running.log_file,
-                        "duration": _duration_since(running.started_at),
-                    }
-                continue
+            for running in instances:
+                proc = running.process
+                pid = running.pid
+                finished = False
+                comp_info: Optional[Dict[str, Any]] = None
 
-            # Poll the process
-            exit_code = proc.poll()
-            if exit_code is not None:
-                finished_names.append(name)
-                result = "success" if exit_code == 0 else "error"
-                error_msg = None
+                # If we don't have a process handle (e.g., restored from
+                # state after restart), check if the PID is still alive
+                if proc is None:
+                    if not _is_process_alive(pid):
+                        finished = True
+                        comp_info = {
+                            "pid": pid,
+                            "exit_code": None,
+                            "result": "unknown",
+                            "log_file": running.log_file,
+                            "duration": _duration_since(running.started_at),
+                        }
+                else:
+                    # Poll the process
+                    exit_code = proc.poll()
+                    if exit_code is not None:
+                        finished = True
+                        result = "success" if exit_code == 0 else "error"
+                        error_msg = None
 
-                # Try to read the last few lines of the log for context
-                if exit_code != 0:
-                    error_msg = _tail_file(running.log_file, lines=20)
+                        if exit_code != 0:
+                            error_msg = _tail_file(running.log_file, lines=20)
 
-                completed[name] = {
-                    "pid": pid,
-                    "exit_code": exit_code,
-                    "result": result,
-                    "error": error_msg,
-                    "log_file": running.log_file,
-                    "duration": _duration_since(running.started_at),
-                }
+                        comp_info = {
+                            "pid": pid,
+                            "exit_code": exit_code,
+                            "result": result,
+                            "error": error_msg,
+                            "log_file": running.log_file,
+                            "duration": _duration_since(running.started_at),
+                        }
 
-                # Update schedule state
-                schedule = self.schedules.get(name)
-                if schedule:
-                    schedule.last_run = running.started_at
-                    schedule.last_result = result
-                    schedule.last_error = error_msg
+                        # Update schedule state
+                        schedule = self.schedules.get(name)
+                        if schedule:
+                            schedule.last_run = running.started_at
+                            schedule.last_result = result
+                            schedule.last_error = error_msg
 
-        # Remove completed agents from running
-        for name in finished_names:
-            del self.running[name]
+                if finished and comp_info:
+                    # Use name:pid as key when multiple instances possible
+                    comp_key = f"{name}:{pid}"
+                    completed[comp_key] = comp_info
+                else:
+                    still_running.append(running)
+
+            if still_running:
+                self.running[name] = still_running
+            else:
+                self.running.pop(name, None)
 
         return completed
 
@@ -376,7 +405,7 @@ class Orchestrator:
         """Run one orchestrator cycle.
 
         1. Check running processes for completion.
-        2. Fork due agents that aren't running.
+        2. Fork due agents (at most one new instance per agent per tick).
         3. Save state.
 
         Returns:
@@ -385,7 +414,7 @@ class Orchestrator:
         # 1. Check completed agents
         completed = self.check_running()
 
-        # 2. Fork due agents
+        # 2. Fork due agents (one-per-agent per tick to avoid burst-forking)
         forked: list[str] = []
         for name, schedule in self.schedules.items():
             if self._should_run(schedule):
@@ -395,10 +424,16 @@ class Orchestrator:
         # 3. Save state
         self.save_state()
 
+        # Count total running instances
+        total_running = sum(
+            len(instances) for instances in self.running.values()
+        )
+
         return {
             "completed": completed,
             "forked": forked,
             "running": list(self.running.keys()),
+            "running_total": total_running,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -412,24 +447,26 @@ class Orchestrator:
                 result = self.tick()
                 n_c = len(result["completed"])
                 n_f = len(result["forked"])
-                n_r = len(result["running"])
+                n_r = result["running_total"]
 
                 if n_c or n_f:
                     logger.info(
                         f"Tick: {n_f} forked, {n_c} completed, "
                         f"{n_r} running"
                     )
-                    for name, info in result["completed"].items():
+                    for comp_key, info in result["completed"].items():
                         logger.info(
-                            f"  {name}: {info['result']} "
+                            f"  {comp_key}: {info['result']} "
                             f"(exit={info.get('exit_code')}, "
                             f"duration={info.get('duration', '?')})"
                         )
                     for name in result["forked"]:
-                        logger.info(
-                            f"  {name}: forked → "
-                            f"PID {self.running[name].pid}"
-                        )
+                        instances = self.running.get(name, [])
+                        if instances:
+                            logger.info(
+                                f"  {name}: forked → "
+                                f"PID {instances[-1].pid}"
+                            )
 
                 time.sleep(tick_seconds)
         except KeyboardInterrupt:
@@ -437,53 +474,87 @@ class Orchestrator:
             self.save_state()
 
     def stop_agent(self, name: str) -> Dict[str, Any]:
-        """Stop a running agent: SIGTERM, wait 5s, then SIGKILL."""
-        if name not in self.running:
-            return {"stopped": [], "already_stopped": [name]}
+        """Stop all running instances of an agent.
 
-        running = self.running[name]
-        pid = running.pid
+        Sends SIGTERM to each instance's process group, waits up to
+        5 seconds, then SIGKILL if still alive. Releases any claimed
+        plans for each stopped PID.
+        """
+        instances = self.running.get(name, [])
+        if not instances:
+            return {
+                "stopped": [],
+                "already_stopped": [name],
+                "stopped_count": 0,
+                "stopped_instances": [],
+            }
 
-        # Send SIGTERM to process group
-        try:
-            os.killpg(os.getpgid(pid), signal.SIGTERM)
-        except OSError:
-            pass
-
-        # Wait up to 5 seconds
-        for _ in range(50):
-            time.sleep(0.1)
-            if not _is_process_alive(pid):
-                break
-        else:
+        # Send SIGTERM to all instances
+        for running in instances:
             try:
-                os.killpg(os.getpgid(pid), signal.SIGKILL)
+                os.killpg(os.getpgid(running.pid), signal.SIGTERM)
             except OSError:
                 pass
 
-        # Release any plans claimed by the stopped executor
+        force_killed: set[int] = set()
+
+        # Wait up to 5 seconds for all to die
+        for _ in range(50):
+            time.sleep(0.1)
+            if all(not _is_process_alive(r.pid) for r in instances):
+                break
+        else:
+            # Force kill any survivors
+            for running in instances:
+                if _is_process_alive(running.pid):
+                    try:
+                        os.killpg(os.getpgid(running.pid), signal.SIGKILL)
+                        force_killed.add(running.pid)
+                    except OSError:
+                        pass
+
+        # Release plans for each stopped PID
         from agents.tools.planner import release_plans_for_pid
 
-        released = release_plans_for_pid(pid)
-        if released["count"]:
-            logger.info(
-                "Released %d plan(s) from stopped %s (PID %d): %s",
-                released["count"],
-                name,
-                pid,
-                released["released"],
+        stopped_instances: list[dict[str, Any]] = []
+        for running in instances:
+            released = release_plans_for_pid(running.pid)
+            stopped_instances.append(
+                {
+                    "pid": running.pid,
+                    "started_at": running.started_at,
+                    "log_file": running.log_file,
+                    "signal": (
+                        "SIGKILL" if running.pid in force_killed else "SIGTERM"
+                    ),
+                    "released_plan_count": released["count"],
+                    "released_plan_ids": released["released"],
+                }
             )
+            if released["count"]:
+                logger.info(
+                    "Released %d plan(s) from stopped %s (PID %d): %s",
+                    released["count"],
+                    name,
+                    running.pid,
+                    released["released"],
+                )
 
         # Update schedule
         schedule = self.schedules.get(name)
         if schedule:
-            schedule.last_run = running.started_at
+            schedule.last_run = instances[-1].started_at
             schedule.last_result = "stopped"
             schedule.last_error = "Stopped by user"
 
-        del self.running[name]
+        self.running.pop(name, None)
         self.save_state()
-        return {"stopped": [name], "already_stopped": []}
+        return {
+            "stopped": [name],
+            "already_stopped": [],
+            "stopped_count": len(instances),
+            "stopped_instances": stopped_instances,
+        }
 
     def stop_all(self) -> Dict[str, Any]:
         """Stop all running agents."""
@@ -513,25 +584,28 @@ class Orchestrator:
             elif not schedule.enabled:
                 next_run = "disabled"
 
-            is_running = name in self.running
-            running_info = None
-            if is_running:
-                r = self.running[name]
-                running_info = {
+            instances = self.running.get(name, [])
+            running_count = len(instances)
+            running_info = [
+                {
                     "pid": r.pid,
                     "started_at": r.started_at,
                     "log_file": r.log_file,
                 }
+                for r in instances
+            ]
 
             status[name] = {
                 "enabled": schedule.enabled,
                 "interval_minutes": schedule.interval_minutes,
+                "max_concurrent": schedule.max_concurrent,
                 "last_run": schedule.last_run,
                 "last_result": schedule.last_result,
                 "last_error": schedule.last_error,
                 "next_run": next_run,
                 "task_prompt": schedule.task_prompt,
-                "running": is_running,
+                "running": running_count > 0,
+                "running_count": running_count,
                 "running_info": running_info,
             }
         return status

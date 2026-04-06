@@ -56,12 +56,18 @@ def agents_status(
                 f"  Next run:    "
                 f"{agent_status.get('next_run', 'immediate')}"
             )
+            max_c = agent_status.get("max_concurrent", 1)
+            if max_c > 1:
+                print(f"  Concurrency: {max_c}")
             if agent_status.get("running"):
-                info = agent_status["running_info"]
-                print(
-                    f"  RUNNING:     PID {info['pid']} "
-                    f"since {info['started_at']}"
-                )
+                count = agent_status.get("running_count", 0)
+                infos = agent_status.get("running_info", [])
+                label = f"{count} instance{'s' if count != 1 else ''}"
+                print(f"  RUNNING:     {label}")
+                for info in infos:
+                    print(
+                        f"    PID {info['pid']} " f"since {info['started_at']}"
+                    )
 
 
 @agents_app.command(name="run")
@@ -154,20 +160,27 @@ def agents_start(
     )
     table.add_column("Agent", style="bold", min_width=10)
     table.add_column("Interval", justify="right", min_width=10)
+    table.add_column("Slots", justify="right", min_width=6)
     table.add_column("Last Run", min_width=22)
     table.add_column("Status", min_width=10)
 
     for name, s in status.items():
         last = s.get("last_run") or "never"
         interval = f"{s['interval_minutes']}min"
+        max_c = s.get("max_concurrent", 1)
+        slots = str(max_c) if max_c > 1 else ""
         is_running = s.get("running", False)
+        running_count = s.get("running_count", 0)
         if is_running:
-            status_str = "[green]running[/green]"
+            if running_count > 1:
+                status_str = f"[green]running ({running_count})[/green]"
+            else:
+                status_str = "[green]running[/green]"
         elif last == "never":
             status_str = "[cyan]due[/cyan]"
         else:
             status_str = "[dim]waiting[/dim]"
-        table.add_row(name, interval, last, status_str)
+        table.add_row(name, interval, slots, last, status_str)
 
     console.print(table)
     console.print()
@@ -226,29 +239,46 @@ def agents_dashboard(
 
         current_running = data.get("running", {})
 
-        # Start tailers for new agents
-        for name, info in current_running.items():
-            log_file = info.get("log_file", "")
-            if name not in tailers and log_file:
-                buffer = EventBuffer(max_lines=100)
-                stop_event = threading.Event()
-                thread = threading.Thread(
-                    target=tail_file_stream,
-                    args=(log_file, buffer, stop_event),
-                    daemon=True,
-                )
-                thread.start()
-                tailers[name] = (thread, stop_event)
-                dashboard.buffers[name] = buffer
-                dashboard.agent_status[name] = "running"
+        # Collect all active tailer keys from current state
+        active_tailer_keys: set[str] = set()
+
+        # Start tailers for new agent instances
+        for name, run_data in current_running.items():
+            # Support both list (current) and dict (legacy) formats
+            instances = run_data if isinstance(run_data, list) else [run_data]
+            for i, info in enumerate(instances):
+                tailer_key = f"{name}:{i}" if len(instances) > 1 else name
+                active_tailer_keys.add(tailer_key)
+                log_file = info.get("log_file", "")
+                if tailer_key not in tailers and log_file:
+                    # Merge all instances into the same agent panel buffer
+                    if name not in dashboard.buffers:
+                        dashboard.buffers[name] = EventBuffer(max_lines=100)
+                    buffer = dashboard.buffers[name]
+                    stop_event = threading.Event()
+                    thread = threading.Thread(
+                        target=tail_file_stream,
+                        args=(log_file, buffer, stop_event),
+                        daemon=True,
+                    )
+                    thread.start()
+                    tailers[tailer_key] = (thread, stop_event)
+                    dashboard.agent_status[name] = "running"
 
         # Mark completed agents
-        for name in list(tailers.keys()):
-            if name not in current_running:
-                thread, stop_event = tailers.pop(name)
+        for tailer_key in list(tailers.keys()):
+            if tailer_key not in active_tailer_keys:
+                thread, stop_event = tailers.pop(tailer_key)
                 stop_event.set()
                 thread.join(timeout=2)
-                dashboard.agent_status[name] = "completed"
+                # Extract agent name from tailer_key
+                agent_name = tailer_key.split(":")[0]
+                # Only mark completed if no other instances running
+                if not any(
+                    k.startswith(agent_name + ":") or k == agent_name
+                    for k in active_tailer_keys
+                ):
+                    dashboard.agent_status[agent_name] = "completed"
 
         # Refresh article stats
         dashboard.stats_data = _get_article_stats()
