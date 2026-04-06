@@ -461,6 +461,19 @@ class Orchestrator:
             except OSError:
                 pass
 
+        # Release any plans claimed by the stopped executor
+        from agents.tools.planner import release_plans_for_pid
+
+        released = release_plans_for_pid(pid)
+        if released["count"]:
+            logger.info(
+                "Released %d plan(s) from stopped %s (PID %d): %s",
+                released["count"],
+                name,
+                pid,
+                released["released"],
+            )
+
         # Update schedule
         schedule = self.schedules.get(name)
         if schedule:

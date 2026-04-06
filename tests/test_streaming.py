@@ -165,6 +165,46 @@ class TestFormatLogLine:
         result = format_log_line(line)
         assert result == "08:30 💬 Done."
 
+    def test_executing_tool_with_pipe_kwargs(self):
+        """Should format new pipe-delimited Executing tool line."""
+        line = (
+            "2026-04-04 12:38:42 [agents._run] "
+            "Executing tool: run_shell_command | "
+            "command='news48 parse --limit 58', timeout=600"
+        )
+        result = format_log_line(line)
+        assert result == (
+            "12:38 ⚙ Executing: run_shell_command "
+            "(command='news48 parse --limit 58', timeout=600)"
+        )
+
+    def test_completed_with_pipe_summary(self):
+        """Should format new pipe-delimited Completed line."""
+        line = (
+            "2026-04-04 12:38:42 [agents._run] "
+            "Completed execution of tool: claim_plan | "
+            '{"result": {"plan_id": "abc-123"}, "error": ""}'
+        )
+        result = format_log_line(line)
+        assert result == (
+            "12:38 ✔ Completed: claim_plan "
+            '({"result": {"plan_id": "abc-123"}, "error": ""})'
+        )
+
+    def test_failed_with_pipe_error_and_summary(self):
+        """Should format new pipe-delimited error line."""
+        line = (
+            "2026-04-04 12:38:42 [agents._run] "
+            "Unsuccessfully execution of the tool: "
+            "run_shell_command | Error: Operation Timeout | "
+            "rc=? | time=120.0s"
+        )
+        result = format_log_line(line)
+        assert result == (
+            "12:38 ✖ Failed: run_shell_command "
+            "(Error: Operation Timeout | rc=? | time=120.0s)"
+        )
+
 
 class TestEmitStreamDelta:
     """Tests for newline-driven streaming emission."""

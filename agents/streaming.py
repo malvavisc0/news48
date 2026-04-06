@@ -63,9 +63,15 @@ def format_log_line(line: str) -> str:
         content = _strip_prefix(message, _PREFIX_AGENT)
         return f"{time} 💬 {content}"
 
-    # Parse "Executing tool: <name>. Reason: <reason>"
+    # Parse "Executing tool: <name> | <kwargs>" (new) or
+    # "Executing tool: <name>. Reason: <reason>" (legacy)
     if message.startswith(_PREFIX_EXEC):
         rest = _strip_prefix(message, _PREFIX_EXEC)
+        if " | " in rest:
+            tool_name, detail = rest.split(" | ", 1)
+            return (
+                f"{time} ⚙ Executing: {tool_name.strip()} ({detail.strip()})"
+            )
         if ". Reason:" in rest:
             tool_name, reason = rest.split(". Reason:", 1)
             return (
@@ -73,19 +79,31 @@ def format_log_line(line: str) -> str:
             )
         return f"{time} ⚙ Executing: {rest}"
 
-    # Parse "Completed execution of tool: <name>"
+    # Parse "Completed execution of tool: <name> | <summary>" (new) or
+    # "Completed execution of tool: <name>" (legacy)
     if message.startswith(_PREFIX_COMPLETE):
-        tool_name = _strip_prefix(message, _PREFIX_COMPLETE)
-        return f"{time} ✔ Completed: {tool_name}"
+        rest = _strip_prefix(message, _PREFIX_COMPLETE)
+        if " | " in rest:
+            tool_name, detail = rest.split(" | ", 1)
+            return (
+                f"{time} ✔ Completed: {tool_name.strip()} ({detail.strip()})"
+            )
+        return f"{time} ✔ Completed: {rest}"
 
     # Parse "System error while executing tool: <name>"
     if message.startswith(_PREFIX_SYS_ERR):
         tool_name = _strip_prefix(message, _PREFIX_SYS_ERR)
         return f"{time} ✖ Error: {tool_name}"
 
-    # Parse "Unsuccessfully execution of the tool: <name>. Error: <error>"
+    # Parse "Unsuccessfully execution of the tool: <name> | Error: ... | ..."
+    # (new) or "<name>. Error: <error>" (legacy)
     if message.startswith(_PREFIX_FAIL):
         rest = _strip_prefix(message, _PREFIX_FAIL)
+        if " | " in rest:
+            parts = rest.split(" | ", 2)
+            tool_name = parts[0].strip()
+            detail = " | ".join(parts[1:]).strip()
+            return f"{time} ✖ Failed: {tool_name} ({detail})"
         if ". Error:" in rest:
             tool_name, error = rest.split(". Error:", 1)
             return f"{time} ✖ Failed: {tool_name.strip()} ({error.strip()})"

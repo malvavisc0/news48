@@ -713,6 +713,58 @@ def _requeue_stale_plan(plan: dict) -> None:
     )
 
 
+def release_plans_for_pid(pid: int) -> dict:
+    """Release all plans claimed by a specific PID back to pending.
+
+    Used when an executor process is stopped to immediately free
+    its claimed plans instead of waiting for stale timeout.
+
+    Args:
+        pid: The process ID whose claimed plans should be released.
+
+    Returns:
+        Dict with released plan IDs and count.
+    """
+    plans_dir = _ensure_plans_dir()
+    released = []
+    timestamp = _now()
+
+    for plan_file in plans_dir.glob("*.json"):
+        try:
+            plan = json.loads(plan_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        claimed_pid = _parse_claimed_pid(plan.get("claimed_by"))
+        if claimed_pid != pid:
+            continue
+
+        if plan.get("status") != "executing":
+            continue
+
+        # Reset plan to pending
+        plan["status"] = "pending"
+        plan["claimed_by"] = None
+        plan["claimed_at"] = None
+        plan["updated_at"] = timestamp
+
+        # Reset in_progress steps back to pending
+        for step in plan.get("steps", []):
+            if step.get("status") == "in_progress":
+                step["status"] = "pending"
+                step["updated_at"] = timestamp
+
+        _write_plan(plan)
+        released.append(plan["id"])
+        logger.info(
+            "Released plan %s (was claimed by pid:%d)",
+            plan["id"],
+            pid,
+        )
+
+    return {"released": released, "count": len(released)}
+
+
 def recover_stale_plans(reason: str) -> str:
     """Heal inconsistent plans and requeue stale executing plans.
 

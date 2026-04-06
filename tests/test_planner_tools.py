@@ -635,3 +635,66 @@ def test_recover_stale_plans_normalizes_orphaned_plan(tmp_path, monkeypatch):
     recovered = planner_tools._read_plan(created["plan_id"])
     assert recovered["status"] == "pending"
     assert recovered["steps"][0]["status"] == "pending"
+
+
+def test_release_plans_for_pid_resets_claimed_plan(tmp_path, monkeypatch):
+    """Should reset executing plan claimed by target PID to pending."""
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    pid = 99999
+
+    # Create a plan, then manually set it to executing with claimed_by
+    result = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Test task",
+            steps=["Step 1", "Step 2"],
+            success_conditions=["Condition 1"],
+        )
+    )
+    plan_id = result["result"]["plan_id"]
+
+    plan_path = (tmp_path / ".plans") / f"{plan_id}.json"
+    plan = json.loads(plan_path.read_text())
+    plan["status"] = "executing"
+    plan["claimed_by"] = f"pid:{pid}"
+    plan["claimed_at"] = "2026-01-01T00:00:00+00:00"
+    plan["steps"][0]["status"] = "in_progress"
+    plan_path.write_text(json.dumps(plan))
+
+    released = planner_tools.release_plans_for_pid(pid)
+    assert released["count"] == 1
+    assert plan_id in released["released"]
+
+    # Verify the plan is now pending
+    updated = json.loads(plan_path.read_text())
+    assert updated["status"] == "pending"
+    assert updated["claimed_by"] is None
+    assert updated["claimed_at"] is None
+    assert updated["steps"][0]["status"] == "pending"
+
+
+def test_release_plans_for_pid_ignores_other_pids(tmp_path, monkeypatch):
+    """Should not affect plans claimed by other PIDs."""
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    result = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Test task",
+            steps=["Step 1"],
+            success_conditions=["Condition 1"],
+        )
+    )
+    plan_id = result["result"]["plan_id"]
+
+    plan_path = (tmp_path / ".plans") / f"{plan_id}.json"
+    plan = json.loads(plan_path.read_text())
+    plan["status"] = "executing"
+    plan["claimed_by"] = "pid:12345"
+    plan_path.write_text(json.dumps(plan))
+
+    released = planner_tools.release_plans_for_pid(99999)
+    assert released["count"] == 0
+
+    updated = json.loads(plan_path.read_text())
+    assert updated["status"] == "executing"
