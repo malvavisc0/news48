@@ -68,7 +68,7 @@ async def _ensure_solution(
         return solutions[domain]
 
 
-async def _download_article_with_retry(
+async def _download_article(
     article: dict,
     solutions: dict[str, ByparrSolution],
     domain_locks: dict[str, asyncio.Lock],
@@ -76,7 +76,6 @@ async def _download_article_with_retry(
     semaphore: asyncio.Semaphore,
     db_path: Path,
     claim_owner: str,
-    retry_count: int = 0,
 ) -> bool:
     """Download a single article with retry logic."""
     async with semaphore:
@@ -89,18 +88,18 @@ async def _download_article_with_retry(
         )
 
         try:
-            solution = await _ensure_solution(
-                domain,
-                solutions,
-                domain_lock,
-            )
-        except Exception as e:
-            logger.exception("Failed to get solution for %s", domain)
-            status_msg(f"Solution failed: {domain} - {e}")
-            mark_article_download_failed(db_path, article["id"], str(e))
-            return False
+            try:
+                solution = await _ensure_solution(
+                    domain,
+                    solutions,
+                    domain_lock,
+                )
+            except Exception as e:
+                logger.exception("Failed to get solution for %s", domain)
+                status_msg(f"Solution failed: {domain} - {e}")
+                mark_article_download_failed(db_path, article["id"], str(e))
+                return False
 
-        try:
             last_error = None
             for attempt in range(MAX_RETRIES + 1):
                 try:
@@ -149,30 +148,6 @@ async def _download_article_with_retry(
                 article["id"],
                 owner=claim_owner,
             )
-
-
-async def _download_article(
-    article: dict,
-    solutions: dict[str, ByparrSolution],
-    domain_locks: dict[str, asyncio.Lock],
-    meta_lock: asyncio.Lock,
-    semaphore: asyncio.Semaphore,
-    db_path: Path,
-    claim_owner: str,
-) -> bool:
-    """Download a single article's content.
-
-    This is a wrapper that calls the retry-enabled download function.
-    """
-    return await _download_article_with_retry(
-        article=article,
-        solutions=solutions,
-        domain_locks=domain_locks,
-        meta_lock=meta_lock,
-        semaphore=semaphore,
-        db_path=db_path,
-        claim_owner=claim_owner,
-    )
 
 
 async def _download(
@@ -389,8 +364,10 @@ def download(
         raise
     except Exception as e:
         emit_error(str(e), as_json=output_json)
+        return
     if "error" in data:
         emit_error(data["error"], as_json=output_json)
+        return
     if output_json:
         emit_json(data)
     else:
