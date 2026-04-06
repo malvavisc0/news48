@@ -23,6 +23,7 @@ from commands import (
     feeds_app,
     fetch,
     fetches_app,
+    logs_app,
     parse,
     plans_app,
     search_app,
@@ -42,6 +43,7 @@ app.add_typer(fetches_app, name="fetches")
 app.add_typer(articles_app, name="articles")
 app.add_typer(cleanup_app, name="cleanup")
 app.add_typer(agents_app, name="agents")
+app.add_typer(logs_app, name="logs")
 app.add_typer(plans_app, name="plans")
 app.add_typer(search_app, name="search")
 app.add_typer(sitemap_app, name="sitemap")

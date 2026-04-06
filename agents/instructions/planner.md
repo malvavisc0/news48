@@ -50,6 +50,8 @@ news48 cleanup status --json
 news48 cleanup health --json
 news48 plans list --status pending --json
 news48 plans list --status executing --json
+news48 logs list --agent executor --json
+news48 logs list --plan-id <plan_id> --json
 ```
 
 ## Plan Rules
@@ -171,7 +173,8 @@ When `list_plans(status="executing")` shows plans with `stale: true`:
 2. **Check requeue count** -- if a plan has `requeue_count >= 2`, it has failed repeatedly. Do not let it keep cycling.
 3. **Create a remediation plan** -- when a plan has been requeued 2+ times, create a new plan that investigates why the work keeps failing. Include steps to:
    - Check system health (`news48 cleanup health --json`)
-   - Review error logs for the failing plan type
+   - Review executor logs for the failing plan (`news48 logs list --plan-id <plan_id> --json`)
+   - Review recent executor logs for error patterns (`news48 logs list --agent executor --json`)
    - Identify root cause (network issues, feed changes, resource limits)
    - Recommend corrective action
 

@@ -372,6 +372,81 @@ uv run news48 articles content 42
 
 ---
 
+## Log Inspection
+
+The `logs` command group provides structured access to agent execution logs stored in `.logs/`:
+
+### List Log Entries
+
+```bash
+# List recent log entries from all agents
+uv run news48 logs list
+
+# Filter by agent type
+uv run news48 logs list --agent executor
+uv run news48 logs list --agent planner
+uv run news48 logs list --agent monitor
+
+# Filter by date
+uv run news48 logs list --date today
+uv run news48 logs list --date yesterday
+uv run news48 logs list --date 2026-04-06
+
+# Filter by plan ID (for debugging specific plans)
+uv run news48 logs list --plan-id plan-20260406-123456
+
+# Filter by module name
+uv run news48 logs list --module agents._run
+
+# Include free-form agent output (prose)
+uv run news48 logs list --include-prose
+
+# JSON output for scripting
+uv run news48 logs list --agent executor --json
+
+# Control output order and limit
+uv run news48 logs list --limit 50 --reverse
+```
+
+### Discover Log Files
+
+```bash
+# List available log files with metadata
+uv run news48 logs files
+
+# Filter by agent
+uv run news48 logs files --agent executor
+
+# Filter by date
+uv run news48 logs files --date today
+
+# JSON output
+uv run news48 logs files --json
+```
+
+### View Full Log File
+
+```bash
+# Display a log file (accepts stem or full name)
+uv run news48 logs show executor-20260406-025724
+uv run news48 logs show executor-20260406-025724.log
+
+# Raw output (no formatting)
+uv run news48 logs show executor-20260406-025724 --raw
+
+# JSON output (parsed entries)
+uv run news48 logs show executor-20260406-025724 --json
+```
+
+### When to Use Logs
+
+- **Debug failures**: Investigate download or parse failures by reviewing executor logs
+- **Track plan execution**: Follow a specific plan's progress with `--plan-id`
+- **Monitor agent activity**: Review recent agent sessions for patterns or anomalies
+- **Correlate errors**: Match log timestamps with error spikes in stats
+
+---
+
 ## JSON Output for Automation
 
 All commands support `--json` output for scripting:
@@ -433,6 +508,9 @@ uv run news48 fetch
 # Check failure reasons
 uv run news48 articles list --status download-failed --json
 
+# Review executor logs for error patterns
+uv run news48 logs list --agent executor --module httpx --json
+
 # Reset and retry
 uv run news48 articles reset 42 --download
 uv run news48 download --article 42
@@ -444,12 +522,28 @@ uv run news48 download --article 42
 # Check failure reasons
 uv run news48 articles list --status parse-failed --json
 
+# Review executor logs for LLM errors
+uv run news48 logs list --agent executor --module agents._run --json
+
 # Verify LLM configuration
 cat .env | grep -E "API_BASE|MODEL|API_KEY"
 
 # Reset and retry
 uv run news48 articles reset 42 --parse
 uv run news48 parse --article 42
+```
+
+### Plan Execution Issues
+
+```bash
+# Check for stuck executing plans
+uv run news48 plans list --status executing --json
+
+# Review executor logs for a specific plan
+uv run news48 logs list --plan-id plan-20260406-123456 --json
+
+# Check recent executor activity
+uv run news48 logs list --agent executor --limit 20 --json
 ```
 
 ---

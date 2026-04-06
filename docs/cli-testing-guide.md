@@ -476,15 +476,133 @@ Expected: `{"error": "Article not found: 99999"}`, exit code 1
 
 ---
 
-## 13. Error Handling
+## 13. Logs
 
-### 13.1 No database configured
+Note: logs commands require agent activity. Run agents first to generate logs.
+
+### 13.1 Logs list -- text output
+```bash
+uv run news48 logs list
+```
+Expected: list of structured log entries with timestamp, module, message
+
+### 13.2 Logs list -- JSON output
+```bash
+uv run news48 logs list --json
+```
+Expected: JSON array of log entries with timestamp, module, message, source_file
+
+### 13.3 Logs list -- filter by agent
+```bash
+uv run news48 logs list --agent executor --json
+uv run news48 logs list --agent planner --json
+uv run news48 logs list --agent monitor --json
+```
+Expected: entries only from specified agent
+
+### 13.4 Logs list -- filter by date
+```bash
+uv run news48 logs list --date today --json
+uv run news48 logs list --date yesterday --json
+uv run news48 logs list --date 2026-04-06 --json
+```
+Expected: entries only from specified date
+
+### 13.5 Logs list -- filter by plan-id
+```bash
+uv run news48 logs list --plan-id plan-20260406-123456 --json
+```
+Expected: entries containing the plan ID in message or continuation
+
+### 13.6 Logs list -- filter by module
+```bash
+uv run news48 logs list --module agents._run --json
+```
+Expected: entries from specified module
+
+### 13.7 Logs list -- include prose
+```bash
+uv run news48 logs list --include-prose --json
+```
+Expected: includes free-form agent output lines
+
+### 13.8 Logs list -- with limit and reverse
+```bash
+uv run news48 logs list --limit 10 --reverse --json
+```
+Expected: oldest 10 entries first
+
+### 13.9 Logs list -- invalid agent
+```bash
+uv run news48 logs list --agent bogus --json
+```
+Expected: `{"error": "Invalid agent type 'bogus'. Choose from: executor, planner, monitor"}`, exit code 1
+
+### 13.10 Logs list -- invalid date
+```bash
+uv run news48 logs list --date notadate --json
+```
+Expected: `{"error": "Invalid date 'notadate'. Use YYYY-MM-DD, 'today', or 'yesterday'."}`, exit code 1
+
+### 13.11 Logs files -- text output
+```bash
+uv run news48 logs files
+```
+Expected: list of log files with size and modified date
+
+### 13.12 Logs files -- JSON output
+```bash
+uv run news48 logs files --json
+```
+Expected: `[{"name": "...", "size": N, "modified": "..."}]`
+
+### 13.13 Logs files -- filter by agent
+```bash
+uv run news48 logs files --agent executor --json
+```
+Expected: only executor log files
+
+### 13.14 Logs files -- filter by date
+```bash
+uv run news48 logs files --date today --json
+```
+Expected: only log files from today
+
+### 13.15 Logs show -- text output
+```bash
+uv run news48 logs show executor-20260406-025724
+```
+Expected: formatted log file content
+
+### 13.16 Logs show -- JSON output
+```bash
+uv run news48 logs show executor-20260406-025724 --json
+```
+Expected: parsed log entries as JSON array
+
+### 13.17 Logs show -- raw output
+```bash
+uv run news48 logs show executor-20260406-025724 --raw
+```
+Expected: raw log file content without formatting
+
+### 13.18 Logs show -- not found
+```bash
+uv run news48 logs show nonexistent --json
+```
+Expected: `{"error": "Log file not found: nonexistent"}`, exit code 1
+
+---
+
+## 14. Error Handling
+
+### 14.1 No database configured
 ```bash
 DATABASE_PATH="" uv run news48 stats
 ```
 Expected: `Error: DATABASE_PATH not configured` to stderr, exit code 1
 
-### 13.2 Invalid database path
+### 14.2 Invalid database path
 ```bash
 DATABASE_PATH=/nonexistent/path.db uv run news48 stats --json
 ```
@@ -492,7 +610,7 @@ Expected: `{"error": "..."}` to stdout, exit code 1
 
 ---
 
-## 14. Full Pipeline Walkthrough (stage by stage)
+## 15. Full Pipeline Walkthrough (stage by stage)
 
 ```bash
 # 1. Start fresh

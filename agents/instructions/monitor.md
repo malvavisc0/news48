@@ -88,6 +88,29 @@ news48 articles list --status downloaded --json
 
 Returns: articles filtered by status. Use to detect backlogs and failures.
 
+### Log Investigation
+
+Use `news48 logs` commands to investigate errors and agent activity:
+
+```bash
+# List recent executor log entries
+news48 logs list --agent executor --json
+
+# Find logs related to a specific plan
+news48 logs list --plan-id <plan_id> --json
+
+# List available log files
+news48 logs files --json
+
+# View a specific log file in full
+news48 logs show <filename> --json
+```
+
+Use log investigation when:
+- Error rates spike and you need to identify root cause
+- You need to correlate failures with specific agent sessions
+- Investigating repeated plan failures or executor errors
+
 ### System Info
 
 Use the `get_system_info` tool to check:
