@@ -4,10 +4,10 @@ import re
 import threading
 import time
 from collections import deque
-from typing import Dict, List, Optional
 
 from rich.align import Align
 from rich.layout import Layout
+from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -20,9 +20,9 @@ _AGENT_COLORS = {
     "monitor": "yellow",
 }
 
-_HEADER_ROWS = 3
-_FOOTER_ROWS = 3
-_PANEL_BORDER_ROWS = 2  # top + bottom border per panel
+_MIN_WIDTH = 80
+_MIN_HEIGHT = 24
+_STATS_CACHE_TTL = 10.0  # seconds
 
 
 class EventBuffer:
@@ -69,14 +69,6 @@ def _append_complete_chunks(buffer: EventBuffer, partial: str) -> str:
     return partial
 
 
-def _normalize_line(line: str) -> str:
-    """Normalize noisy stream fragments for panel readability."""
-    compact = " ".join(line.replace("\t", " ").split())
-    if len(compact) > 500:
-        return compact[:497] + "..."
-    return compact
-
-
 def tail_file_stream(
     log_file: str, buffer: EventBuffer, stop_event: threading.Event
 ) -> None:
@@ -115,45 +107,125 @@ def tail_file_stream(
         pass
 
 
+# Module-level cache for stats
+_stats_cache: dict = {}
+_stats_cache_time: float = 0.0
+
+
+def _get_article_stats() -> dict:
+    """Fetch article statistics from database.
+
+    Returns cached data if within TTL, otherwise queries database.
+    """
+    global _stats_cache, _stats_cache_time
+
+    now = time.monotonic()
+    if _stats_cache and (now - _stats_cache_time) < _STATS_CACHE_TTL:
+        return _stats_cache
+
+    try:
+        from config import Database
+        from database.connection import get_connection
+
+        with get_connection(Database.path) as conn:
+            # Article counts
+            cursor = conn.execute("SELECT COUNT(*) FROM articles")
+            total = cursor.fetchone()[0]
+            cursor = conn.execute(
+                "SELECT COUNT(*) FROM articles WHERE content IS NOT NULL "
+                "AND content != ''"
+            )
+            with_content = cursor.fetchone()[0]
+
+            # Feed count
+            cursor = conn.execute("SELECT COUNT(*) FROM feeds")
+            feeds = cursor.fetchone()[0]
+
+            # Pending processing (claimed but not completed)
+            cursor = conn.execute(
+                "SELECT COUNT(*) FROM articles WHERE processing_status = "
+                "'claimed'"
+            )
+            pending = cursor.fetchone()[0]
+
+            # Last fetch timestamp
+            cursor = conn.execute(
+                "SELECT MAX(completed_at) FROM fetches WHERE status = "
+                "'completed'"
+            )
+            row = cursor.fetchone()
+            last_fetch = row[0] if row and row[0] else "Never"
+
+            # Articles today
+            cursor = conn.execute(
+                "SELECT COUNT(*) FROM articles WHERE created_at >= "
+                "date('now')"
+            )
+            today = cursor.fetchone()[0]
+
+            _stats_cache = {
+                "total": total,
+                "with_content": with_content,
+                "without_content": total - with_content,
+                "feeds": feeds,
+                "pending": pending,
+                "last_fetch": last_fetch,
+                "today": today,
+            }
+            _stats_cache_time = now
+            return _stats_cache
+    except Exception:
+        return {
+            "total": 0,
+            "with_content": 0,
+            "without_content": 0,
+            "feeds": 0,
+            "pending": 0,
+            "last_fetch": "Error",
+            "today": 0,
+        }
+
+
 class Dashboard:
     """Rich Live dashboard that tails agent log files.
 
-    Fills 90% of the terminal width and height. Dynamically adapts
-    the number of visible log lines per panel when the terminal is
-    resized.
+    Fixed 4-panel layout:
+    - Top row: planner (50%) | executor (50%)
+    - Bottom row: stats (33%) | monitor (67%)
+
+    Responsive: stacks vertically on narrow terminals (< 100 cols).
     """
 
-    def __init__(
-        self,
-        tick_seconds: int,
-        agents: Optional[List[str]] = None,
-    ):
+    def __init__(self, tick_seconds: int):
         from rich.console import Console
 
         self.console = Console()
-        self.buffers: Dict[str, EventBuffer] = {}
-        self.agent_status: Dict[str, str] = {}
+        self.buffers: dict[str, EventBuffer] = {}
+        self.agent_status: dict[str, str] = {}
         self.tick_seconds = tick_seconds
-        self.agents = agents or ["planner", "executor"]
+        self.agents = ["planner", "executor", "monitor"]
+        self.stats_data = _get_article_stats()
 
     def _build_panel(self, name: str, lines_per_panel: int) -> Panel:
-        """Build a single agent panel."""
+        """Build a single agent panel rendering content as Markdown."""
         color = _AGENT_COLORS.get(name, "white")
         buffer = self.buffers.get(name)
+
         if buffer:
-            lines = buffer.get_lines()
-            content = Text()
-            for line in lines[-lines_per_panel:]:
-                formatted = format_log_line(line)
-                normalized = _normalize_line(formatted)
-                if not normalized:
-                    continue
-                content.append(normalized + "\n", style=f"{color} dim")
+            log_lines = buffer.get_lines()
+            if log_lines:
+                visible = log_lines[-lines_per_panel:]
+                formatted = [format_log_line(line) for line in visible]
+                md_source = "\n\n".join(formatted)
+                content = Markdown(md_source, style=f"{color} dim")
+            else:
+                content = Text("No logs yet...", style="dim")
         else:
             content = Text("Waiting...", style="dim")
 
         status = self.agent_status.get(name, "idle")
         title_extra = f" [{status}]" if status != "idle" else ""
+
         return Panel(
             content,
             title=f"[bold {color}]{name}{title_extra}[/]",
@@ -161,71 +233,141 @@ class Dashboard:
             expand=True,
         )
 
+    def _build_stats_panel(self, height: int) -> Panel:
+        """Build the stats panel with article counts."""
+        from rich.console import Group
+
+        stats = _get_article_stats()
+        lines: list[Text] = []
+
+        # Article stats section
+        lines.append(Text("Articles", style="bold white"))
+        lines.append(Text(f"  Total:     {stats['total']}", style="white"))
+        lines.append(Text(f"  Today:     {stats['today']}", style="cyan"))
+        lines.append(
+            Text(f"  With text: {stats['with_content']}", style="green")
+        )
+        lines.append(
+            Text(f"  No text:   {stats['without_content']}", style="yellow")
+        )
+        lines.append(Text(f"  Pending:   {stats['pending']}", style="magenta"))
+
+        # Feed stats section
+        lines.append(Text())  # blank line
+        lines.append(Text("Feeds", style="bold white"))
+        lines.append(Text(f"  Active:    {stats['feeds']}", style="white"))
+
+        # Last fetch section
+        lines.append(Text())  # blank line
+        lines.append(Text("Last Fetch", style="bold white"))
+        fetch_time = stats["last_fetch"]
+        if fetch_time and fetch_time != "Never" and fetch_time != "Error":
+            # Truncate to just date/time part
+            if "T" in fetch_time:
+                fetch_display = fetch_time[:19].replace("T", " ")
+            else:
+                fetch_display = fetch_time[:19]
+        else:
+            fetch_display = fetch_time
+        lines.append(Text(f"  {fetch_display}", style="dim"))
+
+        # Pad to fill height
+        lines_used = len(lines)
+        for _ in range(max(0, height - lines_used)):
+            lines.append(Text())
+
+        content = Group(*lines)
+
+        return Panel(
+            content,
+            title="[bold white]stats[/]",
+            border_style="white",
+            expand=True,
+        )
+
     def render(self) -> Align:
         # Read current terminal size (supports live resize)
         term_width, term_height = self.console.size
-        usable_width = int(term_width * 0.9)
-        usable_height = int(term_height * 0.9)
 
-        # Calculate how many log lines fit per panel
-        num_agents = len(self.agents)
-        if num_agents <= 2:
-            panel_rows = 2
+        # Apply minimum size protection
+        usable_width = max(_MIN_WIDTH, int(term_width * 0.9))
+        usable_height = max(_MIN_HEIGHT, int(term_height * 0.9))
+
+        # Determine layout based on terminal width
+        use_vertical_stack = term_width < 100
+
+        header_rows = 3
+        panel_area = usable_height - header_rows
+
+        if use_vertical_stack:
+            # Vertical stack: header + 4 panels stacked
+            panel_height = panel_area // 4
+            lines_per_panel = max(3, panel_height - 2)
+
+            layout = Layout(size=usable_height)
+            layout.split_column(
+                Layout(name="header", size=header_rows),
+                Layout(name="planner"),
+                Layout(name="executor"),
+                Layout(name="stats"),
+                Layout(name="monitor"),
+            )
+
+            layout["planner"].update(
+                self._build_panel("planner", lines_per_panel)
+            )
+            layout["executor"].update(
+                self._build_panel("executor", lines_per_panel)
+            )
+            layout["stats"].update(self._build_stats_panel(lines_per_panel))
+            layout["monitor"].update(
+                self._build_panel("monitor", lines_per_panel)
+            )
         else:
-            panel_rows = 2  # top row + bottom row
+            # Standard 2x2 grid layout
+            panel_height = panel_area // 2  # Each row gets half
+            lines_per_panel = max(3, panel_height - 2)
 
-        agent_area = usable_height - _HEADER_ROWS - _FOOTER_ROWS
-        lines_per_panel = max(
-            3, (agent_area // panel_rows) - _PANEL_BORDER_ROWS
-        )
+            layout = Layout(size=usable_height)
+            layout.split_column(
+                Layout(name="header", size=header_rows),
+                Layout(name="top_row"),
+                Layout(name="bottom_row"),
+            )
 
-        layout = Layout(size=usable_height)
-        layout.split_column(
-            Layout(name="header", size=_HEADER_ROWS),
-            Layout(name="agents"),
-            Layout(name="footer", size=_FOOTER_ROWS),
-        )
+            # Top row: planner | executor (50% each)
+            layout["top_row"].split_row(
+                Layout(name="planner"),
+                Layout(name="executor"),
+            )
+
+            # Bottom row: stats (33%) | monitor (67%)
+            layout["bottom_row"].split_row(
+                Layout(name="stats", ratio=1),
+                Layout(name="monitor", ratio=2),
+            )
+
+            # Build panels
+            layout["planner"].update(
+                self._build_panel("planner", lines_per_panel)
+            )
+            layout["executor"].update(
+                self._build_panel("executor", lines_per_panel)
+            )
+            layout["monitor"].update(
+                self._build_panel("monitor", lines_per_panel)
+            )
+            layout["stats"].update(self._build_stats_panel(lines_per_panel))
 
         # Header
         header = Table(show_header=False, border_style="dim", padding=(0, 1))
         header.add_column("title", style="bold white")
         header.add_column("tick", style="cyan", justify="right")
-        header.add_row(" news48 dashboard", f"Tick: {self.tick_seconds}s")
+        layout_str = "stacked" if use_vertical_stack else "grid"
+        header.add_row(
+            f" news48 dashboard [{layout_str}]",
+            f"Tick: {self.tick_seconds}s",
+        )
         layout["header"].update(header)
 
-        # Agent panels - dynamic layout based on agent count
-        panels = [
-            self._build_panel(name, lines_per_panel) for name in self.agents
-        ]
-
-        agents_layout = Layout()
-        if len(panels) == 1:
-            agents_layout.update(panels[0])
-        elif len(panels) == 2:
-            agents_layout.split_row(Layout(panels[0]), Layout(panels[1]))
-        elif len(panels) >= 3:
-            agents_layout.split_column(
-                Layout(name="top_row"),
-                Layout(name="bottom_row"),
-            )
-            agents_layout["top_row"].update(panels[0])
-            agents_layout["bottom_row"].split_row(
-                *[Layout(p) for p in panels[1:]]
-            )
-        layout["agents"].update(agents_layout)
-
-        # Footer - status summary
-        parts = []
-        running = [n for n, s in self.agent_status.items() if s == "running"]
-        completed = [
-            n for n, s in self.agent_status.items() if s == "completed"
-        ]
-        if completed:
-            parts.append(f"Completed: {', '.join(completed)}")
-        if running:
-            parts.append(f"Running: {', '.join(running)}")
-        footer_text = "  " + "  |  ".join(parts) if parts else "  Idle"
-        layout["footer"].update(Text(footer_text, style="dim"))
-
-        # Center horizontally at 90% width
         return Align.center(layout, width=usable_width)

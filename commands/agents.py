@@ -202,15 +202,10 @@ def agents_dashboard(
         "-r",
         help="Dashboard refresh interval in seconds",
     ),
-    agent: list[str] = typer.Option(
-        None,
-        "--agent",
-        "-a",
-        help="Agent(s) to show, repeatable; default: planner executor",
-    ),
 ) -> None:
     """Live dashboard showing agent output (read-only).
 
+    Fixed 4-panel layout: planner, executor, monitor, stats.
     Connects to a running orchestrator by reading .orchestrator.json
     and tailing agent log files. Press Ctrl+C to exit.
     """
@@ -221,12 +216,16 @@ def agents_dashboard(
 
     from rich.live import Live
 
-    from agents.dashboard import Dashboard, EventBuffer, tail_file_stream
+    from agents.dashboard import (
+        Dashboard,
+        EventBuffer,
+        _get_article_stats,
+        tail_file_stream,
+    )
 
     STATE_FILE = Path(".orchestrator.json")
 
-    selected = agent if agent else ["planner", "executor"]
-    dashboard = Dashboard(tick_seconds=tick, agents=selected)
+    dashboard = Dashboard(tick_seconds=tick)
     tailers: dict[str, tuple[threading.Thread, threading.Event]] = {}
 
     def sync_state() -> None:
@@ -242,8 +241,6 @@ def agents_dashboard(
 
         # Start tailers for new agents
         for name, info in current_running.items():
-            if name not in selected:
-                continue
             log_file = info.get("log_file", "")
             if name not in tailers and log_file:
                 buffer = EventBuffer(max_lines=100)
@@ -266,6 +263,9 @@ def agents_dashboard(
                 thread.join(timeout=2)
                 dashboard.agent_status[name] = "completed"
 
+        # Refresh article stats
+        dashboard.stats_data = _get_article_stats()
+
     try:
         with Live(
             dashboard.render(),
@@ -281,12 +281,13 @@ def agents_dashboard(
                 live.update(dashboard.render())
                 time.sleep(refresh)
     except KeyboardInterrupt:
-        # Stop all tailer threads
+        dashboard.console.print("\n  [dim]Dashboard closed.[/dim]")
+    finally:
+        # Stop all tailer threads (handles any exception, not just Ctrl+C)
         for thread, stop_event in tailers.values():
             stop_event.set()
         for thread, stop_event in tailers.values():
             thread.join(timeout=2)
-        dashboard.console.print("\n  [dim]Dashboard closed.[/dim]")
 
 
 @agents_app.command(name="stop")

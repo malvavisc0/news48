@@ -29,6 +29,12 @@ logger = logging.getLogger(__name__)
 MAX_CONCURRENT = 5
 """Default maximum number of concurrent download tasks."""
 
+MAX_RETRIES = 3
+"""Maximum number of retry attempts for failed downloads."""
+
+RETRY_DELAY_BASE = 2.0
+"""Base delay in seconds for exponential backoff."""
+
 
 async def _get_domain_lock(
     domain: str,
@@ -62,7 +68,7 @@ async def _ensure_solution(
         return solutions[domain]
 
 
-async def _download_article(
+async def _download_article_with_retry(
     article: dict,
     solutions: dict[str, ByparrSolution],
     domain_locks: dict[str, asyncio.Lock],
@@ -70,8 +76,9 @@ async def _download_article(
     semaphore: asyncio.Semaphore,
     db_path: Path,
     claim_owner: str,
+    retry_count: int = 0,
 ) -> bool:
-    """Download a single article's content."""
+    """Download a single article with retry logic."""
     async with semaphore:
         url = article["url"]
         domain = get_base_url(url=url)
@@ -94,23 +101,47 @@ async def _download_article(
             return False
 
         try:
-            content = await fetch_url_content(
-                url=url,
-                solution=solution,
-            )
-            image_url = extract_og_image(content)
-            update_article(
-                db_path,
-                article["id"],
-                content=content,
-                image_url=image_url,
-            )
-            return True
+            last_error = None
+            for attempt in range(MAX_RETRIES + 1):
+                try:
+                    content = await fetch_url_content(
+                        url=url,
+                        solution=solution,
+                    )
+                    image_url = extract_og_image(content)
+                    update_article(
+                        db_path,
+                        article["id"],
+                        content=content,
+                        image_url=image_url,
+                    )
+                    return True
+                except Exception as e:
+                    last_error = e
+                    logger.warning(
+                        "Attempt %d/%d failed for %s: %s",
+                        attempt + 1,
+                        MAX_RETRIES + 1,
+                        url,
+                        str(e),
+                    )
+                    if attempt < MAX_RETRIES:
+                        delay = RETRY_DELAY_BASE * (2**attempt)
+                        status_msg(
+                            f"Retry {attempt + 1}/{MAX_RETRIES} "
+                            f"for {url} in {delay:.1f}s"
+                        )
+                        await asyncio.sleep(delay)
 
-        except Exception as e:
-            logger.exception("Failed to download %s", url)
-            status_msg(f"Failed: {url} - {e}")
-            mark_article_download_failed(db_path, article["id"], str(e))
+            logger.exception(
+                "Failed to download %s after %d attempts",
+                url,
+                MAX_RETRIES + 1,
+            )
+            status_msg(f"Failed: {url} - {last_error}")
+            mark_article_download_failed(
+                db_path, article["id"], str(last_error)
+            )
             return False
         finally:
             clear_article_processing_claim(
@@ -118,6 +149,30 @@ async def _download_article(
                 article["id"],
                 owner=claim_owner,
             )
+
+
+async def _download_article(
+    article: dict,
+    solutions: dict[str, ByparrSolution],
+    domain_locks: dict[str, asyncio.Lock],
+    meta_lock: asyncio.Lock,
+    semaphore: asyncio.Semaphore,
+    db_path: Path,
+    claim_owner: str,
+) -> bool:
+    """Download a single article's content.
+
+    This is a wrapper that calls the retry-enabled download function.
+    """
+    return await _download_article_with_retry(
+        article=article,
+        solutions=solutions,
+        domain_locks=domain_locks,
+        meta_lock=meta_lock,
+        semaphore=semaphore,
+        db_path=db_path,
+        claim_owner=claim_owner,
+    )
 
 
 async def _download(
@@ -251,8 +306,6 @@ async def _download(
     async def _throttled(idx: int, article: dict) -> bool:
         if idx > 0:
             await asyncio.sleep(delay * idx)
-        if retry:
-            reset_article_download(db_path, article["id"])
         return await _download_article(
             article=article,
             solutions=solutions,
