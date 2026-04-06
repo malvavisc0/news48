@@ -60,43 +60,71 @@ class Orchestrator:
         each schedule, and any previously running agent entries (their
         processes will be checked on the next tick).
         """
-        if not _STATE_FILE.exists():
-            return
-        try:
-            data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as exc:
-            logger.warning(f"Could not load state: {exc}")
-            return
+        if _STATE_FILE.exists():
+            try:
+                data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as exc:
+                logger.warning(f"Could not load state: {exc}")
+                data = {}
 
-        # Restore schedule state
-        for name, sched_data in data.get("schedules", {}).items():
-            if name in self.schedules:
-                self.schedules[name].last_run = sched_data.get("last_run")
-                self.schedules[name].last_result = sched_data.get(
-                    "last_result"
-                )
-                self.schedules[name].last_error = sched_data.get("last_error")
-
-        # Restore running agent records (processes are gone after restart,
-        # but we mark them as failed-unknown so we know they didn't finish)
-        for name, run_data in data.get("running", {}).items():
-            pid = run_data.get("pid", 0)
-            if not _is_process_alive(pid):
-                # Process is gone -- mark as completed with unknown result
+            # Restore schedule state
+            for name, sched_data in data.get("schedules", {}).items():
                 if name in self.schedules:
-                    self.schedules[name].last_run = run_data.get("started_at")
-                    self.schedules[name].last_result = "unknown"
-                    self.schedules[name].last_error = (
-                        "Process disappeared (orchestrator restarted?)"
+                    self.schedules[name].last_run = sched_data.get("last_run")
+                    self.schedules[name].last_result = sched_data.get(
+                        "last_result"
                     )
-            else:
-                # Process is still running from a previous session
-                self.running[name] = RunningAgent(
-                    pid=pid,
-                    agent_name=name,
-                    started_at=run_data.get("started_at", ""),
-                    log_file=run_data.get("log_file", ""),
+                    self.schedules[name].last_error = sched_data.get(
+                        "last_error"
+                    )
+
+            # Restore running agent records (processes are gone after restart,
+            # but we mark them as failed-unknown so we know they didn't finish)
+            for name, run_data in data.get("running", {}).items():
+                pid = run_data.get("pid", 0)
+                if not _is_process_alive(pid):
+                    # Process is gone -- mark as completed with unknown result
+                    if name in self.schedules:
+                        self.schedules[name].last_run = run_data.get(
+                            "started_at"
+                        )
+                        self.schedules[name].last_result = "unknown"
+                        self.schedules[name].last_error = (
+                            "Process disappeared (orchestrator restarted?)"
+                        )
+                else:
+                    # Process is still running from a previous session
+                    self.running[name] = RunningAgent(
+                        pid=pid,
+                        agent_name=name,
+                        started_at=run_data.get("started_at", ""),
+                        log_file=run_data.get("log_file", ""),
+                    )
+
+        # Autonomous recovery pass: normalize/requeue stale executing plans
+        # immediately on orchestrator startup.
+        try:
+            from agents.tools.planner import recover_stale_plans
+
+            payload = json.loads(
+                recover_stale_plans(
+                    "Orchestrator startup recovery after restart"
                 )
+            )
+            if payload.get("error"):
+                logger.warning(
+                    "Plan recovery pass failed: %s", payload["error"]
+                )
+            else:
+                result = payload.get("result", {})
+                logger.info(
+                    "Plan recovery pass: scanned=%s normalized=%s requeued=%s",
+                    result.get("scanned", 0),
+                    result.get("normalized", 0),
+                    result.get("requeued", 0),
+                )
+        except Exception as exc:
+            logger.warning("Plan recovery startup hook failed: %s", exc)
 
     def save_state(self) -> None:
         """Persist schedule state to ``.orchestrator.json``."""

@@ -373,3 +373,265 @@ def test_create_plan_dedupes_active_same_family(tmp_path, monkeypatch):
     )["result"]
 
     assert second["plan_id"] == first["plan_id"]
+
+
+def test_claim_plan_sets_claim_owner_metadata(tmp_path, monkeypatch):
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    created = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Fetch feeds",
+            steps=["Fetch", "Verify"],
+            success_conditions=["All feeds fetched"],
+        )
+    )["result"]
+
+    claimed = json.loads(planner_tools.claim_plan("test"))["result"]
+    assert claimed["plan_id"] == created["plan_id"]
+
+    raw = planner_tools._read_plan(created["plan_id"])
+    assert raw["claimed_by"].startswith("pid:")
+    assert raw["claimed_at"] is not None
+
+
+def test_stale_detects_dead_claimed_pid(tmp_path, monkeypatch):
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    created = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download articles",
+            steps=["Download", "Verify"],
+            success_conditions=["No empty articles"],
+        )
+    )["result"]
+
+    plan = planner_tools._read_plan(created["plan_id"])
+    plan["status"] = "executing"
+    plan["claimed_by"] = "pid:999999"
+    planner_tools._write_plan(plan)
+
+    monkeypatch.setattr(planner_tools, "_is_pid_alive", lambda _pid: False)
+
+    payload = json.loads(planner_tools.recover_stale_plans("startup recovery"))
+    assert payload["error"] == ""
+    assert payload["result"]["requeued"] == 1
+
+    recovered = planner_tools._read_plan(created["plan_id"])
+    assert recovered["status"] == "pending"
+    assert recovered["claimed_by"] is None
+    assert recovered["claimed_at"] is None
+
+
+# --- Auto-recovery fixes: _is_plan_stale, _normalize, _read_plan ---
+
+
+def test_is_plan_stale_returns_true_when_claimed_by_is_none(
+    tmp_path, monkeypatch
+):
+    """An executing plan with no claimed_by is immediately stale because
+    ownership cannot be verified."""
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    created = json.loads(
+        planner_tools.create_plan(
+            "test", "Download articles", ["Step 1"], ["No empty articles"]
+        )
+    )["result"]
+
+    plan = planner_tools._read_plan(created["plan_id"])
+    plan["status"] = "executing"
+    plan["claimed_by"] = None
+    plan["claimed_at"] = None
+    planner_tools._write_plan(plan)
+
+    assert planner_tools._is_plan_stale(plan) is True
+
+
+def test_is_plan_stale_returns_true_when_claimed_by_is_missing(
+    tmp_path, monkeypatch
+):
+    """An executing plan whose JSON has no claimed_by key at all is stale."""
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    created = json.loads(
+        planner_tools.create_plan(
+            "test", "Download articles", ["Step 1"], ["No empty articles"]
+        )
+    )["result"]
+
+    plan = planner_tools._read_plan(created["plan_id"])
+    plan["status"] = "executing"
+    plan.pop("claimed_by", None)
+    plan.pop("claimed_at", None)
+    planner_tools._write_plan(plan)
+
+    assert planner_tools._is_plan_stale(plan) is True
+
+
+def test_is_plan_stale_returns_false_when_pid_alive(tmp_path, monkeypatch):
+    """An executing plan claimed by a live PID is NOT stale."""
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    created = json.loads(
+        planner_tools.create_plan(
+            "test", "Download articles", ["Step 1"], ["No empty articles"]
+        )
+    )["result"]
+
+    plan = planner_tools._read_plan(created["plan_id"])
+    plan["status"] = "executing"
+    plan["claimed_by"] = "pid:12345"
+    planner_tools._write_plan(plan)
+
+    monkeypatch.setattr(planner_tools, "_is_pid_alive", lambda _pid: True)
+    assert planner_tools._is_plan_stale(plan) is False
+
+
+def test_normalize_resets_orphaned_executing_plan_to_pending(
+    tmp_path, monkeypatch
+):
+    """An executing plan with no claimed_by is reset to pending with
+    in_progress steps reverted to pending."""
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    created = json.loads(
+        planner_tools.create_plan(
+            "test",
+            "Download articles",
+            ["Step 1", "Step 2"],
+            ["No empty articles"],
+        )
+    )["result"]
+
+    plan = planner_tools._read_plan(created["plan_id"])
+    plan["status"] = "executing"
+    plan["claimed_by"] = None
+    plan["steps"][0]["status"] = "in_progress"
+    planner_tools._write_plan(plan)
+
+    changed = planner_tools._normalize_plan_for_consistency(plan)
+
+    assert changed is True
+    assert plan["status"] == "pending"
+    assert plan["steps"][0]["status"] == "pending"
+    assert plan["steps"][1]["status"] == "pending"
+
+
+def test_normalize_does_not_touch_executing_plan_with_claimed_by(
+    tmp_path, monkeypatch
+):
+    """An executing plan WITH a claimed_by PID is not reset by normalize."""
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    created = json.loads(
+        planner_tools.create_plan(
+            "test", "Download articles", ["Step 1"], ["No empty articles"]
+        )
+    )["result"]
+
+    plan = planner_tools._read_plan(created["plan_id"])
+    plan["status"] = "executing"
+    plan["claimed_by"] = "pid:12345"
+    plan["steps"][0]["status"] = "in_progress"
+    planner_tools._write_plan(plan)
+
+    changed = planner_tools._normalize_plan_for_consistency(plan)
+
+    assert changed is False
+    assert plan["status"] == "executing"
+    assert plan["steps"][0]["status"] == "in_progress"
+
+
+def test_read_plan_backfills_missing_schema_fields(tmp_path, monkeypatch):
+    """Plans created before claimed_by/requeue_count schema additions
+    get sane defaults on read."""
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    created = json.loads(
+        planner_tools.create_plan(
+            "test", "Download articles", ["Step 1"], ["No empty articles"]
+        )
+    )["result"]
+
+    # Simulate old-schema plan by stripping new fields from JSON on disk
+    path = planner_tools._plan_path(created["plan_id"])
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw.pop("claimed_by", None)
+    raw.pop("claimed_at", None)
+    raw.pop("requeue_count", None)
+    raw.pop("requeued_at", None)
+    raw.pop("requeue_reason", None)
+    path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+
+    plan = planner_tools._read_plan(created["plan_id"])
+    assert plan["claimed_by"] is None
+    assert plan["claimed_at"] is None
+    assert plan["requeue_count"] == 0
+    assert plan["requeued_at"] is None
+    assert plan["requeue_reason"] is None
+
+
+def test_claim_plan_recovers_orphaned_executing_plan(tmp_path, monkeypatch):
+    """claim_plan requeues an executing plan with no claimed_by and then
+    claims it in the same call."""
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    created = json.loads(
+        planner_tools.create_plan(
+            "test",
+            "Download articles",
+            ["Step 1", "Step 2"],
+            ["No empty articles"],
+        )
+    )["result"]
+
+    # Simulate orphaned plan: executing, no claimed_by, in_progress step
+    plan = planner_tools._read_plan(created["plan_id"])
+    plan["status"] = "executing"
+    plan["claimed_by"] = None
+    plan["claimed_at"] = None
+    plan["steps"][0]["status"] = "completed"
+    plan["steps"][1]["status"] = "in_progress"
+    planner_tools._write_plan(plan)
+
+    # claim_plan should detect the orphan, requeue it, then claim it
+    payload = json.loads(planner_tools.claim_plan("auto-recovery"))
+    assert payload["error"] == ""
+    assert payload["result"] != ""
+    assert payload["result"]["plan_id"] == created["plan_id"]
+    assert payload["result"]["status"] == "executing"
+
+    # The on-disk plan should now have a valid claimed_by
+    disk = planner_tools._read_plan(created["plan_id"])
+    assert disk["claimed_by"] is not None
+    assert disk["claimed_by"].startswith("pid:")
+
+
+def test_recover_stale_plans_normalizes_orphaned_plan(tmp_path, monkeypatch):
+    """recover_stale_plans normalizes an orphaned executing plan (no
+    claimed_by) back to pending via _normalize_plan_for_consistency,
+    which runs before the stale-requeue check."""
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    created = json.loads(
+        planner_tools.create_plan(
+            "test", "Download articles", ["Step 1"], ["No empty articles"]
+        )
+    )["result"]
+
+    plan = planner_tools._read_plan(created["plan_id"])
+    plan["status"] = "executing"
+    plan["claimed_by"] = None
+    plan["steps"][0]["status"] = "in_progress"
+    planner_tools._write_plan(plan)
+
+    payload = json.loads(planner_tools.recover_stale_plans("startup recovery"))
+    assert payload["error"] == ""
+    # Normalization catches the orphan before the stale-requeue path
+    assert payload["result"]["normalized"] >= 1
+
+    recovered = planner_tools._read_plan(created["plan_id"])
+    assert recovered["status"] == "pending"
+    assert recovered["steps"][0]["status"] == "pending"

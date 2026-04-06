@@ -7,6 +7,7 @@ process restarts.
 
 import json
 import logging
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -15,6 +16,7 @@ from agents.tools._helpers import _safe_json
 
 _PLANS_DIR = Path(".plans")
 _STALE_PLAN_TIMEOUT_MINUTES = 60
+_MAX_REQUEUE_COUNT = 3
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +106,19 @@ def _normalize_plan_for_consistency(plan: dict) -> bool:
     status = plan.get("status")
     steps = plan.get("steps", [])
 
+    # If an executing plan has no claimed_by, it's orphaned — reset to
+    # pending so it can be reclaimed by the next executor cycle.
+    if status == "executing" and not plan.get("claimed_by"):
+        plan["status"] = "pending"
+        plan["claimed_by"] = None
+        plan["claimed_at"] = None
+        status = "pending"
+        for step in steps:
+            if step.get("status") == "in_progress":
+                step["status"] = "pending"
+                step["updated_at"] = timestamp
+        changed = True
+
     # If a non-executing plan has in-progress steps,
     # reset those steps to pending.
     if status != "executing":
@@ -138,6 +153,29 @@ def _normalize_plan_for_consistency(plan: dict) -> bool:
     return changed
 
 
+def _parse_claimed_pid(claimed_by: str | None) -> int | None:
+    """Parse claimed_by value in format ``pid:<number>``."""
+    if not claimed_by or not isinstance(claimed_by, str):
+        return None
+    if not claimed_by.startswith("pid:"):
+        return None
+    try:
+        return int(claimed_by.split(":", 1)[1])
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_pid_alive(pid: int) -> bool:
+    """Check process liveness for claim ownership checks."""
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except (ProcessLookupError, PermissionError):
+        return False
+
+
 def _ensure_plans_dir() -> Path:
     """Ensure the .plans directory exists.
 
@@ -163,6 +201,9 @@ def _plan_path(plan_id: str) -> Path:
 def _read_plan(plan_id: str) -> dict:
     """Read a plan from disk.
 
+    Backfills any fields added after the initial schema so that all
+    downstream code can rely on their presence.
+
     Args:
         plan_id: The plan UUID.
 
@@ -174,7 +215,17 @@ def _read_plan(plan_id: str) -> dict:
     """
     path = _plan_path(plan_id)
     with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        plan = json.load(f)
+
+    # Backfill fields that may be absent in plans created before the
+    # claimed_by / requeue_count schema additions.
+    plan.setdefault("claimed_by", None)
+    plan.setdefault("claimed_at", None)
+    plan.setdefault("requeue_count", 0)
+    plan.setdefault("requeued_at", None)
+    plan.setdefault("requeue_reason", None)
+
+    return plan
 
 
 def _write_plan(plan: dict) -> None:
@@ -301,6 +352,8 @@ def create_plan(
             "requeue_count": 0,
             "requeued_at": None,
             "requeue_reason": None,
+            "claimed_by": None,
+            "claimed_at": None,
         }
 
         _write_plan(plan)
@@ -520,10 +573,31 @@ def update_plan(
                 plan["status"] = requested_status
                 changed = True
 
+            if requested_status == "executing":
+                # Ensure executing plans always have ownership metadata
+                # so _is_plan_stale can verify the owner process.
+                if not plan.get("claimed_by"):
+                    plan["claimed_by"] = f"pid:{os.getpid()}"
+                    plan["claimed_at"] = timestamp
+                    changed = True
+            else:
+                if plan.get("claimed_by") is not None:
+                    plan["claimed_by"] = None
+                    changed = True
+                if plan.get("claimed_at") is not None:
+                    plan["claimed_at"] = None
+                    changed = True
+
         derived_status = _derive_plan_status_from_steps(plan)
         if derived_status and plan.get("status") != derived_status:
             plan["status"] = derived_status
             changed = True
+            if plan.get("claimed_by") is not None:
+                plan["claimed_by"] = None
+                changed = True
+            if plan.get("claimed_at") is not None:
+                plan["claimed_at"] = None
+                changed = True
 
         if changed:
             plan["updated_at"] = timestamp
@@ -584,6 +658,18 @@ def _is_plan_stale(plan: dict) -> bool:
     """
     if plan.get("status") != "executing":
         return False
+
+    claimed_pid = _parse_claimed_pid(plan.get("claimed_by"))
+
+    # No valid PID claim — ownership is unverifiable, treat as stale so
+    # the plan can be requeued and reclaimed by a live executor.
+    if claimed_pid is None:
+        return True
+
+    # Claimed PID is dead — the executor that owned this plan is gone.
+    if not _is_pid_alive(claimed_pid):
+        return True
+
     updated_at = plan.get("updated_at", "")
     if not updated_at:
         return True
@@ -613,16 +699,69 @@ def _requeue_stale_plan(plan: dict) -> None:
         f"{_STALE_PLAN_TIMEOUT_MINUTES} minutes"
     )
     plan["updated_at"] = timestamp
+    plan["claimed_by"] = None
+    plan["claimed_at"] = None
+
+    exceeded_limit = plan["requeue_count"] >= _MAX_REQUEUE_COUNT
     for step in plan.get("steps", []):
         if step.get("status") == "in_progress":
-            step["status"] = "pending"
+            step["status"] = "failed" if exceeded_limit else "pending"
             step["updated_at"] = timestamp
+
+    if exceeded_limit:
+        plan["status"] = "failed"
+        plan["requeue_reason"] = (
+            f"Plan requeued {plan['requeue_count']} times; "
+            "marked failed for automatic remediation"
+        )
+
     _write_plan(plan)
     logger.info(
         "Requeued stale plan %s (requeue_count=%d)",
         plan["id"],
         plan["requeue_count"],
     )
+
+
+def recover_stale_plans(reason: str) -> str:
+    """Heal inconsistent plans and requeue stale executing plans.
+
+    This is used for autonomous recovery on orchestrator startup.
+    """
+    try:
+        plans_dir = _ensure_plans_dir()
+        scanned = 0
+        normalized = 0
+        requeued = 0
+
+        for plan_file in plans_dir.glob("*.json"):
+            try:
+                plan = json.loads(plan_file.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+
+            scanned += 1
+
+            if _normalize_plan_for_consistency(plan):
+                _write_plan(plan)
+                normalized += 1
+
+            if _is_plan_stale(plan):
+                _requeue_stale_plan(plan)
+                requeued += 1
+
+        return _safe_json(
+            {
+                "result": {
+                    "scanned": scanned,
+                    "normalized": normalized,
+                    "requeued": requeued,
+                },
+                "error": "",
+            }
+        )
+    except Exception as exc:
+        return _safe_json({"result": "", "error": str(exc)})
 
 
 def claim_plan(reason: str) -> str:
@@ -689,6 +828,8 @@ def claim_plan(reason: str) -> str:
 
             plan["status"] = "executing"
             plan["updated_at"] = _now()
+            plan["claimed_by"] = f"pid:{os.getpid()}"
+            plan["claimed_at"] = _now()
             _write_plan(plan)
             return _safe_json({"result": _serialize_plan(plan), "error": ""})
 

@@ -1,7 +1,12 @@
 """Non-LLM tests for orchestrator scheduling behavior."""
 
+import json
+from typing import Any, cast
+
+from agents import orchestrator as orchestrator_module
 from agents.orchestrator import Orchestrator
 from agents.schedules import AgentSchedule
+from agents.tools import planner as planner_tools
 
 
 class TestAgentSchedule:
@@ -135,7 +140,12 @@ class TestOrchestrator:
         import asyncio
 
         orchestrator = Orchestrator()
-        result = asyncio.run(orchestrator.run_agent("nonexistent", "do stuff"))
+        result = asyncio.run(
+            orchestrator.run_agent(
+                cast(Any, "nonexistent"),
+                "do stuff",
+            )
+        )
         assert result["agent"] == "nonexistent"
         assert result["error"] is not None
         assert "Unknown agent" in result["error"]
@@ -158,3 +168,86 @@ class TestOrchestrator:
         result = asyncio.run(orchestrator.run_due_agents())
         assert result["agents_run"] == []
         assert result["results"] == {}
+
+    def test_load_state_runs_recovery_without_state_file(
+        self, tmp_path, monkeypatch
+    ):
+        state_file = tmp_path / ".orchestrator.json"
+        monkeypatch.setattr(orchestrator_module, "_STATE_FILE", state_file)
+
+        calls = []
+
+        def _fake_recover(reason: str) -> str:
+            calls.append(reason)
+            return json.dumps(
+                {
+                    "result": {
+                        "scanned": 0,
+                        "normalized": 0,
+                        "requeued": 0,
+                    },
+                    "error": "",
+                }
+            )
+
+        monkeypatch.setattr(
+            planner_tools, "recover_stale_plans", _fake_recover
+        )
+
+        orchestrator = Orchestrator()
+        orchestrator.load_state()
+
+        assert len(calls) == 1
+        assert "startup" in calls[0].lower()
+
+    def test_load_state_marks_disappeared_process_and_runs_recovery(
+        self, tmp_path, monkeypatch
+    ):
+        state_file = tmp_path / ".orchestrator.json"
+        state_file.write_text(
+            json.dumps(
+                {
+                    "schedules": {},
+                    "running": {
+                        "planner": {
+                            "pid": 123456,
+                            "started_at": "2026-01-01T00:00:00+00:00",
+                            "log_file": ".logs/planner.log",
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(orchestrator_module, "_STATE_FILE", state_file)
+        monkeypatch.setattr(
+            orchestrator_module, "_is_process_alive", lambda _p: False
+        )
+
+        called = {"value": False}
+
+        def _fake_recover(_reason: str) -> str:
+            called["value"] = True
+            return json.dumps(
+                {
+                    "result": {
+                        "scanned": 1,
+                        "normalized": 0,
+                        "requeued": 1,
+                    },
+                    "error": "",
+                }
+            )
+
+        monkeypatch.setattr(
+            planner_tools, "recover_stale_plans", _fake_recover
+        )
+
+        orchestrator = Orchestrator()
+        orchestrator.load_state()
+
+        assert called["value"] is True
+        schedule = orchestrator.schedules["planner"]
+        assert schedule.last_result == "unknown"
+        assert "disappeared" in (schedule.last_error or "").lower()
