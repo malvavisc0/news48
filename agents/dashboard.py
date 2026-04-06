@@ -1,9 +1,11 @@
 """Rich Live dashboard that tails agent log files."""
 
+import json
 import re
 import threading
 import time
 from collections import deque
+from pathlib import Path
 
 from rich.align import Align
 from rich.layout import Layout
@@ -23,6 +25,7 @@ _AGENT_COLORS = {
 _MIN_WIDTH = 80
 _MIN_HEIGHT = 24
 _STATS_CACHE_TTL = 10.0  # seconds
+_PLANS_DIR = Path(".plans")
 
 
 class EventBuffer:
@@ -171,7 +174,41 @@ def _get_article_stats() -> dict:
                 "pending": pending,
                 "last_fetch": last_fetch,
                 "today": today,
+                "plans_total": 0,
+                "plans_pending": 0,
+                "plans_executing": 0,
+                "plans_completed": 0,
+                "plans_failed": 0,
             }
+
+            if _PLANS_DIR.exists():
+                plan_counts = {
+                    "pending": 0,
+                    "executing": 0,
+                    "completed": 0,
+                    "failed": 0,
+                }
+                for plan_file in _PLANS_DIR.glob("*.json"):
+                    try:
+                        plan = json.loads(
+                            plan_file.read_text(encoding="utf-8")
+                        )
+                    except (json.JSONDecodeError, OSError):
+                        continue
+                    status = str(plan.get("status", "")).lower()
+                    if status in plan_counts:
+                        plan_counts[status] += 1
+
+                _stats_cache.update(
+                    {
+                        "plans_total": sum(plan_counts.values()),
+                        "plans_pending": plan_counts["pending"],
+                        "plans_executing": plan_counts["executing"],
+                        "plans_completed": plan_counts["completed"],
+                        "plans_failed": plan_counts["failed"],
+                    }
+                )
+
             _stats_cache_time = now
             return _stats_cache
     except Exception:
@@ -183,6 +220,11 @@ def _get_article_stats() -> dict:
             "pending": 0,
             "last_fetch": "Error",
             "today": 0,
+            "plans_total": 0,
+            "plans_pending": 0,
+            "plans_executing": 0,
+            "plans_completed": 0,
+            "plans_failed": 0,
         }
 
 
@@ -256,6 +298,25 @@ class Dashboard:
         lines.append(Text())  # blank line
         lines.append(Text("Feeds", style="bold white"))
         lines.append(Text(f"  Active:    {stats['feeds']}", style="white"))
+
+        # Plans section
+        lines.append(Text())  # blank line
+        lines.append(Text("Plans", style="bold white"))
+        lines.append(
+            Text(f"  Total:     {stats['plans_total']}", style="white")
+        )
+        lines.append(
+            Text(f"  Running:   {stats['plans_executing']}", style="green")
+        )
+        lines.append(
+            Text(f"  Pending:   {stats['plans_pending']}", style="yellow")
+        )
+        lines.append(
+            Text(f"  Completed: {stats['plans_completed']}", style="cyan")
+        )
+        lines.append(
+            Text(f"  Failed:    {stats['plans_failed']}", style="red")
+        )
 
         # Last fetch section
         lines.append(Text())  # blank line
