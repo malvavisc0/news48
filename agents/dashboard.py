@@ -158,6 +158,7 @@ class Dashboard:
             content,
             title=f"[bold {color}]{name}{title_extra}[/]",
             border_style=color,
+            expand=True,
         )
 
     def render(self) -> Align:

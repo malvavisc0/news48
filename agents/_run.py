@@ -11,6 +11,13 @@ from llama_index.core.agent.workflow import (
 
 from agents.streaming import flush_remaining_stream, flush_sentence_chunks
 
+# Configure logging for agent execution
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
 logger = logging.getLogger(__name__)
 
 

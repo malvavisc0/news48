@@ -4,13 +4,12 @@ import re
 
 _SENTENCE_BOUNDARY_RE = re.compile(r"(?:[.!?][\"')\]]*\s+|\n{2,})")
 
-# Loguru format:
-# 2026-04-04 12:38:42.698 | INFO | agents.pipeline:run:77 - message
-_LOGURU_LINE_RE = re.compile(
+# Standard logging format:
+# 2026-04-05 23:56:00 [agents._run] Executing tool: run_shell_command...
+_LOG_LINE_RE = re.compile(
     r"^(\d{4}-\d{2}-\d{2})\s+"  # date
-    r"(\d{2}:\d{2}):\d{2}\.\d+\s*\|\s*"  # time (HH:MM)
-    r"\w+\s*\|\s*"  # log level
-    r"[\w.]+:\w+:\d+\s*-\s*"  # module:function:line
+    r"(\d{2}:\d{2}):\d{2}\s+"  # time (HH:MM)
+    r"\[([^\]]+)\]\s*"  # [logger name]
     r"(.+)$"  # message
 )
 
@@ -27,27 +26,28 @@ def _strip_prefix(message: str, prefix: str) -> str:
 
 
 def format_log_line(line: str) -> str:
-    """Parse a loguru log line and return a human-readable format.
+    """Parse a log line and return a human-readable format.
 
     Input:
-        2026-04-04 12:38:42.698 | INFO | agents.pipeline:run:77 -
-        Executing tool: update_plan. Reason: ...
+        2026-04-05 23:56:00 [agents._run] Executing tool: run_shell_command...
 
     Output:
-        12:38 ⚙ Executing: update_plan (Reason: ...)
+        23:56 ⚙ Executing: run_shell_command (Reason: ...)
 
     Args:
-        line: A loguru-formatted log line.
+        line: A log line in standard logging format.
 
     Returns:
         A human-readable string, or the original line if it doesn't match.
     """
-    match = _LOGURU_LINE_RE.match(line.strip())
+    stripped = line.strip()
+
+    match = _LOG_LINE_RE.match(stripped)
     if not match:
         return line
 
     time = match.group(2)
-    message = match.group(3).strip()
+    message = match.group(4).strip()
 
     # Parse "Executing tool: <name>. Reason: <reason>"
     if message.startswith(_PREFIX_EXEC):
