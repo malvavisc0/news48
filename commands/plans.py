@@ -7,9 +7,11 @@ from typing import Any
 import typer
 
 from agents.tools.planner import (
+    _derive_plan_status_from_steps,
     _ensure_plans_dir,
     _normalize_plan_for_consistency,
     _read_plan,
+    _task_family,
     _write_plan,
 )
 
@@ -33,42 +35,6 @@ def _iter_plans(status: str = "") -> list[dict]:
     return items
 
 
-def _terminal_status_from_steps(plan: dict[str, Any]) -> str | None:
-    """Return terminal plan status inferred from step statuses."""
-    steps = plan.get("steps", [])
-    if not steps:
-        return None
-
-    statuses = {s.get("status") for s in steps}
-    if statuses.issubset({"completed"}):
-        return "completed"
-    if statuses.issubset({"completed", "failed"}):
-        return "failed"
-    return None
-
-
-def _task_family(task: str) -> str:
-    """Classify a task string into a coarse dedupe family."""
-    t = (task or "").strip().lower()
-    if "fetch" in t and "feed" in t:
-        return "fetch"
-    if "download" in t and "article" in t:
-        return "download"
-    if "parse" in t and "article" in t:
-        return "parse"
-    if "retry" in t and "article" in t:
-        return "retry"
-    if "fact-check" in t or "fact check" in t:
-        return "fact-check"
-    if "feed" in t and "stale" in t:
-        return "feed-health"
-    if "database" in t and ("health" in t or "integrity" in t):
-        return "db-health"
-    if "older than 48" in t or "retention" in t:
-        return "retention"
-    return t
-
-
 def _remediate_plan(
     plan: dict[str, Any], parent_statuses: dict[str, str]
 ) -> list[str]:
@@ -78,7 +44,7 @@ def _remediate_plan(
     if _normalize_plan_for_consistency(plan):
         actions.append("normalized_status_mismatch")
 
-    derived = _terminal_status_from_steps(plan)
+    derived = _derive_plan_status_from_steps(plan)
     if derived and plan.get("status") != derived:
         plan["status"] = derived
         actions.append(f"set_plan_status={derived}")

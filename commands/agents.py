@@ -6,6 +6,7 @@ from typing import Literal
 import typer
 
 from agents.orchestrator import Orchestrator
+from agents.schedules import DEFAULT_SCHEDULES
 
 from ._common import emit_error, emit_json
 
@@ -14,21 +15,7 @@ agents_app = typer.Typer(help="Manage autonomous agents.")
 VALID_AGENTS = ["planner", "executor", "monitor"]
 
 DEFAULT_TASKS = {
-    "planner": (
-        "Run a full planning cycle. Gather evidence, check existing plans, "
-        "identify all needed work, create plans with dependencies, and "
-        "confirm nothing else needs planning."
-    ),
-    "executor": (
-        "Claim and execute one pending plan. Run fetch, download, and parse "
-        "as background processes, execute the final verification step, and "
-        "set plan status when done."
-    ),
-    "monitor": (
-        "Run a monitoring cycle. Gather system metrics, check database "
-        "health, assess feed freshness, detect backlogs and failures, "
-        "classify alerts by severity, and send the report via email."
-    ),
+    name: schedule.task_prompt for name, schedule in DEFAULT_SCHEDULES.items()
 }
 
 

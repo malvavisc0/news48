@@ -2,7 +2,6 @@
 
 from os import getenv
 
-from dotenv import load_dotenv
 from llama_index.core.agent.workflow import FunctionAgent
 from llama_index.llms.openai_like import OpenAILike
 
@@ -12,8 +11,6 @@ from agents.instructions import load_agent_instructions
 
 def get_agent() -> FunctionAgent:
     """Create and return the Executor Agent."""
-    load_dotenv()
-
     api_base = getenv("API_BASE", "")
     api_key = getenv("API_KEY", "")
     model = getenv("MODEL", "")

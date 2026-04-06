@@ -131,46 +131,6 @@ def emit_stream_delta(stream_buffer: str, delta: str) -> tuple[str, str]:
     return working, emitted_text
 
 
-def flush_sentence_chunks(
-    stream_buffer: str, delta: str, *, max_buffer_chars: int = 2000
-) -> tuple[str, str]:
-    """Append delta to a stream buffer and emit readable sentence chunks.
-
-    Returns:
-        tuple[remaining_buffer, emitted_text]
-    """
-    if not delta:
-        return stream_buffer, ""
-
-    working = stream_buffer + delta
-    emitted_parts: list[str] = []
-
-    while True:
-        match = _SENTENCE_BOUNDARY_RE.search(working)
-        if not match:
-            break
-        end = match.end()
-        piece = working[:end]
-        if piece.strip():
-            emitted_parts.append(piece)
-        working = working[end:]
-
-    if len(working) > max_buffer_chars:
-        cutoff = working.rfind(" ")
-        if cutoff <= 0:
-            cutoff = max_buffer_chars
-        overflow = working[:cutoff]
-        if overflow.strip():
-            emitted_parts.append(overflow + "\n")
-        working = working[cutoff:].lstrip()
-
-    emitted_text = "".join(emitted_parts)
-    if emitted_text:
-        _emit_chunk(emitted_text)
-
-    return working, emitted_text
-
-
 def flush_remaining_stream(stream_buffer: str) -> str:
     """Flush any remaining stream buffer content as a final line."""
     text = stream_buffer.strip()

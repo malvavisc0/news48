@@ -46,8 +46,10 @@ def is_article_from_last_48_hours(published_at: str | None) -> bool:
         # Calculate the difference
         age = now - article_date
 
-        # Article must be published within the last 48 hours
-        return timedelta(hours=0) <= age <= timedelta(hours=48)  # noqa: E501
+        # Article must be published within the last 48 hours.
+        # Explicitly exclude future-dated timestamps (clock skew / publisher
+        # error) to avoid processing articles that aren't yet available.
+        return timedelta(hours=0) <= age <= timedelta(hours=48)
     except Exception:
         # If we can't parse the date, skip the article
         return False

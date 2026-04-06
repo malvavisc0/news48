@@ -1,8 +1,7 @@
-"""Helper functions for feed fetching and LLM configuration.
+"""Helper functions for feed fetching and content utilities.
 
 This module provides utilities organized into submodules:
 - feed: Feed fetching and date utilities
-- llm: LLM configuration
 - bypass: Bypass solution and content fetching
 - url: URL utilities
 - seo: SEO and social sharing metadata helpers
@@ -17,11 +16,9 @@ from helpers.feed import (
     load_urls,
     normalize_published_date,
 )
-from helpers.llm import get_llm
 from helpers.url import extract_og_image, get_base_url
 
 __all__ = [
-    "get_llm",
     "load_urls",
     "get_fetch_summary",
     "get_base_url",

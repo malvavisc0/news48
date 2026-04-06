@@ -1,7 +1,6 @@
 """Rich Live dashboard that tails agent log files."""
 
 import json
-import re
 import threading
 import time
 from collections import deque
@@ -14,7 +13,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from agents.streaming import format_log_line
+from agents.streaming import _SENTENCE_BOUNDARY_RE, format_log_line
 
 _AGENT_COLORS = {
     "planner": "blue",
@@ -48,7 +47,6 @@ class EventBuffer:
             self._buffer.clear()
 
 
-_SENTENCE_BOUNDARY_RE = re.compile(r"(?:[.!?][\"')\]]*\s+|\n{2,})")
 _MAX_PARTIAL_CHARS = 4000
 
 

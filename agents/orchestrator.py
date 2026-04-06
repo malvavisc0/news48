@@ -41,15 +41,10 @@ class Orchestrator:
         self,
         schedules: Optional[Dict[str, AgentSchedule]] = None,
     ):
+        from dataclasses import replace
+
         self.schedules = schedules or {
-            name: AgentSchedule(
-                agent_name=s.agent_name,
-                task_prompt=s.task_prompt,
-                interval_minutes=s.interval_minutes,
-                enabled=s.enabled,
-                last_run=s.last_run,
-            )
-            for name, s in DEFAULT_SCHEDULES.items()
+            name: replace(s) for name, s in DEFAULT_SCHEDULES.items()
         }
         self.running: Dict[str, RunningAgent] = {}
 

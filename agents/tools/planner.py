@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from agents.schedules import _is_process_alive as _is_pid_alive
 from agents.tools._helpers import _safe_json
 
 _PLANS_DIR = Path(".plans")
@@ -163,17 +164,6 @@ def _parse_claimed_pid(claimed_by: str | None) -> int | None:
         return int(claimed_by.split(":", 1)[1])
     except (TypeError, ValueError):
         return None
-
-
-def _is_pid_alive(pid: int) -> bool:
-    """Check process liveness for claim ownership checks."""
-    if pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-        return True
-    except (ProcessLookupError, PermissionError):
-        return False
 
 
 def _ensure_plans_dir() -> Path:
