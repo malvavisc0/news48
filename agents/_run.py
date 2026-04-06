@@ -22,18 +22,15 @@ logger = logging.getLogger(__name__)
 
 
 def _format_tool_kwargs(tool_name: str, kwargs: dict) -> str:
-    """Format tool kwargs for logging, truncating long values."""
+    """Format tool kwargs for logging."""
     if tool_name == "run_shell_command":
         cmd = kwargs.get("command", "")
         timeout = kwargs.get("timeout", "")
-        truncated = cmd[:300] + ("..." if len(cmd) > 300 else "")
-        return f"command={truncated!r}, timeout={timeout}"
-    # Generic: truncate all values
+        return f"command={cmd!r}, timeout={timeout}"
+    # Generic: format all values
     parts = []
     for k, v in kwargs.items():
-        s = str(v)
-        truncated = s[:200] + ("..." if len(s) > 200 else "")
-        parts.append(f"{k}={truncated!r}")
+        parts.append(f"{k}={v!r}")
     return ", ".join(parts)
 
 
@@ -44,8 +41,8 @@ def _summarize_tool_result(tool_name: str, output: dict) -> str:
     if tool_name == "run_shell_command" and isinstance(result, dict):
         rc = result.get("return_code", "?")
         t = result.get("execution_time", "?")
-        stdout = (result.get("stdout") or "")[:200]
-        stderr = (result.get("stderr") or "")[:200]
+        stdout = result.get("stdout") or ""
+        stderr = result.get("stderr") or ""
         parts = [f"rc={rc}", f"time={t}s"]
         if stdout.strip():
             parts.append(f"stdout={stdout.strip()!r}")
@@ -53,9 +50,35 @@ def _summarize_tool_result(tool_name: str, output: dict) -> str:
             parts.append(f"stderr={stderr.strip()!r}")
         return " | ".join(parts)
 
-    # Generic: truncate the full output
-    summary = json.dumps(output, default=str)[:300]
+    # Generic: full output
+    summary = json.dumps(output, default=str)
     return summary
+
+
+def _is_empty_claim_result(output: dict) -> bool:
+    """Check if a claim_plan result indicates no eligible plans."""
+    result = output.get("result", "")
+    if isinstance(result, dict):
+        return result.get("status") == "no_eligible_plans"
+    return result == "" or result is None
+
+
+def _is_substantive_result(output: dict) -> bool:
+    """Check if a tool output contains a meaningful (non-hollow) result.
+
+    A hollow result is one where ``result`` is empty/None or is a
+    ``no_eligible_plans`` sentinel.  These should NOT reset the repeated
+    error counter, because the agent is not making real progress.
+    """
+    result = output.get("result", "")
+    if not result:
+        return False
+    if (
+        isinstance(result, dict)
+        and result.get("status") == "no_eligible_plans"
+    ):
+        return False
+    return True
 
 
 async def run_agent(get_agent_fn, task: str, max_iterations: int = 500) -> str:
@@ -74,6 +97,8 @@ async def run_agent(get_agent_fn, task: str, max_iterations: int = 500) -> str:
     repeated_error_count = 0
     last_tool_error_signature = ""
     repeated_error_limit = 5
+    empty_claim_count = 0
+    empty_claim_limit = 2
     handler = get_agent_fn().run(user_msg=task, max_iterations=max_iterations)
     async for event in handler.stream_events():
         if isinstance(event, ToolCall):
@@ -116,8 +141,35 @@ async def run_agent(get_agent_fn, task: str, max_iterations: int = 500) -> str:
                     break
                 continue
 
-            repeated_error_count = 0
-            last_tool_error_signature = ""
+            # --- circuit breaker: consecutive empty claim_plan results ---
+            if event.tool_name == "claim_plan" and _is_empty_claim_result(
+                output
+            ):
+                empty_claim_count += 1
+                logger.info(
+                    "claim_plan returned no eligible plans "
+                    "(%d/%d before abort)",
+                    empty_claim_count,
+                    empty_claim_limit,
+                )
+                if empty_claim_count >= empty_claim_limit:
+                    logger.info(
+                        "Aborting agent loop after %d consecutive "
+                        "empty claim_plan results",
+                        empty_claim_count,
+                    )
+                    break
+            else:
+                empty_claim_count = 0
+
+            # Only reset the error counter on substantive results.
+            # Hollow successes (empty result, no_eligible_plans) must NOT
+            # reset the counter — otherwise alternating hollow-success /
+            # error cycles prevent the repeated-error breaker from firing.
+            if _is_substantive_result(output):
+                repeated_error_count = 0
+                last_tool_error_signature = ""
+
             summary = _summarize_tool_result(event.tool_name, output)
             logger.info(
                 f"Completed execution of tool: {event.tool_name} | {summary}"

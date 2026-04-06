@@ -71,7 +71,7 @@ DEFAULT_SCHEDULES: Dict[str, AgentSchedule] = {
             "health, assess feed freshness, detect backlogs and failures, "
             "classify alerts by severity, and send the report via email."
         ),
-        interval_minutes=1440,  # 24 hours
+        interval_minutes=120,  # 1 hour
     ),
 }
 

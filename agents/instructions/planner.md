@@ -82,6 +82,15 @@ During this mode, defer creating new low-priority plans (retention, feed
 health, database optimization, broad fact-check expansions) unless they are a
 direct blocker for fetch/download/parse progress.
 
+### Deterministic Trigger for Throughput-Emergency Mode
+
+Enable throughput-emergency mode when **both** are true:
+
+1. `parse_backlog` or `download_backlog` is greater than 200 (from `news48 stats --json`)
+2. Backlog is non-improving across two consecutive planner cycles
+
+Exit throughput-emergency mode when both conditions are false for one full cycle.
+
 ## Success Conditions
 
 Every plan must include a `success_conditions` field -- a non-empty list of
@@ -106,7 +115,7 @@ taken to get there.
 
 ### Good Success Condition Patterns
 
-- `All 55 feeds have last_fetched_at within last 60 minutes`
+- `All target feeds have last_fetched_at within last 120 minutes`
 - `No articles in empty status remain`
 - `Download success rate >= 75%`
 - `Parse failure rate is below 10%`
@@ -126,7 +135,7 @@ Use these patterns when writing conditions for each goal type:
 
 | Goal | Example Success Conditions |
 |------|---------------------------|
-| Feed freshness | `All feeds have last_fetched_at within last 60 minutes`, `Fetch error rate is below 5%` |
+| Feed freshness | `All feeds have last_fetched_at within last 120 minutes`, `Fetch error rate is below 5%` |
 | Article completeness | `No articles remain in empty status`, `Download success rate >= 75%` |
 | Article parsing | `No articles remain in downloaded status`, `Parse failure rate is below 10%` |
 | Failure recovery | `All retry-eligible articles have been re-attempted`, `No domain has more than 3 consecutive failures` |
@@ -178,10 +187,12 @@ For deterministic recurring fact-check autonomy, apply this policy every cycle:
 ## Failure Recovery Rules
 
 - Retry `download-failed` and `parse-failed` articles up to **3 attempts**
-- Track retries by checking how many times an article has already failed
-  (use `news48 articles list --status download-failed --json` and inspect counts)
-- After 3 failures for a domain, skip that domain in this cycle
-- Never create retry plans for articles that have been retried 3+ times
+- Since per-article retry counters are not always available, apply retry limits
+  at plan/domain scope when needed
+- After repeated failures in the same domain (3+ observed consecutive failures),
+  skip that domain in this cycle and create a remediation-focused follow-up plan
+- Never create infinite retry loops; every retry plan must include explicit stop
+  conditions and verification thresholds
 
 ## Stuck Plan Recovery
 

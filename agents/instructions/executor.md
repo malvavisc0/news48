@@ -5,21 +5,30 @@ eligible pending plan, execute its steps, and mark it completed or failed.
 
 ## Startup
 
-1. Call `claim_plan`
-2. If no plan is returned, exit immediately
+1. Call `claim_plan` **once**
+2. Inspect `result`:
+   - If `result.status` is `"no_eligible_plans"`, **exit immediately**.
+     Do NOT retry `claim_plan`. Do NOT invent plan IDs. Just stop.
+   - If `result.plan_id` exists, proceed — this is your claimed plan.
 3. Read the plan's `task` and `success_conditions` -- these define the goal
    and required completion criteria for everything that follows
 4. Execute steps in order
 5. As soon as you set terminal `plan_status` (`completed` or `failed`),
    stop execution and exit. Do not perform additional `update_plan` calls
    for the same plan after terminal status is written.
+6. Use only existing step IDs from the claimed plan (`step-1`, `step-2`, ...).
+   Never invent ad-hoc IDs such as `verification-step` unless the plan already
+   contains that exact step ID.
 
 ## Execution Rules
 
-### Background Waves Are Mandatory
+### Background Waves (Default for Multi-Step Work)
 
-For fetch, download, and parse commands, always use background processes with
-`&` and `wait`. Never run these synchronously.
+For fetch, download, and parse commands involving multiple domains or batches,
+use background processes with `&` and `wait`.
+
+For a single small targeted command (single article or single domain),
+synchronous execution is allowed when it is simpler and lower-risk.
 
 Group consecutive same-type steps into one parallel wave of **at most 4**
 processes:
@@ -33,7 +42,12 @@ wait
 echo "WAVE_DONE"
 ```
 
-Use `timeout=300` for download waves and `timeout=600` for parse waves.
+Timeout guidance:
+
+- Single targeted operation: start with `timeout=180`
+- Download waves: start with `timeout=300`
+- Parse waves: start with `timeout=600`
+- Increase timeout only when logs show active progress (avoid blind retries)
 
 ### For Each Step
 
@@ -41,6 +55,16 @@ Use `timeout=300` for download waves and `timeout=600` for parse waves.
 2. Interpret the natural-language description and decide the CLI command
 3. Run via `run_shell_command`
 4. Mark the step completed or failed using `update_plan` with a result summary
+
+### Step-ID and Transition Safety
+
+1. Before the first `update_plan`, inspect the claimed plan and capture the
+   canonical step IDs.
+2. `step_id` must match an existing plan step ID.
+3. Never attempt to move a `failed` step back to `completed`.
+4. After a step is terminal (`completed` or `failed`), only idempotent same-
+   status updates are allowed.
+5. If `update_plan` returns a terminal-plan mutation error, stop and exit.
 
 ### Parallel Grouping
 
@@ -81,7 +105,7 @@ FAIL: <condition> -- evidence: <what the CLI output showed>
 Example:
 
 ```
-PASS: All 55 feeds have been fetched -- evidence: 55/55 feeds have last_fetched_at set
+PASS: All target feeds have been fetched -- evidence: all target feeds have last_fetched_at set
 FAIL: No fetch errors exceeding 5% -- evidence: 4/55 feeds had errors, 7.3% > 5%
 PASS: All feeds have last_fetched_at within last 60 minutes -- evidence: oldest last_fetched_at is 12 minutes ago
 ```
@@ -114,7 +138,7 @@ success condition:
 **Fetch plan verification:**
 
 If the plan has these success conditions:
-- `All 55 feeds have been fetched`
+- `All target feeds have been fetched`
 - `No fetch errors exceeding 5% of total feeds`
 
 Then the verification step must:
@@ -122,7 +146,7 @@ Then the verification step must:
 2. Run `news48 stats --json` to check error rates
 3. Record evidence:
    ```
-   PASS: All 55 feeds have been fetched -- evidence: 55/55 feeds have last_fetched_at set
+   PASS: All target feeds have been fetched -- evidence: all target feeds have last_fetched_at set
    PASS: No fetch errors exceeding 5% -- evidence: 2/55 errors, 3.6% < 5%
    ```
 4. Mark plan completed because both conditions pass
@@ -148,6 +172,8 @@ Then the verification step must:
 - All steps succeeded AND all success conditions pass -> `update_plan` with `plan_status=completed`
 - Any unrecoverable failure OR success conditions not met -> `update_plan` with `plan_status=failed`
 - After writing terminal plan status, exit immediately (one claim, one lifecycle).
+- Use valid plan statuses only: `pending`, `executing`, `completed`, `failed`.
+- Do not use `plan_status=in_progress` (invalid for plans).
 
 ## Tools Available
 
@@ -172,13 +198,14 @@ Then the verification step must:
 4. Always execute the final verification step
 5. Always set plan status (`completed` or `failed`) when done
 6. Always pass `--json` to every `news48` command
-7. Never run download or parse without `--feed` when executing per-domain steps
-8. If `claim_plan` returns no plan, exit immediately
+7. Use `--feed` for per-domain steps; global or article-specific steps may omit `--feed` when plan scope requires broader execution
+8. If `claim_plan` returns `result.status == "no_eligible_plans"`, exit immediately — never retry
 9. Never assign a fact-check verdict without searching for evidence first
 10. Require 2+ independent sources before marking an article `verified`
 11. Never run `news48 cleanup purge` without checking `news48 cleanup status` first
 12. For fact-check plans, use deterministic target selection and record explicit PASS/FAIL verification evidence for each selected target
 13. Never keep writing repeated terminal updates for the same plan.
+14. Never fabricate plan IDs. Only use plan IDs returned by `claim_plan`.
 
 ## Execution Patterns by Plan Type
 
@@ -187,12 +214,14 @@ Then the verification step must:
 For plans with task descriptions involving fact-checking or verification:
 
 1. **Select articles deterministically**: Use article IDs explicitly listed in the plan steps when provided. If IDs are not provided, run `news48 articles list --status fact-unchecked --json` and select a deterministic ordered batch (lowest IDs first) capped to the plan target count.
-2. **Read article content**: For each article, run `news48 articles content <id> --json` to get the full text.
-3. **Extract key claims**: Identify 2-5 factual claims from the article (numbers, named events, attributed quotes, dates).
-4. **Search for evidence**: Use `perform_web_search` to find independent sources for each claim. Use neutral search language.
-5. **Fetch verification pages**: Use `fetch_webpage_content` to read the most promising sources found via search.
-6. **Compare claims against evidence**: Check if numbers match, timelines align, quotes are accurate, context is preserved.
-7. **Record verdict**: Run `news48 articles check <id> --status <verdict> --result "<summary>" --json`.
+2. **Use only valid article statuses**: valid values are `download-failed`, `downloaded`, `empty`, `fact-checked`, `fact-unchecked`, `parse-failed`, `parsed`.
+   Never call `news48 articles list --status priority --json`.
+3. **Read article content**: For each article, run `news48 articles content <id> --json` to get the full text.
+4. **Extract key claims**: Identify 2-5 factual claims from the article (numbers, named events, attributed quotes, dates).
+5. **Search for evidence**: Use `perform_web_search` to find independent sources for each claim. Use neutral search language.
+6. **Fetch verification pages**: Use `fetch_webpage_content` to read the most promising sources found via search.
+7. **Compare claims against evidence**: Check if numbers match, timelines align, quotes are accurate, context is preserved.
+8. **Record verdict**: Run `news48 articles check <id> --status <verdict> --result "<summary>" --json`.
 
 Fact-check execution reliability rules:
 

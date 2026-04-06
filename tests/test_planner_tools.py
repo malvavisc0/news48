@@ -228,12 +228,55 @@ def test_list_plans_filters_by_status(tmp_path, monkeypatch):
     assert data["result"][0]["status"] == "executing"
 
 
-def test_claim_plan_returns_empty_when_no_plans(tmp_path, monkeypatch):
+def test_list_plans_filters_by_comma_separated_status(tmp_path, monkeypatch):
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    # Create two plans
+    plan_a = json.loads(
+        planner_tools.create_plan("test", "Task A", ["Step 1"], ["Cond 1"])
+    )["result"]
+    json.loads(
+        planner_tools.create_plan(
+            "test", "Fetch feeds", ["Step 1"], ["Cond 1"]
+        )
+    )
+
+    # Move plan_a to executing
+    json.loads(
+        planner_tools.update_plan(
+            reason="claim",
+            plan_id=plan_a["plan_id"],
+            step_id="step-1",
+            status="in_progress",
+            plan_status="executing",
+        )
+    )
+
+    # Filter by "pending,executing" should return both plans
+    data = json.loads(
+        planner_tools.list_plans("test", status="pending,executing")
+    )
+    statuses = {p["status"] for p in data["result"]}
+    assert "pending" in statuses
+    assert "executing" in statuses
+    assert len(data["result"]) == 2
+
+    # Filter by single status still works
+    data = json.loads(planner_tools.list_plans("test", status="pending"))
+    assert all(p["status"] == "pending" for p in data["result"])
+
+
+def test_claim_plan_returns_no_eligible_plans_when_empty(
+    tmp_path, monkeypatch
+):
     monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
 
     payload = json.loads(planner_tools.claim_plan("test"))
-    assert payload["result"] == ""
     assert payload["error"] == ""
+    result = payload["result"]
+    assert isinstance(result, dict)
+    assert result["status"] == "no_eligible_plans"
+    assert "exit" in result["message"].lower()
 
 
 def test_claim_plan_returns_empty_when_all_blocked(tmp_path, monkeypatch):
@@ -260,8 +303,10 @@ def test_claim_plan_returns_empty_when_all_blocked(tmp_path, monkeypatch):
 
     # Now parent is executing, child is blocked -- nothing eligible
     payload = json.loads(planner_tools.claim_plan("test"))
-    assert payload["result"] == ""
     assert payload["error"] == ""
+    result = payload["result"]
+    assert isinstance(result, dict)
+    assert result["status"] == "no_eligible_plans"
 
 
 def test_update_plan_rejects_invalid_plan_status(tmp_path, monkeypatch):
@@ -373,6 +418,89 @@ def test_create_plan_dedupes_active_same_family(tmp_path, monkeypatch):
     )["result"]
 
     assert second["plan_id"] == first["plan_id"]
+
+
+def test_create_plan_infers_download_parent_from_active_fetch(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    fetch = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Fetch all feeds within last 120 minutes",
+            steps=["Fetch", "Verify"],
+            success_conditions=["All feeds are fresh"],
+        )
+    )["result"]
+
+    download = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download all empty articles",
+            steps=["Download", "Verify"],
+            success_conditions=["No empty articles"],
+        )
+    )["result"]
+
+    assert download["parent_id"] == fetch["plan_id"]
+
+
+def test_create_plan_infers_parse_parent_from_active_download(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    download = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download all empty articles",
+            steps=["Download", "Verify"],
+            success_conditions=["No empty articles"],
+        )
+    )["result"]
+
+    parse = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Parse all downloaded articles",
+            steps=["Parse", "Verify"],
+            success_conditions=["No downloaded articles remain"],
+        )
+    )["result"]
+
+    assert parse["parent_id"] == download["plan_id"]
+
+
+def test_update_plan_accepts_step_description_alias(tmp_path, monkeypatch):
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    created = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download all empty articles",
+            steps=["Run download", "verification-step"],
+            success_conditions=["No empty articles"],
+        )
+    )["result"]
+
+    payload = json.loads(
+        planner_tools.update_plan(
+            reason="verification by description",
+            plan_id=created["plan_id"],
+            step_id="verification-step",
+            status="completed",
+            result="Verification completed",
+        )
+    )
+
+    assert payload["error"] == ""
+    verification = next(
+        s
+        for s in payload["result"]["steps"]
+        if s["description"] == "verification-step"
+    )
+    assert verification["status"] == "completed"
 
 
 def test_claim_plan_sets_claim_owner_metadata(tmp_path, monkeypatch):

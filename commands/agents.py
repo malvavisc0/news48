@@ -247,14 +247,23 @@ def agents_dashboard(
             # Support both list (current) and dict (legacy) formats
             instances = run_data if isinstance(run_data, list) else [run_data]
             for i, info in enumerate(instances):
-                tailer_key = f"{name}:{i}" if len(instances) > 1 else name
+                pid = info.get("pid")
+                if pid:
+                    tailer_key = f"{name}:{pid}"
+                elif len(instances) > 1:
+                    # Fallback for malformed legacy entries without pid
+                    tailer_key = f"{name}:{i}"
+                else:
+                    tailer_key = name
                 active_tailer_keys.add(tailer_key)
                 log_file = info.get("log_file", "")
                 if tailer_key not in tailers and log_file:
-                    # Merge all instances into the same agent panel buffer
-                    if name not in dashboard.buffers:
-                        dashboard.buffers[name] = EventBuffer(max_lines=100)
-                    buffer = dashboard.buffers[name]
+                    # Keep per-instance buffer keyed by tailer_key
+                    if tailer_key not in dashboard.buffers:
+                        dashboard.buffers[tailer_key] = EventBuffer(
+                            max_lines=100
+                        )
+                    buffer = dashboard.buffers[tailer_key]
                     stop_event = threading.Event()
                     thread = threading.Thread(
                         target=tail_file_stream,

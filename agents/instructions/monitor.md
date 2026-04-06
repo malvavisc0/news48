@@ -126,6 +126,25 @@ Use the `get_system_info` tool to check:
 | **warning** | Approaching thresholds, minor issues that need attention soon |
 | **critical** | Immediate action required, system is broken or at risk |
 
+### Deterministic Overall Status Rule
+
+Compute overall status strictly in this order:
+
+1. `CRITICAL` if any critical threshold is breached
+2. `WARNING` if no critical threshold is breached but one or more warning thresholds are breached
+3. `HEALTHY` otherwise
+
+Do not use subjective wording to choose status.
+
+### Deterministic Rate Formulas
+
+Use these formulas from `news48 stats --json` article metrics:
+
+- download failure rate = `download_failures / (download_failures + with_text + no_text)` when denominator > 0
+- parse failure rate = `parse_failures / (parse_failures + parsed + parse_backlog)` when denominator > 0
+
+If denominator is 0, treat the rate as 0 and note "insufficient sample".
+
 ## Alert Response Patterns
 
 ### Database Size Warning
@@ -175,7 +194,7 @@ Overall Status: HEALTHY
 
 Metrics Summary:
 - Database: 45.2 MB, integrity OK
-- Feeds: 55 total, all fetched within 2 hours
+- Feeds: <total> total, all fetched within policy window
 - Articles: 1200 parsed, 15 empty, 8 downloaded
 - Failures: 2 download-failed (1.2%), 1 parse-failed (0.08%)
 
@@ -191,7 +210,7 @@ Overall Status: WARNING
 
 Metrics Summary:
 - Database: 112 MB, integrity OK
-- Feeds: 55 total, 3 stale > 7 days
+- Feeds: <total> total, 3 stale > 7 days
 - Articles: 1200 parsed, 85 empty, 42 downloaded
 - Failures: 12 download-failed (8.5%), 5 parse-failed (3.2%)
 
@@ -213,7 +232,7 @@ Overall Status: CRITICAL
 
 Metrics Summary:
 - Database: 520 MB, integrity OK
-- Feeds: 55 total, 8 stale > 14 days
+- Feeds: <total> total, 8 stale > 14 days
 - Articles: 1200 parsed, 250 empty, 180 downloaded
 - Failures: 45 download-failed (28%), 22 parse-failed (15%)
 
@@ -297,6 +316,7 @@ Include fact-check health in each monitoring cycle:
 6. **Be concise** -- report findings clearly without unnecessary verbosity
 7. **Email only when needed** -- send email for WARNING/CRITICAL status or when explicitly requested
 8. **Fact-check visibility required** -- every monitoring report must include fact-check backlog and 24h completion metrics
+9. **Deterministic status selection** -- apply the Overall Status Rule exactly as defined above
 
 ## Response Style
 

@@ -9,6 +9,7 @@ import fcntl
 import json
 import logging
 import os
+import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -28,15 +29,23 @@ _TERMINAL_PLAN_STATUSES = {"completed", "failed"}
 _ACTIVE_PLAN_STATUSES = {"pending", "executing"}
 
 
+_FAMILY_DEPENDENCIES = {
+    "download": "fetch",
+    "parse": "download",
+}
+
+
 def _task_family(task: str) -> str:
     """Classify task text into a normalized family key."""
     t = (task or "").strip().lower()
     if "fetch" in t and "feed" in t:
         return "fetch"
-    if "download" in t and "article" in t:
-        return "download"
+    # Parse must be checked before download because parse tasks often include
+    # phrases like "downloaded articles".
     if "parse" in t and "article" in t:
         return "parse"
+    if "download" in t and "article" in t:
+        return "download"
     if "retry" in t and "article" in t:
         return "retry"
     if "fact-check" in t or "fact check" in t:
@@ -81,6 +90,56 @@ def _find_active_duplicate_plan(
 
     candidates.sort(key=lambda p: p.get("created_at", ""))
     return candidates[0]
+
+
+def _find_active_plan_by_family(family: str) -> dict | None:
+    """Find the oldest active plan by family, regardless of parent.
+
+    Used to infer pipeline dependencies when callers omit parent_id.
+    """
+    plans_dir = _ensure_plans_dir()
+    candidates = []
+
+    for plan_file in plans_dir.glob("*.json"):
+        try:
+            plan = json.loads(plan_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        if plan.get("status") not in _ACTIVE_PLAN_STATUSES:
+            continue
+
+        if _task_family(plan.get("task", "")) != family:
+            continue
+
+        candidates.append(plan)
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda p: p.get("created_at", ""))
+    return candidates[0]
+
+
+def _infer_parent_plan_id(task: str, parent_id: str | None) -> str | None:
+    """Infer missing parent_id for pipeline plans.
+
+    Enforces canonical pipeline ordering when a caller omits parent_id:
+    fetch -> download -> parse.
+    """
+    if parent_id:
+        return parent_id
+
+    family = _task_family(task)
+    required_parent_family = _FAMILY_DEPENDENCIES.get(family)
+    if not required_parent_family:
+        return None
+
+    upstream = _find_active_plan_by_family(required_parent_family)
+    if not upstream:
+        return None
+
+    return upstream.get("id")
 
 
 def _derive_plan_status_from_steps(plan: dict) -> str | None:
@@ -220,19 +279,50 @@ def _read_plan(plan_id: str) -> dict:
 
 
 def _write_plan(plan: dict) -> None:
-    """Write a plan to disk.
+    """Write a plan to disk atomically.
+
+    Uses write-to-temp-then-rename so a crash mid-write cannot
+    corrupt the plan JSON file.
 
     Args:
         plan: The plan dict to write.
     """
     path = _plan_path(plan["id"])
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(plan, f, indent=2, default=str)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(plan, f, indent=2, default=str)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        # Clean up temp file on any failure
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def _now() -> str:
     """Return current UTC time as ISO 8601 string."""
     return datetime.now(timezone.utc).isoformat()
+
+
+def _no_eligible_plans_response() -> str:
+    """Return the canonical JSON response for no eligible plans."""
+    return _safe_json(
+        {
+            "result": {
+                "status": "no_eligible_plans",
+                "message": (
+                    "No eligible pending plans found. "
+                    "You must exit immediately."
+                ),
+            },
+            "error": "",
+        }
+    )
 
 
 def create_plan(
@@ -306,7 +396,13 @@ def create_plan(
                     }
                 )
 
-        duplicate = _find_active_duplicate_plan(task, parent_id or None)
+        resolved_parent_id = _infer_parent_plan_id(task, parent_id or None)
+
+        duplicate = _find_active_duplicate_plan(task, resolved_parent_id)
+        # Backward-compatible dedupe: also reuse same-family active plans
+        # that were created before dependency inference (parent_id None).
+        if not duplicate and resolved_parent_id is not None:
+            duplicate = _find_active_duplicate_plan(task, None)
         if duplicate:
             return _safe_json(
                 {
@@ -335,7 +431,7 @@ def create_plan(
             "id": plan_id,
             "task": task,
             "status": "pending",
-            "parent_id": parent_id or None,
+            "parent_id": resolved_parent_id,
             "success_conditions": success_conditions,
             "created_at": timestamp,
             "updated_at": timestamp,
@@ -427,61 +523,72 @@ def update_plan(
         # Prevent mutating terminal plans except idempotent no-op updates.
         plan_is_terminal = plan.get("status") in _TERMINAL_PLAN_STATUSES
 
-        # Find and update the step
+        # Find and update the step. Support both canonical step IDs
+        # ("step-1") and exact description matches (e.g. "verification-step")
+        # for compatibility with agent outputs.
         step_found = False
         changed = False
+        target_step = None
         for step in plan["steps"]:
             if step["id"] == step_id:
-                current_status = step.get("status", "pending")
-                next_status = status.lower()
-
-                prev_result = step.get("result")
-                result_changed = bool(result) and result != prev_result
-
-                if plan_is_terminal and (
-                    next_status != current_status or result_changed
-                ):
-                    return _safe_json(
-                        {
-                            "result": "",
-                            "error": (
-                                "Plan is already terminal and cannot be "
-                                "mutated"
-                            ),
-                        }
-                    )
-
-                # Allowed transitions protect against step regressions.
-                allowed = {
-                    "pending": {
-                        "pending",
-                        "in_progress",
-                        "completed",
-                        "failed",
-                    },
-                    "in_progress": {"in_progress", "completed", "failed"},
-                    "completed": {"completed"},
-                    "failed": {"failed"},
-                }
-                if next_status not in allowed.get(current_status, set()):
-                    return _safe_json(
-                        {
-                            "result": "",
-                            "error": (
-                                "Invalid step status transition "
-                                f"{current_status} -> {next_status}"
-                            ),
-                        }
-                    )
-
-                step["status"] = next_status
-                if result:
-                    step["result"] = result
-                if next_status != current_status or result_changed:
-                    step["updated_at"] = timestamp
-                    changed = True
-                step_found = True
+                target_step = step
                 break
+
+        if target_step is None:
+            for step in plan["steps"]:
+                if step.get("description") == step_id:
+                    target_step = step
+                    break
+
+        if target_step is not None:
+            current_status = target_step.get("status", "pending")
+            next_status = status.lower()
+
+            prev_result = target_step.get("result")
+            result_changed = bool(result) and result != prev_result
+
+            if plan_is_terminal and (
+                next_status != current_status or result_changed
+            ):
+                return _safe_json(
+                    {
+                        "result": "",
+                        "error": (
+                            "Plan is already terminal and cannot be " "mutated"
+                        ),
+                    }
+                )
+
+            # Allowed transitions protect against step regressions.
+            allowed = {
+                "pending": {
+                    "pending",
+                    "in_progress",
+                    "completed",
+                    "failed",
+                },
+                "in_progress": {"in_progress", "completed", "failed"},
+                "completed": {"completed"},
+                "failed": {"failed"},
+            }
+            if next_status not in allowed.get(current_status, set()):
+                return _safe_json(
+                    {
+                        "result": "",
+                        "error": (
+                            "Invalid step status transition "
+                            f"{current_status} -> {next_status}"
+                        ),
+                    }
+                )
+
+            target_step["status"] = next_status
+            if result:
+                target_step["result"] = result
+            if next_status != current_status or result_changed:
+                target_step["updated_at"] = timestamp
+                changed = True
+            step_found = True
 
         if not step_found:
             return _safe_json(
@@ -831,7 +938,8 @@ def claim_plan(reason: str) -> str:
     ## Returns
     JSON with:
     - ``result``: The claimed plan object (status set to ``executing``),
-      or empty string if no eligible plans exist
+      or ``{"status": "no_eligible_plans", "message": "..."}`` when
+      nothing can be claimed
     - ``error``: Empty on success
     """
     lock_fd = None
@@ -865,7 +973,7 @@ def claim_plan(reason: str) -> str:
                 pending_plans.append(plan)
 
         if not pending_plans:
-            return _safe_json({"result": "", "error": ""})
+            return _no_eligible_plans_response()
 
         pending_plans.sort(key=lambda p: p.get("created_at", ""))
 
@@ -883,7 +991,7 @@ def claim_plan(reason: str) -> str:
             _write_plan(plan)
             return _safe_json({"result": _serialize_plan(plan), "error": ""})
 
-        return _safe_json({"result": "", "error": ""})
+        return _no_eligible_plans_response()
     except Exception as exc:
         return _safe_json({"result": "", "error": str(exc)})
     finally:
@@ -913,6 +1021,11 @@ def list_plans(reason: str, status: str = "") -> str:
     """
     try:
         plans_dir = _ensure_plans_dir()
+        status_set: set[str] = set()
+        if status:
+            status_set = {
+                s.strip().lower() for s in status.split(",") if s.strip()
+            }
         plans = []
 
         for plan_file in plans_dir.glob("*.json"):
@@ -921,7 +1034,7 @@ def list_plans(reason: str, status: str = "") -> str:
             except (json.JSONDecodeError, OSError):
                 continue
 
-            if status and plan.get("status") != status.lower():
+            if status_set and plan.get("status") not in status_set:
                 continue
 
             plans.append(
