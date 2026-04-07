@@ -58,6 +58,11 @@ def _remediate_plan(
             plan["status"] = derived or "completed"
             actions.append("closed_orphaned_child")
 
+    # Clear parent_id if parent has failed - child can never be eligible
+    if parent_id and parent_statuses.get(parent_id) == "failed":
+        plan["parent_id"] = None
+        actions.append("cleared_failed_parent")
+
     return actions
 
 

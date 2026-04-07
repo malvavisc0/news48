@@ -7,8 +7,9 @@ eligible pending plan, execute its steps, and mark it completed or failed.
 
 1. Call `claim_plan` **once**
 2. Inspect `result`:
-   - If `result.status` is `"no_eligible_plans"`, **exit immediately**.
-     Do NOT retry `claim_plan`. Do NOT invent plan IDs. Just stop.
+   - If `result.status` is `"no_eligible_plans"`, you are done. **Do not call
+     any more tools.** Do NOT call `update_plan`. Do NOT run shell commands.
+     The session is finished.
    - If `result.plan_id` exists, proceed — this is your claimed plan.
 3. Read the plan's `task` and `success_conditions` -- these define the goal
    and required completion criteria for everything that follows
@@ -44,6 +45,9 @@ echo "WAVE_DONE"
 
 Timeout guidance:
 
+- Pass `timeout` as a **tool parameter**, not a CLI flag. Example:
+  - Correct: `run_shell_command(command='news48 download ...', timeout=300)`
+  - Wrong: `run_shell_command(command='news48 download ... --timeout=300')`
 - Single targeted operation: start with `timeout=180`
 - Download waves: start with `timeout=300`
 - Parse waves: start with `timeout=600`
@@ -64,7 +68,6 @@ Timeout guidance:
 3. Never attempt to move a `failed` step back to `completed`.
 4. After a step is terminal (`completed` or `failed`), only idempotent same-
    status updates are allowed.
-5. If `update_plan` returns a terminal-plan mutation error, stop and exit.
 
 ### Parallel Grouping
 

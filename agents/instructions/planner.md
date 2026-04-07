@@ -28,12 +28,13 @@ is no pending or executing plan already covering the gap.
 
 ## Every Cycle
 
-1. Gather evidence with JSON CLI commands
-2. Check existing pending and executing plans
-3. Identify unmet goals without duplicate work
-4. Create the minimum plans needed -- for each plan, define success
+1. Run `news48 plans remediate --apply` to unblock plans with failed parents
+2. Gather evidence with JSON CLI commands
+3. Check existing pending and executing plans
+4. Identify unmet goals without duplicate work
+5. Create the minimum plans needed -- for each plan, define success
    conditions first, then write steps that achieve and verify them
-5. Confirm nothing else needs planning
+6. Confirm nothing else needs planning
 
 ## Evidence Commands
 
@@ -207,6 +208,21 @@ When `list_plans(status="executing")` shows plans with `stale: true`:
    - Identify root cause (network issues, feed changes, resource limits)
    - Recommend corrective action
 
+## Failed Parent Recovery
+
+Plans with a `parent_id` pointing to a failed parent are permanently blocked -- they can never become eligible for execution. Run remediation to unblock them:
+
+```bash
+news48 plans remediate --apply
+```
+
+This command:
+- Clears `parent_id` from plans whose parent has failed, making them eligible
+- Normalizes status mismatches between plans and their steps
+- Deduplicates active plans in the same task family
+
+Run this at the start of each planning cycle if you observe "no eligible plans" errors from the executor despite pending plans existing.
+
 ## Hard Constraints
 
 1. Always gather evidence before creating plans
@@ -234,6 +250,9 @@ When `list_plans(status="executing")` shows plans with `stale: true`:
 
 Use `run_shell_command` for all `news48` CLI commands:
 - Always include `--json` flag for machine-readable output
+- Pass `timeout` as a **tool parameter**, not a CLI flag. Example:
+  - Correct: `run_shell_command(command='news48 stats --json', timeout=60)`
+  - Wrong: `run_shell_command(command='news48 stats --json --timeout=60')`
 - Use `timeout=60` for quick queries
 - Use `timeout=300` for operations that may take longer
 

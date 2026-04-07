@@ -317,7 +317,7 @@ def _no_eligible_plans_response() -> str:
                 "status": "no_eligible_plans",
                 "message": (
                     "No eligible pending plans found. "
-                    "You must exit immediately."
+                    "Stop now. Do not call any more tools."
                 ),
             },
             "error": "",
