@@ -41,9 +41,7 @@ def send_email(
         recipient = to or getenv("MONITOR_EMAIL_TO", "")
 
         if not smtp_host:
-            return _safe_json(
-                {"result": "", "error": "SMTP_HOST not configured"}
-            )
+            return _safe_json({"result": "", "error": "SMTP_HOST not configured"})
         if not smtp_user or not smtp_pass:
             return _safe_json(
                 {
@@ -56,8 +54,7 @@ def send_email(
                 {
                     "result": "",
                     "error": (
-                        "No recipient: set 'to' param or "
-                        "MONITOR_EMAIL_TO env var"
+                        "No recipient: set 'to' param or " "MONITOR_EMAIL_TO env var"
                     ),
                 }
             )

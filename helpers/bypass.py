@@ -7,9 +7,7 @@ import httpx
 from models import ByparrSolution
 
 
-async def get_byparr_solution(
-    target_url: str, bypass_api_url: str
-) -> ByparrSolution:
+async def get_byparr_solution(target_url: str, bypass_api_url: str) -> ByparrSolution:
     """Fetch a bypass solution using byparr
 
     Sends a POST request to the bypass API to get cookies and headers
@@ -55,9 +53,7 @@ async def get_byparr_solution(
             value = cookie.get("value", "")
             # Sanitize both name and value
             if name and value:
-                sanitized_name = (
-                    str(name).replace("\n", " ").replace("\r", "").strip()
-                )
+                sanitized_name = str(name).replace("\n", " ").replace("\r", "").strip()
                 sanitized_value = (
                     str(value).replace("\n", " ").replace("\r", "").strip()
                 )
@@ -120,8 +116,7 @@ async def fetch_url_content(url: str, solution: ByparrSolution) -> str:
     # Add standard browser headers if not already present
     headers.setdefault(
         "Accept",
-        "text/html,application/xhtml+xml,application/xml;q=0.9,"
-        "image/webp,*/*;q=0.8",
+        "text/html,application/xhtml+xml,application/xml;q=0.9," "image/webp,*/*;q=0.8",
     )
     headers.setdefault("Accept-Language", "en-US,en;q=0.9")
     headers.setdefault("Accept-Encoding", "gzip, deflate")
@@ -130,12 +125,8 @@ async def fetch_url_content(url: str, solution: ByparrSolution) -> str:
     headers.setdefault("Upgrade-Insecure-Requests", "1")
     headers.setdefault("Cache-Control", "no-cache")
 
-    async with httpx.AsyncClient(
-        timeout=timeout, follow_redirects=True
-    ) as client:
-        response = await client.get(
-            url=url, cookies=solution.cookies, headers=headers
-        )
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        response = await client.get(url=url, cookies=solution.cookies, headers=headers)
         response.raise_for_status()
         return _strip_html_noise(html_content=response.content.decode())
 
@@ -202,9 +193,7 @@ def _strip_html_noise(html_content: str) -> str:
         except (ValueError, OverflowError):
             return m.group(0)
 
-    html_content = _sub(
-        r"&#x([0-9a-fA-F]+);", _hex_entity_replace, html_content
-    )
+    html_content = _sub(r"&#x([0-9a-fA-F]+);", _hex_entity_replace, html_content)
     html_content = _sub(r"&#(\d+);", _decimal_entity_replace, html_content)
 
     # 4. Remove &nbsp; entirely (not replace with space) to save tokens.
@@ -218,9 +207,7 @@ def _strip_html_noise(html_content: str) -> str:
     # --- Phase 1: Remove entire tag blocks with content ---
 
     # Strip <head> but preserve <title> content
-    title_match = re.search(
-        r"<title[^>]*>(.*?)</title>", html_content, flags=ID
-    )
+    title_match = re.search(r"<title[^>]*>(.*?)</title>", html_content, flags=ID)
     title_text = title_match.group(1).strip() if title_match else ""
     html_content = _sub(r"<head[^>]*>.*?</head>", "", html_content, flags=ID)
     if title_text:
@@ -341,9 +328,7 @@ def _strip_html_noise(html_content: str) -> str:
     html_content = _sub(r"\n\s*\n(\s*\n)+", "\n\n", html_content)
 
     # Strip leading/trailing whitespace on each line
-    html_content = "\n".join(
-        line.strip() for line in html_content.splitlines()
-    )
+    html_content = "\n".join(line.strip() for line in html_content.splitlines())
 
     # Final collapse of any remaining multiple blank lines
     html_content = _sub(r"\n{3,}", "\n\n", html_content)

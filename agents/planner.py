@@ -6,11 +6,16 @@ from llama_index.core.agent.workflow import FunctionAgent
 from llama_index.llms.openai_like import OpenAILike
 
 from agents._run import run_agent
-from agents.instructions import load_agent_instructions
+from agents.skills import compose_agent_instructions
 
 
-def get_agent() -> FunctionAgent:
-    """Create and return the Planner Agent."""
+def get_agent(task_context: dict | None = None) -> FunctionAgent:
+    """Create and return the Planner Agent.
+
+    Args:
+        task_context: Dict with keys for conditional skill loading.
+            If None, uses empty context (all core skills loaded).
+    """
     api_base = getenv("API_BASE", "")
     api_key = getenv("API_KEY", "")
     model = getenv("MODEL", "")
@@ -25,6 +30,8 @@ def get_agent() -> FunctionAgent:
         run_shell_command,
         update_plan,
     )
+
+    ctx = task_context or {}
 
     return FunctionAgent(
         name="Planner",
@@ -48,12 +55,12 @@ def get_agent() -> FunctionAgent:
             update_plan,
             list_plans,
         ],
-        system_prompt=load_agent_instructions("planner"),
+        system_prompt=compose_agent_instructions("planner", ctx),
         verbose=False,
         streaming=True,
     )
 
 
-async def run(task: str):
+async def run(task: str, task_context: dict | None = None):
     """Run the Planner Agent with a task prompt."""
-    return await run_agent(get_agent, task)
+    return await run_agent(lambda: get_agent(task_context), task)

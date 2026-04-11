@@ -18,16 +18,12 @@ class FeedEntry(BaseModel):
     """A single entry from an RSS/Atom feed."""
 
     url: str = Field(description="URL of the feed entry")
-    title: str | None = Field(
-        default=None, description="Title of the feed entry"
-    )
+    title: str | None = Field(default=None, description="Title of the feed entry")
     summary: str | None = Field(
         default=None, description="Summary/description of the entry"
     )
     author: str | None = Field(default=None, description="Author of the entry")
-    published_at: str | None = Field(
-        default=None, description="Publication date"
-    )
+    published_at: str | None = Field(default=None, description="Publication date")
     image_url: str | None = Field(
         default=None,
         description="Primary image URL from feed enclosure/media",
@@ -50,12 +46,8 @@ class FeedResult(BaseModel):
     entries: list[FeedEntry] = Field(
         default_factory=list, description="List of feed entries"
     )
-    success: bool = Field(
-        default=False, description="Whether the fetch was successful"
-    )
-    error: str | None = Field(
-        default=None, description="Error message if fetch failed"
-    )
+    success: bool = Field(default=False, description="Whether the fetch was successful")
+    error: str | None = Field(default=None, description="Error message if fetch failed")
 
     @field_validator("url")
     @classmethod
@@ -73,21 +65,13 @@ class Feed(BaseModel):
     id: int | None = Field(default=None, description="Database ID of the feed")
     url: str = Field(description="URL of the feed")
     title: str | None = Field(default=None, description="Title of the feed")
-    description: str | None = Field(
-        default=None, description="Description of the feed"
-    )
-    icon_url: str | None = Field(
-        default=None, description="URL of the feed icon/logo"
-    )
-    favicon_url: str | None = Field(
-        default=None, description="URL of the feed favicon"
-    )
+    description: str | None = Field(default=None, description="Description of the feed")
+    icon_url: str | None = Field(default=None, description="URL of the feed icon/logo")
+    favicon_url: str | None = Field(default=None, description="URL of the feed favicon")
     language: str | None = Field(
         default="en", description="ISO 639-1 language code of the feed"
     )
-    category: str | None = Field(
-        default=None, description="Category/topic of the feed"
-    )
+    category: str | None = Field(default=None, description="Category/topic of the feed")
     last_fetched_at: datetime | None = Field(
         default=None, description="Last time the feed was fetched"
     )
@@ -111,20 +95,14 @@ class Fetch(BaseModel):
 
     model_config = {"str_strip_whitespace": True}
 
-    id: int | None = Field(
-        default=None, description="Database ID of the fetch"
-    )
+    id: int | None = Field(default=None, description="Database ID of the fetch")
     started_at: datetime = Field(description="When the fetch started")
     completed_at: datetime | None = Field(
         default=None, description="When the fetch completed"
     )
     status: str = Field(default="running", description="Status of the fetch")
-    feeds_fetched: int = Field(
-        default=0, ge=0, description="Number of feeds fetched"
-    )
-    articles_found: int = Field(
-        default=0, ge=0, description="Number of articles found"
-    )
+    feeds_fetched: int = Field(default=0, ge=0, description="Number of feeds fetched")
+    articles_found: int = Field(default=0, ge=0, description="Number of articles found")
 
     @field_validator("status")
     @classmethod
@@ -139,24 +117,14 @@ class Article(BaseModel):
 
     model_config = {"str_strip_whitespace": True}
 
-    id: int | None = Field(
-        default=None, description="Database ID of the article"
-    )
-    fetch_id: int = Field(
-        description="ID of the fetch this article belongs to"
-    )
+    id: int | None = Field(default=None, description="Database ID of the article")
+    fetch_id: int = Field(description="ID of the fetch this article belongs to")
     feed_id: int = Field(description="ID of the feed this article belongs to")
     url: str = Field(description="URL of the article")
     title: str | None = Field(default=None, description="Title of the article")
-    summary: str | None = Field(
-        default=None, description="Summary of the article"
-    )
-    content: str | None = Field(
-        default=None, description="Full content of the article"
-    )
-    author: str | None = Field(
-        default=None, description="Author of the article"
-    )
+    summary: str | None = Field(default=None, description="Summary of the article")
+    content: str | None = Field(default=None, description="Full content of the article")
+    author: str | None = Field(default=None, description="Author of the article")
     published_at: datetime | None = Field(
         default=None, description="Publication date of the article"
     )

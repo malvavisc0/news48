@@ -48,8 +48,7 @@ def _resolve_status(status: str, as_json: bool = False) -> str:
     }
     if status not in valid:
         emit_error(
-            f"Invalid status '{status}'. "
-            f"Valid: {', '.join(sorted(valid))}",
+            f"Invalid status '{status}'. " f"Valid: {', '.join(sorted(valid))}",
             as_json=as_json,
         )
     return status
@@ -203,9 +202,7 @@ def article_info(
         "title": article["title"],
         "url": article["url"],
         "feed_url": feed_url,
-        "content_length": (
-            len(article["content"]) if article.get("content") else 0
-        ),
+        "content_length": (len(article["content"]) if article.get("content") else 0),
         "status": status,
         "published_at": article.get("published_at"),
         "parsed_at": article.get("parsed_at"),
@@ -269,9 +266,7 @@ def article_info(
 @articles_app.command(name="delete")
 def delete_article_cmd(
     identifier: str = typer.Argument(..., help="Article ID or URL to delete"),
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Skip confirmation prompt"
-    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Delete an article by ID or URL."""
@@ -299,9 +294,7 @@ def delete_article_cmd(
     # Ask for confirmation when not forced (human mode)
     if not force and not output_json:
         title = article["title"] or "Untitled"
-        confirm = typer.confirm(
-            f"Delete article '{title}' (ID: {article_id})?"
-        )
+        confirm = typer.confirm(f"Delete article '{title}' (ID: {article_id})?")
         if not confirm:
             print("Deletion cancelled")
             return
@@ -332,9 +325,7 @@ def reset_article_cmd(
     download: bool = typer.Option(
         False, "--download", help="Reset download failure flag"
     ),
-    parse: bool = typer.Option(
-        False, "--parse", help="Reset parse failure flag"
-    ),
+    parse: bool = typer.Option(False, "--parse", help="Reset parse failure flag"),
     all_flags: bool = typer.Option(
         False, "--all", help="Reset both download and parse failure flags"
     ),
@@ -572,9 +563,7 @@ def check_article(
 @articles_app.command(name="feature")
 def feature_article(
     identifier: str = typer.Argument(..., help="Article ID or URL"),
-    remove: bool = typer.Option(
-        False, "--remove", help="Remove featured status"
-    ),
+    remove: bool = typer.Option(False, "--remove", help="Remove featured status"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Mark an article as featured."""
@@ -614,9 +603,7 @@ def feature_article(
 @articles_app.command(name="breaking")
 def breaking_article(
     identifier: str = typer.Argument(..., help="Article ID or URL"),
-    remove: bool = typer.Option(
-        False, "--remove", help="Remove breaking status"
-    ),
+    remove: bool = typer.Option(False, "--remove", help="Remove breaking status"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Mark an article as breaking news."""
@@ -672,12 +659,8 @@ def update_article_cmd(
         None, "--sentiment", help="positive|negative|neutral"
     ),
     image_url: str = typer.Option(None, "--image-url", help="Image URL"),
-    language: str = typer.Option(
-        None, "--language", help="ISO 639-1 language code"
-    ),
-    published_at: str = typer.Option(
-        None, "--published-at", help="Publication date"
-    ),
+    language: str = typer.Option(None, "--language", help="ISO 639-1 language code"),
+    published_at: str = typer.Option(None, "--published-at", help="Publication date"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Update article with parsed content and metadata.

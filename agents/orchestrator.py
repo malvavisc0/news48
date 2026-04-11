@@ -72,32 +72,23 @@ class Orchestrator:
             for name, sched_data in data.get("schedules", {}).items():
                 if name in self.schedules:
                     self.schedules[name].last_run = sched_data.get("last_run")
-                    self.schedules[name].last_result = sched_data.get(
-                        "last_result"
-                    )
-                    self.schedules[name].last_error = sched_data.get(
-                        "last_error"
-                    )
+                    self.schedules[name].last_result = sched_data.get("last_result")
+                    self.schedules[name].last_error = sched_data.get("last_error")
 
             # Restore running agent records (processes are gone after restart,
             # but we mark them as failed-unknown so we know they didn't finish)
             for name, run_data in data.get("running", {}).items():
                 # Support both legacy (dict) and current (list) formats
-                entries = (
-                    run_data if isinstance(run_data, list) else [run_data]
-                )
+                entries = run_data if isinstance(run_data, list) else [run_data]
                 for entry in entries:
                     pid = entry.get("pid", 0)
                     if not _is_process_alive(pid):
                         # Process is gone -- mark as completed with unknown
                         if name in self.schedules:
-                            self.schedules[name].last_run = entry.get(
-                                "started_at"
-                            )
+                            self.schedules[name].last_run = entry.get("started_at")
                             self.schedules[name].last_result = "unknown"
                             self.schedules[name].last_error = (
-                                "Process disappeared "
-                                "(orchestrator restarted?)"
+                                "Process disappeared " "(orchestrator restarted?)"
                             )
                     else:
                         # Process is still running from a previous session
@@ -116,14 +107,10 @@ class Orchestrator:
             from agents.tools.planner import recover_stale_plans
 
             payload = json.loads(
-                recover_stale_plans(
-                    "Orchestrator startup recovery after restart"
-                )
+                recover_stale_plans("Orchestrator startup recovery after restart")
             )
             if payload.get("error"):
-                logger.warning(
-                    "Plan recovery pass failed: %s", payload["error"]
-                )
+                logger.warning("Plan recovery pass failed: %s", payload["error"])
             else:
                 result = payload.get("result", {})
                 logger.info(
@@ -210,12 +197,29 @@ class Orchestrator:
                 "error": f"Unknown agent: {name}",
             }
 
+        # Build task_context for skills composition
+        task_context: dict = {}
+        if name == "executor":
+            # Peek at next plan family to load conditional executor skills
+            try:
+                from agents.tools.planner import peek_next_plan
+
+                family = peek_next_plan()
+                if family:
+                    task_context["plan_family"] = family
+            except Exception as exc:
+                logger.warning("Failed to peek next plan family: %s", exc)
+
         import importlib
 
         module = importlib.import_module(_AGENT_MODULES[name])
 
         try:
-            result = await module.run(task)
+            # Only pass task_context if non-empty for backward compatibility
+            if task_context:
+                result = await module.run(task, task_context)
+            else:
+                result = await module.run(task)
             self._update_schedule(name, "success")
             self.save_state()
             return {"agent": name, "result": result, "error": None}
@@ -272,8 +276,7 @@ class Orchestrator:
         if len(instances) >= max_concurrent:
             pids = ", ".join(str(r.pid) for r in instances)
             logger.warning(
-                f"Agent {name} at max concurrency "
-                f"({max_concurrent}): PIDs {pids}"
+                f"Agent {name} at max concurrency " f"({max_concurrent}): PIDs {pids}"
             )
             return False
 
@@ -283,9 +286,7 @@ class Orchestrator:
         # Add instance index to log filename for concurrent agents
         instance_idx = len(instances)
         if max_concurrent > 1:
-            log_file = str(
-                _LOGS_DIR / f"{name}-{timestamp}-{instance_idx}.log"
-            )
+            log_file = str(_LOGS_DIR / f"{name}-{timestamp}-{instance_idx}.log")
         else:
             log_file = str(_LOGS_DIR / f"{name}-{timestamp}.log")
 
@@ -425,9 +426,7 @@ class Orchestrator:
         self.save_state()
 
         # Count total running instances
-        total_running = sum(
-            len(instances) for instances in self.running.values()
-        )
+        total_running = sum(len(instances) for instances in self.running.values())
 
         return {
             "completed": completed,
@@ -451,8 +450,7 @@ class Orchestrator:
 
                 if n_c or n_f:
                     logger.info(
-                        f"Tick: {n_f} forked, {n_c} completed, "
-                        f"{n_r} running"
+                        f"Tick: {n_f} forked, {n_c} completed, " f"{n_r} running"
                     )
                     for comp_key, info in result["completed"].items():
                         logger.info(
@@ -464,8 +462,7 @@ class Orchestrator:
                         instances = self.running.get(name, [])
                         if instances:
                             logger.info(
-                                f"  {name}: forked → "
-                                f"PID {instances[-1].pid}"
+                                f"  {name}: forked → " f"PID {instances[-1].pid}"
                             )
 
                 time.sleep(tick_seconds)
@@ -524,9 +521,7 @@ class Orchestrator:
                     "pid": running.pid,
                     "started_at": running.started_at,
                     "log_file": running.log_file,
-                    "signal": (
-                        "SIGKILL" if running.pid in force_killed else "SIGTERM"
-                    ),
+                    "signal": ("SIGKILL" if running.pid in force_killed else "SIGTERM"),
                     "released_plan_count": released["count"],
                     "released_plan_ids": released["released"],
                 }

@@ -38,8 +38,7 @@ def extract_og_image(html: str) -> str | None:
 
     # og:image
     match = re.search(
-        r'<meta\s+[^>]*property=["\']og:image["\'][^>]*'
-        r'content=["\']([^"\']+)["\']',
+        r'<meta\s+[^>]*property=["\']og:image["\'][^>]*' r'content=["\']([^"\']+)["\']',
         html,
         re.IGNORECASE,
     )
@@ -48,8 +47,7 @@ def extract_og_image(html: str) -> str | None:
 
     # og:image with content before property
     match = re.search(
-        r'<meta\s+[^>]*content=["\']([^"\']+)["\'][^>]*'
-        r'property=["\']og:image["\']',
+        r'<meta\s+[^>]*content=["\']([^"\']+)["\'][^>]*' r'property=["\']og:image["\']',
         html,
         re.IGNORECASE,
     )
@@ -78,8 +76,7 @@ def extract_og_image(html: str) -> str | None:
 
     # link rel="image_src"
     match = re.search(
-        r'<link\s+[^>]*rel=["\']image_src["\'][^>]*'
-        r'href=["\']([^"\']+)["\']',
+        r'<link\s+[^>]*rel=["\']image_src["\'][^>]*' r'href=["\']([^"\']+)["\']',
         html,
         re.IGNORECASE,
     )

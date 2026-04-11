@@ -228,12 +228,8 @@ def _process_feed(feed: feedparser.FeedParserDict, url: str) -> FeedResult:
             enclosures = entry.get("enclosures")
             if enclosures and isinstance(enclosures, list):
                 for enc in enclosures:
-                    enc_type = (
-                        enc.get("type", "") if isinstance(enc, dict) else ""
-                    )
-                    if isinstance(enc_type, str) and enc_type.startswith(
-                        "image/"
-                    ):
+                    enc_type = enc.get("type", "") if isinstance(enc, dict) else ""
+                    if isinstance(enc_type, str) and enc_type.startswith("image/"):
                         image_url = enc.get(
                             "href"
                         ) or enc.get(  # type: ignore[union-attr]

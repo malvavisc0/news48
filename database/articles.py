@@ -535,8 +535,7 @@ def get_articles_paginated(
     status_conditions = {
         "empty": "a.content IS NULL AND a.download_failed = 0",
         "downloaded": (
-            "a.content IS NOT NULL AND a.parsed_at IS NULL "
-            "AND a.parse_failed = 0"
+            "a.content IS NOT NULL AND a.parsed_at IS NULL " "AND a.parse_failed = 0"
         ),
         "parsed": "a.parsed_at IS NOT NULL",
         "download-failed": "a.download_failed = 1",
@@ -632,9 +631,7 @@ def get_article_by_id(db_path: Path, article_id: int) -> dict | None:
         A dict with article data, or None if not found.
     """
     with get_connection(db_path) as db:
-        cursor = db.execute(
-            "SELECT * FROM articles WHERE id = ?", (article_id,)
-        )
+        cursor = db.execute("SELECT * FROM articles WHERE id = ?", (article_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
 
@@ -655,9 +652,7 @@ def get_article_by_url(db_path: Path, url: str) -> dict | None:
         return dict(row) if row else None
 
 
-def mark_article_download_failed(
-    db_path: Path, article_id: int, error: str
-) -> None:
+def mark_article_download_failed(db_path: Path, article_id: int, error: str) -> None:
     """Mark an article as having a failed download.
 
     Args:
@@ -675,9 +670,7 @@ def mark_article_download_failed(
         db.commit()
 
 
-def mark_article_parse_failed(
-    db_path: Path, article_id: int, error: str
-) -> None:
+def mark_article_parse_failed(db_path: Path, article_id: int, error: str) -> None:
     """Mark an article as having a failed parse.
 
     Args:
@@ -775,9 +768,7 @@ def get_article_stats(db_path: Path) -> dict:
                  AND parsed_at IS NULL
                  AND parse_failed = 0""")
         oldest = cursor.fetchone()
-        row["oldest_unparsed_at"] = (
-            oldest["oldest_unparsed_at"] if oldest else None
-        )
+        row["oldest_unparsed_at"] = oldest["oldest_unparsed_at"] if oldest else None
 
         # Articles created today (UTC)
         cursor = db.execute("""SELECT COUNT(*) AS cnt FROM articles
@@ -821,14 +812,12 @@ def get_feed_stats(db_path: Path, stale_days: int = 7) -> dict:
         row = dict(cursor.fetchone())
 
         # Top feeds by article count
-        cursor = db.execute(
-            """SELECT f.title, f.url, COUNT(a.id) AS article_count
+        cursor = db.execute("""SELECT f.title, f.url, COUNT(a.id) AS article_count
                FROM feeds f
                LEFT JOIN articles a ON f.id = a.feed_id
                GROUP BY f.id
                ORDER BY article_count DESC
-               LIMIT 10"""
-        )
+               LIMIT 10""")
         row["top_feeds"] = [dict(r) for r in cursor.fetchall()]
 
         return row
@@ -917,9 +906,7 @@ def search_articles(
         return [dict(row) for row in rows], total
 
 
-def set_article_featured(
-    db_path: Path, article_id: int, featured: bool = True
-) -> None:
+def set_article_featured(db_path: Path, article_id: int, featured: bool = True) -> None:
     """Mark/unmark an article as featured."""
     with get_connection(db_path) as db:
         db.execute(
@@ -929,9 +916,7 @@ def set_article_featured(
         db.commit()
 
 
-def set_article_breaking(
-    db_path: Path, article_id: int, breaking: bool = True
-) -> None:
+def set_article_breaking(db_path: Path, article_id: int, breaking: bool = True) -> None:
     """Mark/unmark an article as breaking news."""
     with get_connection(db_path) as db:
         db.execute(
@@ -1044,9 +1029,7 @@ def get_all_categories(db_path: Path, hours: int = 48) -> list[dict]:
         ]
 
 
-def get_all_tags(
-    db_path: Path, hours: int = 48, limit: int = 50
-) -> list[dict]:
+def get_all_tags(db_path: Path, hours: int = 48, limit: int = 50) -> list[dict]:
     """Get most common tags with article counts within time window.
 
     Returns list of dicts: [{name, slug, article_count}]
@@ -1071,9 +1054,7 @@ def get_all_tags(
                 "slug": name.replace(" ", "-"),
                 "article_count": count,
             }
-            for name, count in sorted(counts.items(), key=lambda x: -x[1])[
-                :limit
-            ]
+            for name, count in sorted(counts.items(), key=lambda x: -x[1])[:limit]
         ]
 
 
@@ -1168,9 +1149,7 @@ def get_related_articles(
         tokens: list[str] = []
         if row["categories"]:
             tokens.extend(
-                t.strip().lower()
-                for t in row["categories"].split(",")
-                if t.strip()
+                t.strip().lower() for t in row["categories"].split(",") if t.strip()
             )
         if row["tags"]:
             tokens.extend(
@@ -1185,8 +1164,7 @@ def get_related_articles(
         params: list = []
         for token in tokens[:10]:  # Limit to avoid huge queries
             conditions.append(
-                "(categories LIKE '%' || ? || '%' "
-                "OR tags LIKE '%' || ? || '%')"
+                "(categories LIKE '%' || ? || '%' " "OR tags LIKE '%' || ? || '%')"
             )
             params.extend([token, token])
 
@@ -1244,9 +1222,7 @@ def get_articles_by_time_bucket(
     for i in range(num_buckets):
         start_hours = i * bucket_hours
         end_hours = (i + 1) * bucket_hours
-        bucket_bounds.append(
-            (_hours_ago_iso(end_hours), _hours_ago_iso(start_hours))
-        )
+        bucket_bounds.append((_hours_ago_iso(end_hours), _hours_ago_iso(start_hours)))
 
     # Build a single query using CASE WHEN for all buckets
     case_parts = []
@@ -1277,9 +1253,7 @@ def get_articles_by_time_bucket(
     return buckets
 
 
-def get_articles_older_than_hours(
-    db_path: Path, hours: int = 48
-) -> list[dict]:
+def get_articles_older_than_hours(db_path: Path, hours: int = 48) -> list[dict]:
     """Get articles older than specified hours.
 
     Args:

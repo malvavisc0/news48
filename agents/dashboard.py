@@ -204,23 +204,20 @@ def _get_article_stats() -> dict:
 
             # Pending processing (claimed but not completed)
             cursor = conn.execute(
-                "SELECT COUNT(*) FROM articles WHERE processing_status = "
-                "'claimed'"
+                "SELECT COUNT(*) FROM articles WHERE processing_status = " "'claimed'"
             )
             pending = cursor.fetchone()[0]
 
             # Last fetch timestamp
             cursor = conn.execute(
-                "SELECT MAX(completed_at) FROM fetches WHERE status = "
-                "'completed'"
+                "SELECT MAX(completed_at) FROM fetches WHERE status = " "'completed'"
             )
             row = cursor.fetchone()
             last_fetch = row[0] if row and row[0] else "Never"
 
             # Articles today
             cursor = conn.execute(
-                "SELECT COUNT(*) FROM articles WHERE created_at >= "
-                "date('now')"
+                "SELECT COUNT(*) FROM articles WHERE created_at >= " "date('now')"
             )
             today = cursor.fetchone()[0]
 
@@ -258,9 +255,7 @@ def _get_article_stats() -> dict:
                 }
                 for plan_file in _PLANS_DIR.glob("*.json"):
                     try:
-                        plan = json.loads(
-                            plan_file.read_text(encoding="utf-8")
-                        )
+                        plan = json.loads(plan_file.read_text(encoding="utf-8"))
                     except (json.JSONDecodeError, OSError):
                         continue
                     status = str(plan.get("status", "")).lower()
@@ -425,9 +420,7 @@ class Dashboard:
         else:
             for key in keys:
                 buffer = self.buffers.get(key)
-                s = self._summarize_lines(
-                    buffer.get_lines()[-80:] if buffer else []
-                )
+                s = self._summarize_lines(buffer.get_lines()[-80:] if buffer else [])
                 instance_id = key.split(":", 1)[1] if ":" in key else "main"
                 lines.append(
                     Text(
@@ -440,18 +433,10 @@ class Dashboard:
 
         lines.append(Text())
         lines.append(Text("recent outcomes", style="bold white"))
-        lines.append(
-            Text(f"  claim/exec events: {agg['executing']}", style="cyan")
-        )
-        lines.append(
-            Text(f"  completed:         {agg['completed']}", style="green")
-        )
-        lines.append(
-            Text(f"  failed:            {agg['failed']}", style="red")
-        )
-        lines.append(
-            Text(f"  timeouts:          {agg['timeouts']}", style="yellow")
-        )
+        lines.append(Text(f"  claim/exec events: {agg['executing']}", style="cyan"))
+        lines.append(Text(f"  completed:         {agg['completed']}", style="green"))
+        lines.append(Text(f"  failed:            {agg['failed']}", style="red"))
+        lines.append(Text(f"  timeouts:          {agg['timeouts']}", style="yellow"))
         lines.append(Text())
         lines.append(Text("last event", style="bold white"))
         lines.append(Text(f"  {agg['last']}", style="dim"))
@@ -478,9 +463,7 @@ class Dashboard:
                 formatted = format_log_line(line)
                 lower = formatted.lower()
                 if "timeout" in lower:
-                    alerts.append(
-                        Text(f"[{name}] {formatted}", style="yellow")
-                    )
+                    alerts.append(Text(f"[{name}] {formatted}", style="yellow"))
                 elif "✖" in formatted or "failed" in lower:
                     alerts.append(Text(f"[{name}] {formatted}", style="red"))
 
@@ -505,15 +488,9 @@ class Dashboard:
 
         # Article stats section
         lines.append(Text("Pipeline snapshot", style="bold white"))
-        lines.append(
-            Text(f"  Total:            {stats['total']}", style="white")
-        )
-        lines.append(
-            Text(f"  Parsed:           {stats['parsed']}", style="green")
-        )
-        lines.append(
-            Text(f"  Unparsed:         {stats['unparsed']}", style="yellow")
-        )
+        lines.append(Text(f"  Total:            {stats['total']}", style="white"))
+        lines.append(Text(f"  Parsed:           {stats['parsed']}", style="green"))
+        lines.append(Text(f"  Unparsed:         {stats['unparsed']}", style="yellow"))
         lines.append(
             Text(f"  Parse backlog:    {stats['parse_backlog']}", style="cyan")
         )
@@ -523,27 +500,17 @@ class Dashboard:
                 style="cyan",
             )
         )
+        lines.append(Text(f"  Parse failed:     {stats['parse_failed']}", style="red"))
         lines.append(
-            Text(f"  Parse failed:     {stats['parse_failed']}", style="red")
-        )
-        lines.append(
-            Text(
-                f"  Download failed:  {stats['download_failed']}", style="red"
-            )
+            Text(f"  Download failed:  {stats['download_failed']}", style="red")
         )
 
         # Freshness section
         lines.append(Text())  # blank line
         lines.append(Text("Freshness", style="bold white"))
-        lines.append(
-            Text(f"  New 1h:           {stats['new_1h']}", style="white")
-        )
-        lines.append(
-            Text(f"  New 6h:           {stats['new_6h']}", style="white")
-        )
-        lines.append(
-            Text(f"  New 24h:          {stats['new_24h']}", style="white")
-        )
+        lines.append(Text(f"  New 1h:           {stats['new_1h']}", style="white"))
+        lines.append(Text(f"  New 6h:           {stats['new_6h']}", style="white"))
+        lines.append(Text(f"  New 24h:          {stats['new_24h']}", style="white"))
         lines.append(
             Text(
                 f"  Oldest unparsed:  {stats['oldest_unparsed_age']}",
@@ -554,28 +521,16 @@ class Dashboard:
         # Plans section
         lines.append(Text())  # blank line
         lines.append(Text("Plans", style="bold white"))
-        lines.append(
-            Text(f"  Total:     {stats['plans_total']}", style="white")
-        )
-        lines.append(
-            Text(f"  Running:   {stats['plans_executing']}", style="green")
-        )
-        lines.append(
-            Text(f"  Pending:   {stats['plans_pending']}", style="yellow")
-        )
-        lines.append(
-            Text(f"  Completed: {stats['plans_completed']}", style="cyan")
-        )
-        lines.append(
-            Text(f"  Failed:    {stats['plans_failed']}", style="red")
-        )
+        lines.append(Text(f"  Total:     {stats['plans_total']}", style="white"))
+        lines.append(Text(f"  Running:   {stats['plans_executing']}", style="green"))
+        lines.append(Text(f"  Pending:   {stats['plans_pending']}", style="yellow"))
+        lines.append(Text(f"  Completed: {stats['plans_completed']}", style="cyan"))
+        lines.append(Text(f"  Failed:    {stats['plans_failed']}", style="red"))
 
         # Feed + fetch section
         lines.append(Text())  # blank line
         lines.append(Text("Feed/Fetch", style="bold white"))
-        lines.append(
-            Text(f"  Active feeds:     {stats['feeds']}", style="white")
-        )
+        lines.append(Text(f"  Active feeds:     {stats['feeds']}", style="white"))
         fetch_time = stats["last_fetch"]
         if fetch_time and fetch_time != "Never" and fetch_time != "Error":
             # Truncate to just date/time part
@@ -631,9 +586,7 @@ class Dashboard:
 
             layout["stats"].update(self._build_stats_panel(lines_per_panel))
             layout["planner"].update(self._build_ops_panel("planner"))
-            layout["executor"].update(
-                self._build_executor_ops_panel(lines_per_panel)
-            )
+            layout["executor"].update(self._build_executor_ops_panel(lines_per_panel))
             layout["alerts"].update(self._build_alerts_panel(lines_per_panel))
         else:
             # Summary-first 2x2 layout
@@ -662,9 +615,7 @@ class Dashboard:
             # Build panels
             layout["stats"].update(self._build_stats_panel(lines_per_panel))
             layout["planner"].update(self._build_ops_panel("planner"))
-            layout["executor"].update(
-                self._build_executor_ops_panel(lines_per_panel)
-            )
+            layout["executor"].update(self._build_executor_ops_panel(lines_per_panel))
             layout["alerts"].update(self._build_alerts_panel(lines_per_panel))
 
         # Header

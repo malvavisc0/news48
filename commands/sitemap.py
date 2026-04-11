@@ -14,9 +14,7 @@ def generate_sitemap_cmd(
     output: str = typer.Option(
         "sitemap.xml", "--output", "-o", help="Output file path"
     ),
-    site_url: str = typer.Option(
-        ..., "--site-url", help="Base URL of the website"
-    ),
+    site_url: str = typer.Option(..., "--site-url", help="Base URL of the website"),
 ) -> None:
     """Generate sitemap.xml for search engines."""
     db_path = require_db()

@@ -37,9 +37,7 @@ class RunningAgent:
     agent_name: str
     started_at: str
     log_file: str
-    process: Optional[subprocess.Popen] = field(
-        default=None, repr=False, compare=False
-    )
+    process: Optional[subprocess.Popen] = field(default=None, repr=False, compare=False)
 
 
 # Default schedules

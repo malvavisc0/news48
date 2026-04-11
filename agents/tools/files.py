@@ -58,18 +58,14 @@ def read_file(
             return _safe_json({"result": "", "error": "File not found"})
 
         if metadata_only:
-            return _safe_json(
-                {"result": _get_file_metadata(file), "error": ""}
-            )
+            return _safe_json({"result": _get_file_metadata(file), "error": ""})
 
         # Check for binary file
         with open(file, "rb") as f:
             sample = f.read(_BINARY_SAMPLE_SIZE)
 
         if _is_binary(sample):
-            return _safe_json(
-                {"result": "", "error": "Binary file not supported"}
-            )
+            return _safe_json({"result": "", "error": "Binary file not supported"})
 
         # Read file content
         if offset is not None and limit is not None:
@@ -122,12 +118,8 @@ def _get_file_metadata(file: Path) -> dict:
         A dict with file metadata.
     """
     info = file.lstat()
-    modified = datetime.fromtimestamp(info.st_mtime).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
-    created = datetime.fromtimestamp(info.st_ctime).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
+    modified = datetime.fromtimestamp(info.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+    created = datetime.fromtimestamp(info.st_ctime).strftime("%Y-%m-%d %H:%M:%S")
     return {
         "name": file.name,
         "size_bytes": info.st_size,

@@ -13,12 +13,8 @@ search_app = typer.Typer(help="Search articles using full-text search.")
 def search_articles_cmd(
     query: str = typer.Argument(..., help="Search query"),
     hours: int = typer.Option(48, "--hours", help="Time window in hours"),
-    sentiment: str = typer.Option(
-        None, "--sentiment", help="Filter by sentiment"
-    ),
-    category: str = typer.Option(
-        None, "--category", help="Filter by category"
-    ),
+    sentiment: str = typer.Option(None, "--sentiment", help="Filter by sentiment"),
+    category: str = typer.Option(None, "--category", help="Filter by category"),
     limit: int = typer.Option(20, "--limit", "-l"),
     offset: int = typer.Option(0, "--offset", "-o"),
     output_json: bool = typer.Option(False, "--json"),

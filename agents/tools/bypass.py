@@ -100,11 +100,7 @@ async def fetch_webpage_content(
             )
 
     success = len(results) > 0
-    error = (
-        ""
-        if success
-        else f"Failed to fetch {len(errors)} of {len(urls)} URL(s)"
-    )
+    error = "" if success else f"Failed to fetch {len(errors)} of {len(urls)} URL(s)"
 
     return _safe_json(
         {

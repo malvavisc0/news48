@@ -24,9 +24,7 @@ def test_plans_list_show_cancel(tmp_path, monkeypatch):
 
     list_result = runner.invoke(app, ["plans", "list", "--json"])
     assert list_result.exit_code == 0
-    assert any(
-        item["plan_id"] == plan_id for item in json.loads(list_result.stdout)
-    )
+    assert any(item["plan_id"] == plan_id for item in json.loads(list_result.stdout))
 
     show_result = runner.invoke(app, ["plans", "show", plan_id, "--json"])
     assert show_result.exit_code == 0

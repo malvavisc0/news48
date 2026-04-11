@@ -154,9 +154,7 @@ def delete_feed(db_path, feed_id: int) -> bool:
         return cursor.rowcount > 0
 
 
-def get_feeds_paginated(
-    db_path, limit: int = 20, offset: int = 0
-) -> list[dict]:
+def get_feeds_paginated(db_path, limit: int = 20, offset: int = 0) -> list[dict]:
     """Get feeds with server-side pagination.
 
     Args:

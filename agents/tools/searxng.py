@@ -119,9 +119,7 @@ def perform_web_search(
     page_errors: list[dict[str, Any]] = []
     dropped_results = 0
     stats: SearchPageStats = {"requested": pages, "succeeded": 0, "failed": 0}
-    field_map = _CATEGORY_FIELD_MAP.get(
-        category, _CATEGORY_FIELD_MAP["general"]
-    )
+    field_map = _CATEGORY_FIELD_MAP.get(category, _CATEGORY_FIELD_MAP["general"])
 
     with httpx.Client(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
         for page_number in range(1, pages + 1):
@@ -230,9 +228,7 @@ def _build_row(
         if required and not value:
             return None
 
-        if field_name in {"title", "content", "filename"} and isinstance(
-            value, str
-        ):
+        if field_name in {"title", "content", "filename"} and isinstance(value, str):
             value = _clean_text(value)
 
         row[field_name] = value
@@ -241,9 +237,7 @@ def _build_row(
     return row
 
 
-def _page_error(
-    page_number: int, error_type: str, detail: str
-) -> dict[str, Any]:
+def _page_error(page_number: int, error_type: str, detail: str) -> dict[str, Any]:
     """Build a structured per-page error payload."""
     return {
         "page": page_number,

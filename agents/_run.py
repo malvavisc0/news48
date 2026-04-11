@@ -3,11 +3,7 @@
 import json
 import logging
 
-from llama_index.core.agent.workflow import (
-    AgentStream,
-    ToolCall,
-    ToolCallResult,
-)
+from llama_index.core.agent.workflow import AgentStream, ToolCall, ToolCallResult
 
 from agents.streaming import emit_stream_delta, flush_remaining_stream
 
@@ -73,19 +69,21 @@ def _is_substantive_result(output: dict) -> bool:
     result = output.get("result", "")
     if not result:
         return False
-    if (
-        isinstance(result, dict)
-        and result.get("status") == "no_eligible_plans"
-    ):
+    if isinstance(result, dict) and result.get("status") == "no_eligible_plans":
         return False
     return True
 
 
-async def run_agent(get_agent_fn, task: str, max_iterations: int = 500) -> str:
+async def run_agent(
+    get_agent_fn,
+    task: str,
+    max_iterations: int = 500,
+) -> str:
     """Run any agent with standardized streaming and logging.
 
     Args:
         get_agent_fn: Callable that returns a configured FunctionAgent.
+            The callable is invoked without arguments.
         task: The task prompt to send to the agent.
         max_iterations: Maximum agent iterations (default 500).
 
@@ -102,17 +100,11 @@ async def run_agent(get_agent_fn, task: str, max_iterations: int = 500) -> str:
     handler = get_agent_fn().run(user_msg=task, max_iterations=max_iterations)
     async for event in handler.stream_events():
         if isinstance(event, ToolCall):
-            kwargs_summary = _format_tool_kwargs(
-                event.tool_name, event.tool_kwargs
-            )
-            logger.info(
-                f"Executing tool: {event.tool_name} | {kwargs_summary}"
-            )
+            kwargs_summary = _format_tool_kwargs(event.tool_name, event.tool_kwargs)
+            logger.info(f"Executing tool: {event.tool_name} | {kwargs_summary}")
         elif isinstance(event, ToolCallResult):
             if event.tool_output.is_error:
-                logger.info(
-                    f"System error while executing tool: {event.tool_name}."
-                )
+                logger.info(f"System error while executing tool: {event.tool_name}.")
                 continue
             output: dict = json.loads(event.tool_output.raw_output)
             error = output.get("error", None)
@@ -131,10 +123,7 @@ async def run_agent(get_agent_fn, task: str, max_iterations: int = 500) -> str:
                 )
                 if repeated_error_count >= repeated_error_limit:
                     logger.info(
-                        (
-                            "Aborting agent loop after %d repeated "
-                            "tool errors: %s"
-                        ),
+                        ("Aborting agent loop after %d repeated " "tool errors: %s"),
                         repeated_error_count,
                         signature,
                     )
@@ -142,13 +131,10 @@ async def run_agent(get_agent_fn, task: str, max_iterations: int = 500) -> str:
                 continue
 
             # --- circuit breaker: consecutive empty claim_plan results ---
-            if event.tool_name == "claim_plan" and _is_empty_claim_result(
-                output
-            ):
+            if event.tool_name == "claim_plan" and _is_empty_claim_result(output):
                 empty_claim_count += 1
                 logger.info(
-                    "claim_plan returned no eligible plans "
-                    "(%d/%d before abort)",
+                    "claim_plan returned no eligible plans " "(%d/%d before abort)",
                     empty_claim_count,
                     empty_claim_limit,
                 )
@@ -171,9 +157,7 @@ async def run_agent(get_agent_fn, task: str, max_iterations: int = 500) -> str:
                 last_tool_error_signature = ""
 
             summary = _summarize_tool_result(event.tool_name, output)
-            logger.info(
-                f"Completed execution of tool: {event.tool_name} | {summary}"
-            )
+            logger.info(f"Completed execution of tool: {event.tool_name} | {summary}")
         elif isinstance(event, AgentStream):
             final_response += event.delta
             stream_buffer, _ = emit_stream_delta(stream_buffer, event.delta)

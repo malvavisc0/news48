@@ -7,13 +7,7 @@ import typer
 from database import get_all_feeds, init_database
 from helpers import get_fetch_summary
 
-from ._common import (
-    DEFAULT_DELAY,
-    emit_error,
-    emit_json,
-    require_db,
-    status_msg,
-)
+from ._common import DEFAULT_DELAY, emit_error, emit_json, require_db, status_msg
 
 
 async def _fetch(delay: float, feed_domain: str | None = None) -> dict:
@@ -55,9 +49,7 @@ async def _fetch(delay: float, feed_domain: str | None = None) -> dict:
     total_valid = sum(r.valid_articles_count for r in summary.successful)
     total_feeds = len(summary.successful) + len(summary.failed)
     success_rate = (
-        (len(summary.successful) / total_feeds * 100)
-        if total_feeds > 0
-        else 0.0
+        (len(summary.successful) / total_feeds * 100) if total_feeds > 0 else 0.0
     )
 
     return {
@@ -76,8 +68,7 @@ async def _fetch(delay: float, feed_domain: str | None = None) -> dict:
             for r in summary.successful
         ],
         "failed": [
-            {"url": r.url, "error": r.error or "Unknown error"}
-            for r in summary.failed
+            {"url": r.url, "error": r.error or "Unknown error"} for r in summary.failed
         ],
     }
 

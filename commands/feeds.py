@@ -61,12 +61,8 @@ def _list_feeds(limit: int, offset: int) -> dict:
 
 @feeds_app.command(name="list")
 def list_feeds(
-    limit: int = typer.Option(
-        1000, "--limit", "-l", help="Number of feeds to show"
-    ),
-    offset: int = typer.Option(
-        0, "--offset", "-o", help="Number of feeds to skip"
-    ),
+    limit: int = typer.Option(1000, "--limit", "-l", help="Number of feeds to show"),
+    offset: int = typer.Option(0, "--offset", "-o", help="Number of feeds to skip"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """List all feeds in the database."""
@@ -189,12 +185,8 @@ def _do_delete_feed(feed: dict, article_count: int, db_path: Path) -> dict:
 
 @feeds_app.command(name="delete")
 def delete_feed_cmd(
-    identifier: str = typer.Argument(
-        ..., help="URL or ID of the feed to delete"
-    ),
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Skip confirmation prompt"
-    ),
+    identifier: str = typer.Argument(..., help="URL or ID of the feed to delete"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Delete a feed by URL or ID."""
@@ -228,10 +220,7 @@ def delete_feed_cmd(
         if data["deleted"]:
             print(f"Deleted feed: {data['url']}")
             if data["articles_removed"] > 0:
-                print(
-                    f"Also deleted {data['articles_removed']}"
-                    " associated articles"
-                )
+                print(f"Also deleted {data['articles_removed']}" " associated articles")
         else:
             print(f"Error: {data['reason']}", file=sys.stderr)
             raise typer.Exit(code=1)
@@ -279,9 +268,7 @@ def _feed_info(identifier: str) -> dict:
 
 @feeds_app.command(name="info")
 def feed_info(
-    identifier: str = typer.Argument(
-        ..., help="URL or ID of the feed to show"
-    ),
+    identifier: str = typer.Argument(..., help="URL or ID of the feed to show"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Show detailed information about a feed."""
@@ -308,12 +295,8 @@ def feed_info(
 
 @feeds_app.command(name="update")
 def update_feed_cmd(
-    identifier: str = typer.Argument(
-        ..., help="URL or ID of the feed to update"
-    ),
-    title: str = typer.Option(
-        None, "--title", "-t", help="New title for the feed"
-    ),
+    identifier: str = typer.Argument(..., help="URL or ID of the feed to update"),
+    title: str = typer.Option(None, "--title", "-t", help="New title for the feed"),
     description: str = typer.Option(
         None, "--description", "-d", help="New description for the feed"
     ),
@@ -381,12 +364,8 @@ def update_feed_cmd(
 @feeds_app.command(name="rss")
 def generate_rss(
     hours: int = typer.Option(48, "--hours", help="Time window"),
-    category: str = typer.Option(
-        None, "--category", help="Filter by category"
-    ),
-    output: str = typer.Option(
-        None, "--output", "-o", help="Output file path"
-    ),
+    category: str = typer.Option(None, "--category", help="Filter by category"),
+    output: str = typer.Option(None, "--output", "-o", help="Output file path"),
 ) -> None:
     """Generate RSS feed XML for the website."""
     db_path = require_db()

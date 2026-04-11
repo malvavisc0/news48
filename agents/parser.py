@@ -11,17 +11,15 @@ from llama_index.core.agent.workflow import FunctionAgent
 from llama_index.llms.openai_like import OpenAILike
 
 from agents._run import run_agent
-from agents.instructions import load_agent_instructions
+from agents.skills import compose_agent_instructions
 
 
-def get_agent() -> FunctionAgent:
+def get_agent(task_context: dict | None = None) -> FunctionAgent:
     """Create and configure the News Parser Agent.
 
-    Self-manages LLM creation from environment variables (PARSER_* with
-    fallback to generic vars).
-
-    Returns:
-        A configured FunctionAgent ready for article parsing.
+    Args:
+        task_context: Dict with keys for conditional skill loading.
+            If None, uses empty context (all core skills loaded).
     """
     api_base = getenv("API_BASE", "")
     api_key = getenv("API_KEY", "")
@@ -30,6 +28,8 @@ def get_agent() -> FunctionAgent:
         raise ValueError("Missing API_BASE env.")
 
     from agents.tools import read_file, run_shell_command
+
+    ctx = task_context or {}
 
     return FunctionAgent(
         name="NewsParser",
@@ -45,14 +45,13 @@ def get_agent() -> FunctionAgent:
             is_chat_model=True,
             is_function_calling_model=True,
         ),
-        system_prompt=load_agent_instructions("parser"),
+        system_prompt=compose_agent_instructions("parser", ctx),
         streaming=True,
         verbose=False,
-        # No output_cls — agent uses CLI tools to update articles
     )
 
 
-async def run(task: str):
+async def run(task: str, task_context: dict | None = None):
     """Run the News Parser Agent with a task prompt.
 
     Parses a single article. The task must contain article information
@@ -60,8 +59,9 @@ async def run(task: str):
 
     Args:
         task: Task prompt containing article details for parsing.
+        task_context: Optional dict for conditional skill loading.
 
     Returns:
         The final text response from the agent.
     """
-    return await run_agent(get_agent, task)
+    return await run_agent(lambda: get_agent(task_context), task)

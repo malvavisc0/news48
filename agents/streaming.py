@@ -69,14 +69,10 @@ def format_log_line(line: str) -> str:
         rest = _strip_prefix(message, _PREFIX_EXEC)
         if " | " in rest:
             tool_name, detail = rest.split(" | ", 1)
-            return (
-                f"{time} ⚙ Executing: {tool_name.strip()} ({detail.strip()})"
-            )
+            return f"{time} ⚙ Executing: {tool_name.strip()} ({detail.strip()})"
         if ". Reason:" in rest:
             tool_name, reason = rest.split(". Reason:", 1)
-            return (
-                f"{time} ⚙ Executing: {tool_name.strip()} ({reason.strip()})"
-            )
+            return f"{time} ⚙ Executing: {tool_name.strip()} ({reason.strip()})"
         return f"{time} ⚙ Executing: {rest}"
 
     # Parse "Completed execution of tool: <name> | <summary>" (new) or
@@ -85,9 +81,7 @@ def format_log_line(line: str) -> str:
         rest = _strip_prefix(message, _PREFIX_COMPLETE)
         if " | " in rest:
             tool_name, detail = rest.split(" | ", 1)
-            return (
-                f"{time} ✔ Completed: {tool_name.strip()} ({detail.strip()})"
-            )
+            return f"{time} ✔ Completed: {tool_name.strip()} ({detail.strip()})"
         return f"{time} ✔ Completed: {rest}"
 
     # Parse "System error while executing tool: <name>"

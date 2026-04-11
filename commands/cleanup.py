@@ -42,18 +42,14 @@ def cleanup_status(
 
 @cleanup_app.command(name="purge")
 def cleanup_purge(
-    hours: int = typer.Option(
-        48, "--hours", "-h", help="Hours threshold for purge"
-    ),
+    hours: int = typer.Option(48, "--hours", "-h", help="Hours threshold for purge"),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
         "-n",
         help="Show what would be deleted without deleting",
     ),
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Skip confirmation prompt"
-    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Purge articles older than specified hours (default: 48)."""

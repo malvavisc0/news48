@@ -95,9 +95,7 @@ def test_create_plan_rejects_empty_success_conditions(tmp_path, monkeypatch):
     assert "success_conditions is required" in payload["error"]
 
 
-def test_create_plan_rejects_blank_success_condition_entry(
-    tmp_path, monkeypatch
-):
+def test_create_plan_rejects_blank_success_condition_entry(tmp_path, monkeypatch):
     monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
 
     payload = json.loads(
@@ -113,9 +111,7 @@ def test_create_plan_rejects_blank_success_condition_entry(
     assert "cannot be blank" in payload["error"]
 
 
-def test_create_plan_rejects_whitespace_success_condition_entry(
-    tmp_path, monkeypatch
-):
+def test_create_plan_rejects_whitespace_success_condition_entry(tmp_path, monkeypatch):
     monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
 
     payload = json.loads(
@@ -152,9 +148,7 @@ def test_update_plan_accepts_explicit_plan_status(tmp_path, monkeypatch):
     monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
-        planner_tools.create_plan(
-            "test", "Task", ["Step 1", "Verify"], ["Condition 1"]
-        )
+        planner_tools.create_plan("test", "Task", ["Step 1", "Verify"], ["Condition 1"])
     )["result"]
 
     updated = json.loads(
@@ -209,9 +203,7 @@ def test_list_plans_filters_by_status(tmp_path, monkeypatch):
     monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
-        planner_tools.create_plan(
-            "test", "Task", ["Step 1", "Verify"], ["Condition 1"]
-        )
+        planner_tools.create_plan("test", "Task", ["Step 1", "Verify"], ["Condition 1"])
     )["result"]
     json.loads(
         planner_tools.update_plan(
@@ -235,11 +227,7 @@ def test_list_plans_filters_by_comma_separated_status(tmp_path, monkeypatch):
     plan_a = json.loads(
         planner_tools.create_plan("test", "Task A", ["Step 1"], ["Cond 1"])
     )["result"]
-    json.loads(
-        planner_tools.create_plan(
-            "test", "Fetch feeds", ["Step 1"], ["Cond 1"]
-        )
-    )
+    json.loads(planner_tools.create_plan("test", "Fetch feeds", ["Step 1"], ["Cond 1"]))
 
     # Move plan_a to executing
     json.loads(
@@ -253,9 +241,7 @@ def test_list_plans_filters_by_comma_separated_status(tmp_path, monkeypatch):
     )
 
     # Filter by "pending,executing" should return both plans
-    data = json.loads(
-        planner_tools.list_plans("test", status="pending,executing")
-    )
+    data = json.loads(planner_tools.list_plans("test", status="pending,executing"))
     statuses = {p["status"] for p in data["result"]}
     assert "pending" in statuses
     assert "executing" in statuses
@@ -266,9 +252,7 @@ def test_list_plans_filters_by_comma_separated_status(tmp_path, monkeypatch):
     assert all(p["status"] == "pending" for p in data["result"])
 
 
-def test_claim_plan_returns_no_eligible_plans_when_empty(
-    tmp_path, monkeypatch
-):
+def test_claim_plan_returns_no_eligible_plans_when_empty(tmp_path, monkeypatch):
     monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
 
     payload = json.loads(planner_tools.claim_plan("test"))
@@ -276,7 +260,7 @@ def test_claim_plan_returns_no_eligible_plans_when_empty(
     result = payload["result"]
     assert isinstance(result, dict)
     assert result["status"] == "no_eligible_plans"
-    assert "exit" in result["message"].lower()
+    assert "stop" in result["message"].lower()
 
 
 def test_claim_plan_returns_empty_when_all_blocked(tmp_path, monkeypatch):
@@ -313,9 +297,7 @@ def test_update_plan_rejects_invalid_plan_status(tmp_path, monkeypatch):
     monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
-        planner_tools.create_plan(
-            "test", "Task", ["Step 1", "Verify"], ["Condition 1"]
-        )
+        planner_tools.create_plan("test", "Task", ["Step 1", "Verify"], ["Condition 1"])
     )["result"]
 
     payload = json.loads(
@@ -336,9 +318,7 @@ def test_update_plan_rejects_step_regression(tmp_path, monkeypatch):
     monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
-        planner_tools.create_plan(
-            "test", "Task", ["Step 1", "Verify"], ["Condition 1"]
-        )
+        planner_tools.create_plan("test", "Task", ["Step 1", "Verify"], ["Condition 1"])
     )["result"]
 
     json.loads(
@@ -368,9 +348,7 @@ def test_update_plan_rejects_terminal_plan_mutation(tmp_path, monkeypatch):
     monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
-        planner_tools.create_plan(
-            "test", "Task", ["Step 1", "Verify"], ["Condition 1"]
-        )
+        planner_tools.create_plan("test", "Task", ["Step 1", "Verify"], ["Condition 1"])
     )["result"]
 
     json.loads(
@@ -420,9 +398,7 @@ def test_create_plan_dedupes_active_same_family(tmp_path, monkeypatch):
     assert second["plan_id"] == first["plan_id"]
 
 
-def test_create_plan_infers_download_parent_from_active_fetch(
-    tmp_path, monkeypatch
-):
+def test_create_plan_infers_download_parent_from_active_fetch(tmp_path, monkeypatch):
     monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
 
     fetch = json.loads(
@@ -446,9 +422,7 @@ def test_create_plan_infers_download_parent_from_active_fetch(
     assert download["parent_id"] == fetch["plan_id"]
 
 
-def test_create_plan_infers_parse_parent_from_active_download(
-    tmp_path, monkeypatch
-):
+def test_create_plan_infers_parse_parent_from_active_download(tmp_path, monkeypatch):
     monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
 
     download = json.loads(
@@ -496,9 +470,7 @@ def test_update_plan_accepts_step_description_alias(tmp_path, monkeypatch):
 
     assert payload["error"] == ""
     verification = next(
-        s
-        for s in payload["result"]["steps"]
-        if s["description"] == "verification-step"
+        s for s in payload["result"]["steps"] if s["description"] == "verification-step"
     )
     assert verification["status"] == "completed"
 
@@ -555,9 +527,7 @@ def test_stale_detects_dead_claimed_pid(tmp_path, monkeypatch):
 # --- Auto-recovery fixes: _is_plan_stale, _normalize, _read_plan ---
 
 
-def test_is_plan_stale_returns_true_when_claimed_by_is_none(
-    tmp_path, monkeypatch
-):
+def test_is_plan_stale_returns_true_when_claimed_by_is_none(tmp_path, monkeypatch):
     """An executing plan with no claimed_by is immediately stale because
     ownership cannot be verified."""
     monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
@@ -577,9 +547,7 @@ def test_is_plan_stale_returns_true_when_claimed_by_is_none(
     assert planner_tools._is_plan_stale(plan) is True
 
 
-def test_is_plan_stale_returns_true_when_claimed_by_is_missing(
-    tmp_path, monkeypatch
-):
+def test_is_plan_stale_returns_true_when_claimed_by_is_missing(tmp_path, monkeypatch):
     """An executing plan whose JSON has no claimed_by key at all is stale."""
     monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
 
@@ -617,9 +585,7 @@ def test_is_plan_stale_returns_false_when_pid_alive(tmp_path, monkeypatch):
     assert planner_tools._is_plan_stale(plan) is False
 
 
-def test_normalize_resets_orphaned_executing_plan_to_pending(
-    tmp_path, monkeypatch
-):
+def test_normalize_resets_orphaned_executing_plan_to_pending(tmp_path, monkeypatch):
     """An executing plan with no claimed_by is reset to pending with
     in_progress steps reverted to pending."""
     monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
@@ -647,9 +613,7 @@ def test_normalize_resets_orphaned_executing_plan_to_pending(
     assert plan["steps"][1]["status"] == "pending"
 
 
-def test_normalize_does_not_touch_executing_plan_with_claimed_by(
-    tmp_path, monkeypatch
-):
+def test_normalize_does_not_touch_executing_plan_with_claimed_by(tmp_path, monkeypatch):
     """An executing plan WITH a claimed_by PID is not reset by normalize."""
     monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
 

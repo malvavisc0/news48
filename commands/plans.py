@@ -35,9 +35,7 @@ def _iter_plans(status: str = "") -> list[dict]:
     return items
 
 
-def _remediate_plan(
-    plan: dict[str, Any], parent_statuses: dict[str, str]
-) -> list[str]:
+def _remediate_plan(plan: dict[str, Any], parent_statuses: dict[str, str]) -> list[str]:
     """Mutate a plan in-place to repair common planner/executor corruption."""
     actions: list[str] = []
 

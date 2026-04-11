@@ -73,8 +73,7 @@ async def _parse(article_id: int, *, force: bool = False) -> dict:
         return {
             "id": article_id,
             "success": False,
-            "error": f"Article {article_id} has no content. "
-            "Download it first.",
+            "error": f"Article {article_id} has no content. " "Download it first.",
         }
     if article.get("parsed_at") and not force:
         return {
@@ -248,9 +247,7 @@ def parse(
     init_database(db_path)
 
     if retry:
-        candidates = get_parse_failed_articles(
-            db_path, limit, feed_domain=feed
-        )
+        candidates = get_parse_failed_articles(db_path, limit, feed_domain=feed)
         if not candidates:
             status_msg("No failed articles found to retry")
             data = {
@@ -324,7 +321,4 @@ def parse(
     if output_json:
         emit_json(data)
     else:
-        print(
-            f"Parsed {parsed} of {len(candidates)} "
-            f"articles, {failed} failed"
-        )
+        print(f"Parsed {parsed} of {len(candidates)} " f"articles, {failed} failed")

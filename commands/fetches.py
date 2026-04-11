@@ -11,9 +11,7 @@ fetches_app = typer.Typer(help="View fetch history.")
 
 @fetches_app.command(name="list")
 def list_fetches_cmd(
-    limit: int = typer.Option(
-        20, "--limit", "-l", help="Number of fetches to show"
-    ),
+    limit: int = typer.Option(20, "--limit", "-l", help="Number of fetches to show"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """List recent fetch runs with details."""
@@ -48,6 +46,4 @@ def list_fetches_cmd(
             print(f"  [{f['status']}] Fetch #{f['id']}")
             print(f"    Started:  {started}")
             print(f"    Completed: {completed}")
-            print(
-                f"    Feeds: {f['feeds_fetched']}, Articles: {f['articles_found']}"
-            )
+            print(f"    Feeds: {f['feeds_fetched']}, Articles: {f['articles_found']}")

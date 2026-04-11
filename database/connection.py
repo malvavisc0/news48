@@ -107,26 +107,14 @@ CREATE_INDEXES = [
         "CREATE INDEX IF NOT EXISTS idx_articles_published_at "
         "ON articles(published_at)"
     ),
-    (
-        "CREATE INDEX IF NOT EXISTS idx_articles_created_at "
-        "ON articles(created_at)"
-    ),
-    (
-        "CREATE INDEX IF NOT EXISTS idx_articles_sentiment "
-        "ON articles(sentiment)"
-    ),
+    ("CREATE INDEX IF NOT EXISTS idx_articles_created_at " "ON articles(created_at)"),
+    ("CREATE INDEX IF NOT EXISTS idx_articles_sentiment " "ON articles(sentiment)"),
     (
         "CREATE INDEX IF NOT EXISTS idx_articles_fact_check_status "
         "ON articles(fact_check_status)"
     ),
-    (
-        "CREATE INDEX IF NOT EXISTS idx_articles_is_featured "
-        "ON articles(is_featured)"
-    ),
-    (
-        "CREATE INDEX IF NOT EXISTS idx_articles_is_breaking "
-        "ON articles(is_breaking)"
-    ),
+    ("CREATE INDEX IF NOT EXISTS idx_articles_is_featured " "ON articles(is_featured)"),
+    ("CREATE INDEX IF NOT EXISTS idx_articles_is_breaking " "ON articles(is_breaking)"),
     # Composite index for the most common website query
     (
         "CREATE INDEX IF NOT EXISTS idx_articles_48h "
@@ -149,18 +137,9 @@ _MIGRATIONS = [
     "ALTER TABLE feeds ADD COLUMN icon_url TEXT",
     "ALTER TABLE feeds ADD COLUMN favicon_url TEXT",
     # --- NEW — editorial ---
-    (
-        "ALTER TABLE articles ADD COLUMN view_count "
-        "INTEGER NOT NULL DEFAULT 0"
-    ),
-    (
-        "ALTER TABLE articles ADD COLUMN is_featured "
-        "INTEGER NOT NULL DEFAULT 0"
-    ),
-    (
-        "ALTER TABLE articles ADD COLUMN is_breaking "
-        "INTEGER NOT NULL DEFAULT 0"
-    ),
+    ("ALTER TABLE articles ADD COLUMN view_count " "INTEGER NOT NULL DEFAULT 0"),
+    ("ALTER TABLE articles ADD COLUMN is_featured " "INTEGER NOT NULL DEFAULT 0"),
+    ("ALTER TABLE articles ADD COLUMN is_breaking " "INTEGER NOT NULL DEFAULT 0"),
     # --- NEW — denormalized source ---
     "ALTER TABLE articles ADD COLUMN source_name TEXT",
     # --- NEW — language ---
@@ -228,9 +207,7 @@ _CLAIM_TIMEOUT_MINUTES = 30
 
 def _claim_cutoff(minutes: int = _CLAIM_TIMEOUT_MINUTES) -> str:
     """Return the cutoff timestamp for stale processing claims."""
-    return (
-        datetime.now(timezone.utc) - timedelta(minutes=minutes)
-    ).isoformat()
+    return (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
 
 
 def init_database(db_path: Path) -> None:

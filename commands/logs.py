@@ -21,9 +21,7 @@ AGENT_CHOICES = ["executor", "planner", "monitor"]
 
 
 # Extract date/time from log filenames: executor-20260406-025724.log
-_FILENAME_TS_RE = re.compile(
-    r"^[a-z]+-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})\d{2}\.log$"
-)
+_FILENAME_TS_RE = re.compile(r"^[a-z]+-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})\d{2}\.log$")
 
 
 def _timestamp_from_filename(filename: str) -> str:
@@ -46,9 +44,7 @@ class LogEntry:
     timestamp: str  # YYYY-MM-DD HH:MM
     module: str  # logger name from brackets
     message: str  # structured message text
-    continuation: list[str] = field(
-        default_factory=list
-    )  # trailing prose lines
+    continuation: list[str] = field(default_factory=list)  # trailing prose lines
     source_file: str = ""  # originating .log filename
 
 
@@ -208,9 +204,7 @@ def logs_list(
         "-m",
         help="Filter by module name, e.g. agents._run, httpx",
     ),
-    output_json: bool = typer.Option(
-        False, "--json", "-j", help="Output as JSON"
-    ),
+    output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
     limit: int = typer.Option(
         100, "--limit", "-n", help="Maximum number of entries to display"
     ),
@@ -237,8 +231,7 @@ def logs_list(
     date_filter = _parse_date(date_str)
     if date_str and date_filter is None:
         emit_error(
-            f"Invalid date '{date_str}'. "
-            "Use YYYY-MM-DD, 'today', or 'yesterday'.",
+            f"Invalid date '{date_str}'. " "Use YYYY-MM-DD, 'today', or 'yesterday'.",
             as_json=output_json,
         )
 
@@ -304,9 +297,7 @@ def logs_files(
         "-d",
         help="Filter by date: YYYY-MM-DD or 'today', 'yesterday'",
     ),
-    output_json: bool = typer.Option(
-        False, "--json", "-j", help="Output as JSON"
-    ),
+    output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
 ) -> None:
     """List log files with metadata."""
     # Parse agent filter
@@ -322,8 +313,7 @@ def logs_files(
     date_filter = _parse_date(date_str) if date_str else None
     if date_str and date_filter is None:
         emit_error(
-            f"Invalid date '{date_str}'. "
-            "Use YYYY-MM-DD, 'today', or 'yesterday'.",
+            f"Invalid date '{date_str}'. " "Use YYYY-MM-DD, 'today', or 'yesterday'.",
             as_json=output_json,
         )
 
@@ -363,9 +353,7 @@ def logs_files(
 def logs_show(
     filename: str = typer.Argument(..., help="Log file name or stem"),
     raw: bool = typer.Option(False, "--raw", help="Print without formatting"),
-    output_json: bool = typer.Option(
-        False, "--json", "-j", help="Output as JSON"
-    ),
+    output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
 ) -> None:
     """Display an entire log file."""
     # Resolve filename: accept stem or full name

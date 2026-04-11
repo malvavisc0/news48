@@ -6,23 +6,25 @@ from llama_index.core.agent.workflow import FunctionAgent
 from llama_index.llms.openai_like import OpenAILike
 
 from agents._run import run_agent
-from agents.instructions import load_agent_instructions
+from agents.skills import compose_agent_instructions
 
 
-def get_agent() -> FunctionAgent:
-    """Create and return the Monitor Agent."""
+def get_agent(task_context: dict | None = None) -> FunctionAgent:
+    """Create and return the Monitor Agent.
+
+    Args:
+        task_context: Dict with keys for conditional skill loading.
+            If None, uses empty context (all core skills loaded).
+    """
     api_base = getenv("API_BASE", "")
     api_key = getenv("API_KEY", "")
     model = getenv("MODEL", "")
     if not api_base:
         raise ValueError("Missing API_BASE env.")
 
-    from agents.tools import (
-        get_system_info,
-        read_file,
-        run_shell_command,
-        send_email,
-    )
+    from agents.tools import get_system_info, read_file, run_shell_command, send_email
+
+    ctx = task_context or {}
 
     return FunctionAgent(
         name="Monitor",
@@ -44,17 +46,18 @@ def get_agent() -> FunctionAgent:
             get_system_info,
             send_email,
         ],
-        system_prompt=load_agent_instructions("monitor"),
+        system_prompt=compose_agent_instructions("monitor", ctx),
         verbose=False,
         streaming=True,
     )
 
 
-async def run(task: str):
+async def run(task: str, task_context: dict | None = None):
     """Run the Monitor Agent with a task prompt.
 
     Args:
         task: What to do, e.g., "Run a monitoring cycle and send report"
               or "Check database health and alert if critical".
+        task_context: Optional dict for conditional skill loading.
     """
-    return await run_agent(get_agent, task)
+    return await run_agent(lambda: get_agent(task_context), task)

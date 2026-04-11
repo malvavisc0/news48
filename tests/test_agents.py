@@ -79,9 +79,7 @@ class TestOrchestrator:
             agent_name="planner",
             task_prompt="Check",
             interval_minutes=15,
-            last_run=(
-                datetime.now(timezone.utc) - timedelta(minutes=5)
-            ).isoformat(),
+            last_run=(datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(),
         )
         orchestrator = Orchestrator()
         assert orchestrator._should_run(schedule) is False
@@ -93,9 +91,7 @@ class TestOrchestrator:
             agent_name="planner",
             task_prompt="Check",
             interval_minutes=15,
-            last_run=(
-                datetime.now(timezone.utc) - timedelta(minutes=20)
-            ).isoformat(),
+            last_run=(datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat(),
         )
         orchestrator = Orchestrator()
         assert orchestrator._should_run(schedule) is True
@@ -171,9 +167,7 @@ class TestOrchestrator:
         assert result["agents_run"] == []
         assert result["results"] == {}
 
-    def test_load_state_runs_recovery_without_state_file(
-        self, tmp_path, monkeypatch
-    ):
+    def test_load_state_runs_recovery_without_state_file(self, tmp_path, monkeypatch):
         state_file = tmp_path / ".orchestrator.json"
         monkeypatch.setattr(orchestrator_module, "_STATE_FILE", state_file)
 
@@ -192,9 +186,7 @@ class TestOrchestrator:
                 }
             )
 
-        monkeypatch.setattr(
-            planner_tools, "recover_stale_plans", _fake_recover
-        )
+        monkeypatch.setattr(planner_tools, "recover_stale_plans", _fake_recover)
 
         orchestrator = Orchestrator()
         orchestrator.load_state()
@@ -223,9 +215,7 @@ class TestOrchestrator:
         )
 
         monkeypatch.setattr(orchestrator_module, "_STATE_FILE", state_file)
-        monkeypatch.setattr(
-            orchestrator_module, "_is_process_alive", lambda _p: False
-        )
+        monkeypatch.setattr(orchestrator_module, "_is_process_alive", lambda _p: False)
 
         called = {"value": False}
 
@@ -242,9 +232,7 @@ class TestOrchestrator:
                 }
             )
 
-        monkeypatch.setattr(
-            planner_tools, "recover_stale_plans", _fake_recover
-        )
+        monkeypatch.setattr(planner_tools, "recover_stale_plans", _fake_recover)
 
         orchestrator = Orchestrator()
         orchestrator.load_state()
@@ -312,17 +300,13 @@ class TestOrchestrator:
             async def run(task: str):
                 return f"ok:{task}"
 
-        monkeypatch.setattr(
-            importlib, "import_module", lambda _name: _FakeModule
-        )
+        monkeypatch.setattr(importlib, "import_module", lambda _name: _FakeModule)
 
         result = asyncio.run(orchestrator.run_agent("executor", "inline"))
         assert result["error"] is None
         assert result["result"] == "ok:inline"
 
-    def test_stop_agent_returns_instance_details_and_release_counts(
-        self, monkeypatch
-    ):
+    def test_stop_agent_returns_instance_details_and_release_counts(self, monkeypatch):
         orchestrator = Orchestrator(
             schedules={
                 "executor": AgentSchedule(
@@ -352,9 +336,7 @@ class TestOrchestrator:
         monkeypatch.setattr(
             orchestrator_module, "_is_process_alive", lambda _pid: False
         )
-        monkeypatch.setattr(
-            orchestrator_module.os, "killpg", lambda _pgid, _sig: None
-        )
+        monkeypatch.setattr(orchestrator_module.os, "killpg", lambda _pgid, _sig: None)
         monkeypatch.setattr(orchestrator_module.os, "getpgid", lambda pid: pid)
         monkeypatch.setattr(orchestrator_module.time, "sleep", lambda _s: None)
 
@@ -367,9 +349,7 @@ class TestOrchestrator:
                 "count": 1,
             }
 
-        monkeypatch.setattr(
-            planner_tools, "release_plans_for_pid", _fake_release
-        )
+        monkeypatch.setattr(planner_tools, "release_plans_for_pid", _fake_release)
 
         result = orchestrator.stop_agent("executor")
 
@@ -381,8 +361,7 @@ class TestOrchestrator:
             202,
         }
         assert all(
-            entry["released_plan_count"] == 1
-            for entry in result["stopped_instances"]
+            entry["released_plan_count"] == 1 for entry in result["stopped_instances"]
         )
         assert released_calls == [101, 202]
 
@@ -406,8 +385,7 @@ class TestRunLoopHelpers:
             "result": {
                 "status": "no_eligible_plans",
                 "message": (
-                    "No eligible pending plans found. "
-                    "You must exit immediately."
+                    "No eligible pending plans found. " "You must exit immediately."
                 ),
             },
             "error": "",

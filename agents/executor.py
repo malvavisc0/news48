@@ -6,11 +6,16 @@ from llama_index.core.agent.workflow import FunctionAgent
 from llama_index.llms.openai_like import OpenAILike
 
 from agents._run import run_agent
-from agents.instructions import load_agent_instructions
+from agents.skills import compose_agent_instructions
 
 
-def get_agent() -> FunctionAgent:
-    """Create and return the Executor Agent."""
+def get_agent(task_context: dict | None = None) -> FunctionAgent:
+    """Create and return the Executor Agent.
+
+    Args:
+        task_context: Dict with keys like plan_family to determine which
+            conditional skills to load. If None, uses empty context.
+    """
     api_base = getenv("API_BASE", "")
     api_key = getenv("API_KEY", "")
     model = getenv("MODEL", "")
@@ -26,6 +31,8 @@ def get_agent() -> FunctionAgent:
         run_shell_command,
         update_plan,
     )
+
+    ctx = task_context or {}
 
     return FunctionAgent(
         name="Executor",
@@ -50,12 +57,12 @@ def get_agent() -> FunctionAgent:
             perform_web_search,
             fetch_webpage_content,
         ],
-        system_prompt=load_agent_instructions("executor"),
+        system_prompt=compose_agent_instructions("executor", ctx),
         verbose=False,
         streaming=True,
     )
 
 
-async def run(task: str):
+async def run(task: str, task_context: dict | None = None):
     """Run the Executor Agent with a task prompt."""
-    return await run_agent(get_agent, task)
+    return await run_agent(lambda: get_agent(task_context), task)
