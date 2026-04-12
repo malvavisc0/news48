@@ -185,4 +185,5 @@ Record each assessment here for trend tracking.
 |------|-----------|-------------|----------|-----------|--------------|--------------|-------------|-------|
 | 2026-04-12 (original) | 4.0 | 3.0 | 3.0 | 2.0 | 2.0 | 4.0 | **3.0** | Pre-fix baseline |
 | 2026-04-12 (post-fix) | 4.5 | 4.5 | 4.0 | 2.5 | 3.0 | 4.5 | **4.0** | All critical/high fixes applied |
+| 2026-04-12 (reassess) | 5.0 | 4.7 | 5.0 | 3.75 | 3.75 | 5.0 | **4.7** | Strict checkpoint scoring; 4.4+5.4 remain FAIL (no runtime code); 2.3 PARTIAL |
 | | | | | | | | | |
