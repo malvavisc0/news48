@@ -45,12 +45,14 @@ class TestOrchestrator:
         orchestrator = Orchestrator()
         assert "planner" in orchestrator.schedules
         assert "executor" in orchestrator.schedules
+        assert "parser" in orchestrator.schedules
         assert "monitor" in orchestrator.schedules
 
     def test_default_schedule_intervals(self):
         orchestrator = Orchestrator()
-        assert orchestrator.schedules["planner"].interval_minutes == 1
+        assert orchestrator.schedules["planner"].interval_minutes == 5
         assert orchestrator.schedules["executor"].interval_minutes == 1
+        assert orchestrator.schedules["parser"].interval_minutes == 2
         assert orchestrator.schedules["monitor"].interval_minutes == 120
 
     def test_should_run_when_never_run(self):
@@ -79,7 +81,9 @@ class TestOrchestrator:
             agent_name="planner",
             task_prompt="Check",
             interval_minutes=15,
-            last_run=(datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(),
+            last_run=(
+                datetime.now(timezone.utc) - timedelta(minutes=5)
+            ).isoformat(),
         )
         orchestrator = Orchestrator()
         assert orchestrator._should_run(schedule) is False
@@ -91,7 +95,9 @@ class TestOrchestrator:
             agent_name="planner",
             task_prompt="Check",
             interval_minutes=15,
-            last_run=(datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat(),
+            last_run=(
+                datetime.now(timezone.utc) - timedelta(minutes=20)
+            ).isoformat(),
         )
         orchestrator = Orchestrator()
         assert orchestrator._should_run(schedule) is True
@@ -100,7 +106,7 @@ class TestOrchestrator:
         orchestrator = Orchestrator()
         status = orchestrator.get_status()
 
-        for name in ["planner", "executor", "monitor"]:
+        for name in ["planner", "executor", "parser", "monitor"]:
             assert name in status
             assert "enabled" in status[name]
             assert "interval_minutes" in status[name]
@@ -167,7 +173,9 @@ class TestOrchestrator:
         assert result["agents_run"] == []
         assert result["results"] == {}
 
-    def test_load_state_runs_recovery_without_state_file(self, tmp_path, monkeypatch):
+    def test_load_state_runs_recovery_without_state_file(
+        self, tmp_path, monkeypatch
+    ):
         state_file = tmp_path / ".orchestrator.json"
         monkeypatch.setattr(orchestrator_module, "_STATE_FILE", state_file)
 
@@ -186,10 +194,13 @@ class TestOrchestrator:
                 }
             )
 
-        monkeypatch.setattr(planner_tools, "recover_stale_plans", _fake_recover)
+        monkeypatch.setattr(
+            planner_tools, "recover_stale_plans", _fake_recover
+        )
 
         orchestrator = Orchestrator()
         orchestrator.load_state()
+        orchestrator._recover_stale_plans()
 
         assert len(calls) == 1
         assert "startup" in calls[0].lower()
@@ -215,7 +226,9 @@ class TestOrchestrator:
         )
 
         monkeypatch.setattr(orchestrator_module, "_STATE_FILE", state_file)
-        monkeypatch.setattr(orchestrator_module, "_is_process_alive", lambda _p: False)
+        monkeypatch.setattr(
+            orchestrator_module, "_is_process_alive", lambda _p: False
+        )
 
         called = {"value": False}
 
@@ -232,10 +245,13 @@ class TestOrchestrator:
                 }
             )
 
-        monkeypatch.setattr(planner_tools, "recover_stale_plans", _fake_recover)
+        monkeypatch.setattr(
+            planner_tools, "recover_stale_plans", _fake_recover
+        )
 
         orchestrator = Orchestrator()
         orchestrator.load_state()
+        orchestrator._recover_stale_plans()
 
         assert called["value"] is True
         schedule = orchestrator.schedules["planner"]
@@ -269,9 +285,15 @@ class TestOrchestrator:
         assert calls["forks"] == 1
         assert result["forked"] == ["executor"]
 
-    def test_run_agent_inline_ignores_daemon_running_slots(self, monkeypatch):
+    def test_run_agent_inline_ignores_daemon_running_slots(
+        self, tmp_path, monkeypatch
+    ):
         import asyncio
         import importlib
+
+        monkeypatch.setattr(
+            orchestrator_module, "_STATE_FILE", tmp_path / ".orchestrator.json"
+        )
 
         orchestrator = Orchestrator()
         orchestrator.running["executor"] = [
@@ -297,16 +319,24 @@ class TestOrchestrator:
 
         class _FakeModule:
             @staticmethod
-            async def run(task: str):
+            async def run(task: str, task_context: dict | None = None):
                 return f"ok:{task}"
 
-        monkeypatch.setattr(importlib, "import_module", lambda _name: _FakeModule)
+        monkeypatch.setattr(
+            importlib, "import_module", lambda _name: _FakeModule
+        )
 
         result = asyncio.run(orchestrator.run_agent("executor", "inline"))
         assert result["error"] is None
         assert result["result"] == "ok:inline"
 
-    def test_stop_agent_returns_instance_details_and_release_counts(self, monkeypatch):
+    def test_stop_agent_returns_instance_details_and_release_counts(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(
+            orchestrator_module, "_STATE_FILE", tmp_path / ".orchestrator.json"
+        )
+
         orchestrator = Orchestrator(
             schedules={
                 "executor": AgentSchedule(
@@ -336,7 +366,9 @@ class TestOrchestrator:
         monkeypatch.setattr(
             orchestrator_module, "_is_process_alive", lambda _pid: False
         )
-        monkeypatch.setattr(orchestrator_module.os, "killpg", lambda _pgid, _sig: None)
+        monkeypatch.setattr(
+            orchestrator_module.os, "killpg", lambda _pgid, _sig: None
+        )
         monkeypatch.setattr(orchestrator_module.os, "getpgid", lambda pid: pid)
         monkeypatch.setattr(orchestrator_module.time, "sleep", lambda _s: None)
 
@@ -349,7 +381,9 @@ class TestOrchestrator:
                 "count": 1,
             }
 
-        monkeypatch.setattr(planner_tools, "release_plans_for_pid", _fake_release)
+        monkeypatch.setattr(
+            planner_tools, "release_plans_for_pid", _fake_release
+        )
 
         result = orchestrator.stop_agent("executor")
 
@@ -361,7 +395,8 @@ class TestOrchestrator:
             202,
         }
         assert all(
-            entry["released_plan_count"] == 1 for entry in result["stopped_instances"]
+            entry["released_plan_count"] == 1
+            for entry in result["stopped_instances"]
         )
         assert released_calls == [101, 202]
 
@@ -385,7 +420,8 @@ class TestRunLoopHelpers:
             "result": {
                 "status": "no_eligible_plans",
                 "message": (
-                    "No eligible pending plans found. " "You must exit immediately."
+                    "No eligible pending plans found. "
+                    "You must exit immediately."
                 ),
             },
             "error": "",

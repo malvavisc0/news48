@@ -1,4 +1,4 @@
-# Skill: run-command
+# Skill: Run plan commands safely
 
 ## Trigger
 Always active — executor transforms plan prose into CLI commands.

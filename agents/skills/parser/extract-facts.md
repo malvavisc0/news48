@@ -1,4 +1,4 @@
-# Skill: extract-facts
+# Skill: Extract source-supported facts
 
 ## Trigger
 Always active — parser must extract only explicit source evidence.

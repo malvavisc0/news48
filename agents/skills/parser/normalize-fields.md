@@ -1,4 +1,4 @@
-# Skill: normalize-fields
+# Skill: Normalize parsed fields
 
 ## Trigger
 Always active — parser must enforce canonical taxonomy.

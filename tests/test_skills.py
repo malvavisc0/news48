@@ -24,14 +24,18 @@ def test_skill_registry_all_have_valid_agents():
     valid_agents = {"planner", "executor", "parser", "monitor"}
     for skill_id, skill in SKILL_REGISTRY.items():
         for agent in skill.agents:
-            assert agent in valid_agents, f"Skill {skill_id} has invalid agent: {agent}"
+            assert (
+                agent in valid_agents
+            ), f"Skill {skill_id} has invalid agent: {agent}"
 
 
 def test_skill_registry_all_have_file():
     """Every skill has a non-empty file path."""
     for skill_id, skill in SKILL_REGISTRY.items():
         assert skill.file, f"Skill {skill_id} has empty file"
-        assert skill.file.endswith(".md"), f"Skill {skill_id} file does not end in .md"
+        assert skill.file.endswith(
+            ".md"
+        ), f"Skill {skill_id} file does not end in .md"
 
 
 def test_skill_registry_no_duplicate_ids():
@@ -45,7 +49,6 @@ def test_plan_family_skills_covers_all_families():
     expected_families = {
         "fetch",
         "download",
-        "parse",
         "fact-check",
         "retention",
         "cleanup",
@@ -92,7 +95,9 @@ def test_shared_skills_available_to_all_agents():
 
 def test_skill_matches_condition_always_true():
     """Always skills match any condition."""
-    skill = SkillDef(id="test", file="test.md", agents=("executor",), always=True)
+    skill = SkillDef(
+        id="test", file="test.md", agents=("executor",), always=True
+    )
     assert _skill_matches_condition(skill, {}) is True
     assert _skill_matches_condition(skill, {"any": "value"}) is True
 
@@ -120,8 +125,12 @@ def test_skill_matches_condition_compound_key():
         always=False,
         condition_key="plan_family:fact-check",
     )
-    assert _skill_matches_condition(skill, {"plan_family": "fact-check"}) is True
-    assert _skill_matches_condition(skill, {"plan_family": "download"}) is False
+    assert (
+        _skill_matches_condition(skill, {"plan_family": "fact-check"}) is True
+    )
+    assert (
+        _skill_matches_condition(skill, {"plan_family": "download"}) is False
+    )
     assert _skill_matches_condition(skill, {}) is False
 
 
@@ -173,7 +182,9 @@ def test_get_skills_for_agent_excludes_other_agents():
 
 def test_get_skills_for_agent_includes_conditional_when_matched():
     """Conditional skills are included when condition matches."""
-    skills = set(_get_skills_for_agent("executor", {"plan_family": "fact-check"}))
+    skills = set(
+        _get_skills_for_agent("executor", {"plan_family": "fact-check"})
+    )
     assert (
         "run-fact-check" in skills
     ), "run-fact-check should be included for fact-check family"
@@ -181,7 +192,9 @@ def test_get_skills_for_agent_includes_conditional_when_matched():
 
 def test_get_skills_for_agent_excludes_conditional_when_not_matched():
     """Conditional skills are excluded when condition does not match."""
-    skills = set(_get_skills_for_agent("executor", {"plan_family": "download"}))
+    skills = set(
+        _get_skills_for_agent("executor", {"plan_family": "download"})
+    )
     assert (
         "run-fact-check" not in skills
     ), "run-fact-check should not be included for download family"
@@ -189,17 +202,12 @@ def test_get_skills_for_agent_excludes_conditional_when_not_matched():
 
 def test_get_skills_for_agent_uses_plan_family_skills_for_download():
     """PLAN_FAMILY_SKILLS correctly loads run-waves for download family."""
-    skills = set(_get_skills_for_agent("executor", {"plan_family": "download"}))
-    assert "run-waves" in skills, (
-        "run-waves should be included for download family " "via PLAN_FAMILY_SKILLS"
+    skills = set(
+        _get_skills_for_agent("executor", {"plan_family": "download"})
     )
-
-
-def test_get_skills_for_agent_uses_plan_family_skills_for_parse():
-    """PLAN_FAMILY_SKILLS correctly loads run-waves for parse family."""
-    skills = set(_get_skills_for_agent("executor", {"plan_family": "parse"}))
     assert "run-waves" in skills, (
-        "run-waves should be included for parse family " "via PLAN_FAMILY_SKILLS"
+        "run-waves should be included for download family "
+        "via PLAN_FAMILY_SKILLS"
     )
 
 
@@ -207,7 +215,8 @@ def test_get_skills_for_agent_uses_plan_family_skills_for_cleanup():
     """PLAN_FAMILY_SKILLS correctly loads run-cleanup for cleanup family."""
     skills = set(_get_skills_for_agent("executor", {"plan_family": "cleanup"}))
     assert "run-cleanup" in skills, (
-        "run-cleanup should be included for cleanup family " "via PLAN_FAMILY_SKILLS"
+        "run-cleanup should be included for cleanup family "
+        "via PLAN_FAMILY_SKILLS"
     )
 
 
@@ -239,20 +248,24 @@ def test_compose_includes_shared_skills():
 
 def test_compose_executor_with_fact_check_includes_run_fact_check():
     """Executor with fact-check plan_family includes run-fact-check skill."""
-    result = compose_agent_instructions("executor", {"plan_family": "fact-check"})
+    result = compose_agent_instructions(
+        "executor", {"plan_family": "fact-check"}
+    )
     assert "# Skill: run-fact-check" in result
 
 
 def test_compose_executor_with_download_includes_run_waves():
     """Executor with download plan_family includes run-waves skill."""
-    result = compose_agent_instructions("executor", {"plan_family": "download"})
+    result = compose_agent_instructions(
+        "executor", {"plan_family": "download"}
+    )
     assert "# Skill: run-waves" in result
 
 
 def test_compose_executor_with_parse_includes_run_waves():
-    """Executor with parse plan_family includes run-waves skill."""
+    """Executor with parse plan_family does not load parser-specific skills."""
     result = compose_agent_instructions("executor", {"plan_family": "parse"})
-    assert "# Skill: run-waves" in result
+    assert "# Skill: run-waves" not in result
 
 
 def test_compose_executor_with_cleanup_includes_run_cleanup():
@@ -283,6 +296,21 @@ def test_compose_monitor_with_healthy_excludes_send_email():
     """Monitor with HEALTHY status does NOT include send-email skill."""
     result = compose_agent_instructions("monitor", {"status": "HEALTHY"})
     assert "# Skill: send-email" not in result
+
+
+def test_compose_monitor_without_email_config_excludes_send_email():
+    """Monitor omits send-email when email is not configured."""
+    result = compose_agent_instructions("monitor", {"email_configured": False})
+    assert "# Skill: send-email" not in result
+
+
+def test_compose_monitor_with_email_config_and_warning_includes_send_email():
+    """Monitor includes send-email when email is configured and needed."""
+    result = compose_agent_instructions(
+        "monitor",
+        {"email_configured": True, "status": "WARNING"},
+    )
+    assert "# Skill: send-email" in result
 
 
 def test_compose_planner_empty_context_loads_core():

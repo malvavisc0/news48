@@ -73,7 +73,8 @@ async def _parse(article_id: int, *, force: bool = False) -> dict:
         return {
             "id": article_id,
             "success": False,
-            "error": f"Article {article_id} has no content. " "Download it first.",
+            "error": f"Article {article_id} has no content. "
+            "Download it first.",
         }
     if article.get("parsed_at") and not force:
         return {
@@ -109,20 +110,18 @@ async def _parse(article_id: int, *, force: bool = False) -> dict:
     try:
         tmp_path = _get_temp_file_path(article["content"])
 
-        task = (
-            f"\nParse the following article.\n"
-            f"--------------------------------------\n"
-            f"Article ID: {article['id']}\n"
-            f"Title: {article['title']}\n"
-            f"HTML file path: {tmp_path}\n"
-            f"URL: {article['url']}\n"
-            f"--------------------------------------\n"
+        task = "\n".join(
+            [
+                "Parse the following article.",
+                "Article ID: " + str(article["id"]),
+                "Title: " + str(article["title"]),
+                "HTML file path: " + tmp_path,
+                "URL: " + str(article["url"]),
+            ]
         )
         status_msg(f"Parsing: {article['title']}")
 
-        # Delegate to parser agent's run() which uses run_agent()
-        # from _run.py — same pattern as planner/executor.
-        # Tool events are logged, agent text streams to stdout.
+        # Delegate to the parser agent for this explicitly claimed article.
         await run_parser(task)
 
         # Verify the agent actually updated the article
@@ -247,7 +246,9 @@ def parse(
     init_database(db_path)
 
     if retry:
-        candidates = get_parse_failed_articles(db_path, limit, feed_domain=feed)
+        candidates = get_parse_failed_articles(
+            db_path, limit, feed_domain=feed
+        )
         if not candidates:
             status_msg("No failed articles found to retry")
             data = {
@@ -321,4 +322,7 @@ def parse(
     if output_json:
         emit_json(data)
     else:
-        print(f"Parsed {parsed} of {len(candidates)} " f"articles, {failed} failed")
+        print(
+            f"Parsed {parsed} of {len(candidates)} "
+            f"articles, {failed} failed"
+        )

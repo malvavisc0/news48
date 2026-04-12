@@ -1,4 +1,4 @@
-# Skill: plan-retry
+# Skill: Create retry plans for failed work
 
 ## Trigger
 Conditional — active when failed backlog exists.

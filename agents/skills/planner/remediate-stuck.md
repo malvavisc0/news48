@@ -1,4 +1,4 @@
-# Skill: remediate-stuck
+# Skill: Fix stuck plan queues
 
 ## Trigger
 Conditional — active when stale or requeued plans detected.

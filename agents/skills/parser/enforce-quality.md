@@ -1,4 +1,4 @@
-# Skill: enforce-quality
+# Skill: Enforce parser quality
 
 ## Trigger
 Always active — parser must block low-quality or invented output.

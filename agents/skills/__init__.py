@@ -11,11 +11,13 @@ File Layout:
     │   ├── use-json-output.md
     │   ├── gather-evidence.md
     │   ├── verify-outcomes.md
-    │   └── fail-safely.md
+    │   ├── fail-safely.md
+    │   └── cli-reference.md
     ├── planner/
     │   ├── begin-planning-cycle.md
     │   ├── prioritize-goals.md
     │   ├── deduplicate-plans.md
+    │   ├── read-db-state.md
     │   ├── write-conditions.md
     │   ├── build-plan.md
     │   ├── throughput-emergency.md
@@ -56,6 +58,7 @@ File Layout:
 """
 
 from dataclasses import dataclass
+from os import getenv
 from pathlib import Path
 
 
@@ -74,7 +77,6 @@ class SkillDef:
 PLAN_FAMILY_SKILLS: dict[str, list[str]] = {
     "fetch": ["run-waves"],
     "download": ["run-waves"],
-    "parse": ["run-waves"],
     "fact-check": ["run-fact-check"],
     "retention": ["run-cleanup"],
     "cleanup": ["run-cleanup"],
@@ -112,6 +114,12 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
         agents=("planner", "executor", "parser", "monitor"),
         always=True,
     ),
+    "cli-reference": SkillDef(
+        id="cli-reference",
+        file="shared/cli-reference.md",
+        agents=("planner", "executor", "parser", "monitor"),
+        always=True,
+    ),
     # -------------------------------------------------------------------------
     # Planner skills
     # -------------------------------------------------------------------------
@@ -130,6 +138,12 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
     "deduplicate-plans": SkillDef(
         id="deduplicate-plans",
         file="planner/deduplicate-plans.md",
+        agents=("planner",),
+        always=True,
+    ),
+    "read-db-state": SkillDef(
+        id="read-db-state",
+        file="planner/read-db-state.md",
         agents=("planner",),
         always=True,
     ),
@@ -425,6 +439,16 @@ def _get_skills_for_agent(agent_name: str, task_context: dict) -> list[str]:
     return skill_ids
 
 
+def _email_is_configured() -> bool:
+    """Return True when monitor email delivery is fully configured."""
+    return bool(
+        getenv("SMTP_HOST", "")
+        and getenv("SMTP_USER", "")
+        and getenv("SMTP_PASS", "")
+        and getenv("MONITOR_EMAIL_TO", "")
+    )
+
+
 def compose_agent_instructions(
     agent_name: str,
     task_context: dict,
@@ -439,15 +463,34 @@ def compose_agent_instructions(
     Returns:
         A single string containing the composed system prompt.
     """
+    ctx = dict(task_context)
+    if agent_name == "monitor":
+        ctx.setdefault("email_configured", _email_is_configured())
+
     # 1. Read base prompt
     base_prompt_path = _SKILLS_DIR.parent / "instructions" / f"{agent_name}.md"
     if base_prompt_path.exists():
         base_prompt = base_prompt_path.read_text(encoding="utf-8")
     else:
-        base_prompt = f"# {agent_name.capitalize()} Agent\n\n(No base prompt found.)"
+        base_prompt = (
+            f"# {agent_name.capitalize()} Agent\n\n(No base prompt found.)"
+        )
+
+    if agent_name == "monitor":
+        if ctx.get("email_configured"):
+            base_prompt = (
+                base_prompt.rstrip()
+                + "\n\nEmail delivery is available in this environment."
+            )
+        else:
+            base_prompt = (
+                base_prompt.rstrip()
+                + "\n\nEmail delivery is not configured in this environment. "
+                + "Do not attempt to send email."
+            )
 
     # 2. Get skill IDs to include
-    skill_ids = _get_skills_for_agent(agent_name, task_context)
+    skill_ids = _get_skills_for_agent(agent_name, ctx)
 
     # 3. Read and concatenate skill files
     skill_contents: list[str] = []

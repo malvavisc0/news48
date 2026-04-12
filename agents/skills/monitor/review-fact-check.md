@@ -1,4 +1,4 @@
-# Skill: review-fact-check
+# Skill: Review fact-check coverage
 
 ## Trigger
 Always active — monitor must surface fact-check backlog drift.

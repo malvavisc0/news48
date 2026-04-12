@@ -1,4 +1,4 @@
-# Skill: generate-alerts
+# Skill: Generate monitoring alerts
 
 ## Trigger
 Conditional — active when threshold is breached.

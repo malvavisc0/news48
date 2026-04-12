@@ -258,13 +258,13 @@ Each active runtime agent uses a specific subset of tools:
 |-------|-------|---------|
 | **Planner** | `run_shell_command`, `read_file`, `get_system_info`, `create_plan`, `update_plan`, `list_plans` | Gather evidence, detect gaps, create minimal executable plans, avoid duplicate work |
 | **Executor** | `claim_plan`, `update_plan`, `run_shell_command`, `read_file`, `get_system_info`, `perform_web_search`, `fetch_webpage_content` | Claim and execute one pending plan, verify success conditions, perform fact-check evidence lookups |
-| **Monitor** | `run_shell_command`, `read_file`, `get_system_info`, `send_email` | Gather metrics, classify alerts, and deliver WARNING or CRITICAL monitoring reports |
-| **Parser** *(sub-agent)* | `run_shell_command` (own), `read_file` (own) | Parse HTML article input and update article metadata and content |
+| **Monitor** | `run_shell_command`, `read_file`, `get_system_info`, `send_email` | Gather metrics, classify alerts, and deliver reports when email is configured |
+| **Parser** | `run_shell_command`, `read_file` | Claim downloaded articles from the database, parse one claimed article at a time, update the article, and release the claim |
 
 ### Design Notes
 
 - **Planner is plan-authoring only**: it never claims or executes plans; it focuses on evidence-driven plan creation and sequencing.
 - **Executor is execution-only**: it does not create plans directly; it claims pending plans and drives steps to completion or failure with verification evidence.
-- **Monitor is read-only for system state**: it does not create or update plans, and sends email only when policy requires it.
+- **Monitor is read-only for system state**: it does not create or update plans, and sends email only when configuration is available and the current run requires it.
 - **Fact-checking is executed by Executor**: fact-check work is produced by Planner plans and executed through Executor tool access to search and page fetch tools.
-- **Parser remains a sub-agent**: it is used by parse flows and is not an orchestrator-scheduled top-level agent.
+- **Parser is autonomous and DB-claim based**: it is scheduler-driven, does not use plan files, and prevents duplicate parse work by claiming articles in the database before parsing.

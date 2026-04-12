@@ -1,4 +1,4 @@
-# Skill: adapt-to-type
+# Skill: Adapt parsing to article type
 
 ## Trigger
 Conditional — active for non-standard article types.

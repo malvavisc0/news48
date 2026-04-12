@@ -550,7 +550,7 @@ uv run news48 logs list --agent executor --limit 20 --json
 
 ## Autonomous Agents and Scheduling
 
-The news48 system uses LlamaIndex `FunctionAgent` instances for autonomous planning, execution, and monitoring. All agents share a consistent interface: `get_agent()` returns the configured agent, and `run(task)` executes it with a task prompt.
+The news48 system uses LlamaIndex `FunctionAgent` instances for autonomous planning, execution, parsing, and monitoring. All agents share a consistent interface: `get_agent()` returns the configured agent, and the runtime invokes the appropriate run entrypoint for the agent's mode.
 
 ### Check Agent Status
 
@@ -571,6 +571,7 @@ uv run news48 agents run
 # Run specific agent
 uv run news48 agents run --agent planner
 uv run news48 agents run --agent executor
+uv run news48 agents run --agent parser
 uv run news48 agents run --agent monitor
 
 # Run agent with custom task prompt
@@ -591,16 +592,23 @@ uv run news48 agents run --agent monitor --json
 
 #### Executor Agent
 - Claims one eligible pending plan and executes steps in order
-- Runs fetch/download/parse in background waves where required
+- Runs plan work and final verification without creating plans
 - Performs final verification against plan success conditions
 - Marks each plan completed or failed with evidence
+
+#### Parser Agent
+- Runs on its own schedule and does not consume plan files
+- Claims eligible downloaded articles directly from the database
+- Parses one claimed article at a time from the standard parser task payload
+- Updates the article record and releases the claim when done
+- Prevents duplicate parse work across concurrent parser processes
 
 #### Monitor Agent
 - Intelligent system health observation with LLM reasoning
 - Gathers metrics via CLI, reasons about patterns and anomalies
 - Generates alerts with severity classification (info/warning/critical)
 - Suggests concrete corrective actions
-- Read-only (no side effects)
+- Read-only except optional email delivery when configured
 
 Fact-checking is executed by the Executor when the Planner creates fact-check plans. It is not a separate scheduled agent in the current architecture.
 
@@ -611,15 +619,15 @@ Fact-checking is executed by the Executor when the Planner creates fact-check pl
               (Python dispatcher, NOT an LLM agent)
               Runs agents on a schedule
                          |
-         ┌───────────┬───┴───┬───────────┐
-         |           |       |
-         v           v       v
-  ┌──────────┐ ┌──────────┐ ┌──────────┐
-  | Planner  | | Executor | | Monitor  |
-  | (Plans)  | | (Worker) | |(Observer)|
-  └──────────┘ └──────────┘ └──────────┘
-         |           |       |
-         v           v       v
+         ┌───────────┬──────────┬──────────┬───────────┐
+         |           |          |          |
+         v           v          v          v
+  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+  | Planner  | | Executor | |  Parser  | | Monitor  |
+  | (Plans)  | | (Worker) | | (Parser) | |(Observer)|
+  └──────────┘ └──────────┘ └──────────┘ └──────────┘
+         |           |          |          |
+         v           v          v          v
   ┌──────────────────────────────────────────────────┐
   │             Shared Tool Library                   │
   │  shell / files / planner / search / bypass / sys  │
@@ -634,7 +642,8 @@ The orchestrator runs agents on a schedule:
 
 - **Planner**: Every 1 minute
 - **Executor**: Every 1 minute
-- **Monitor**: Every 24 hours
+- **Parser**: Every 1 minute
+- **Monitor**: Every 120 minutes
 
 > **Note**: Agent schedules are currently configured in code. A future
 > enhancement will add persistent schedule management via CLI commands.
@@ -643,9 +652,9 @@ The orchestrator runs agents on a schedule:
 
 | Operation | Manual CLI Command | Autonomous Agent |
 |-----------|-------------------|------------------|
-| Run recurring pipeline cycle | `uv run news48 fetch && uv run news48 download --limit 10 && uv run news48 parse --limit 10 && uv run news48 cleanup run` | Planner + Executor loop |
+| Run recurring pipeline cycle | `uv run news48 fetch && uv run news48 download --limit 10 && uv run news48 parse --limit 10 && uv run news48 cleanup run` | Planner + Executor + Parser loop |
 | Purge old articles | `uv run news48 cleanup purge --force` | Executor via explicit cleanup plan steps |
-| Check database health | `uv run news48 cleanup health` | Monitor Agent (every 24h) |
+| Check database health | `uv run news48 cleanup health` | Monitor Agent (every 120m) |
 | View retention status | `uv run news48 cleanup status` | Monitor Agent (alerts) |
 | View system stats | `uv run news48 stats` | Monitor Agent report context |
 | Read stored article content | `uv run news48 articles content <id> --json` | Executor during fact-check plan execution |
@@ -693,12 +702,13 @@ uv run news48 cleanup purge --dry-run
 uv run news48 cleanup health
 ```
 
-Or run the entire pipeline autonomously:
+Or run the agent system autonomously:
 
 ```bash
-# Run Planner then Executor explicitly
+# Run specific roles explicitly
 uv run news48 agents run --agent planner
 uv run news48 agents run --agent executor
+uv run news48 agents run --agent parser
 
 # Or let the Orchestrator handle it on schedule
 uv run news48 agents run
@@ -713,4 +723,5 @@ uv run news48 agents run
 - Review [pyproject.toml](../pyproject.toml) for project dependencies
 - See [Planner Agent Instructions](../agents/instructions/planner.md) for planning details
 - See [Executor Agent Instructions](../agents/instructions/executor.md) for execution details
+- See [Parser Agent Instructions](../agents/instructions/parser.md) for parsing details
 - See [Monitor Agent Instructions](../agents/instructions/monitor.md) for monitoring details

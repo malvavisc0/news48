@@ -1,6 +1,6 @@
 # 🗞️ news48
 
-Autonomous news ingestion and verification pipeline with a planner-executor-monitor agent loop ⚙️
+Autonomous news ingestion and verification pipeline with planner, executor, parser, and monitor agents ⚙️
 
  `news48` collects feed entries, downloads article pages, parses structured content with an LLM, applies retention policy, and continuously coordinates recurring work through scheduled agents.
 
@@ -10,26 +10,27 @@ Autonomous news ingestion and verification pipeline with a planner-executor-moni
 - 🔄 Article lifecycle pipeline: fetch -> download -> parse
 - 🧪 Fact-check workflow support with verdict storage
 - 🧹 Retention and database health tooling
-- 🤖 Autonomous orchestration with planner, executor, and monitor agents
+- 🤖 Autonomous orchestration with planner, executor, parser, and monitor agents
 
 ## 🧠 Active autonomous architecture
 
- The current runtime model uses three scheduled agents:
+ The current runtime model uses four scheduled agents:
 
  - `planner`: detects gaps and creates executable plans
- - `executor`: claims one plan, executes steps, verifies outcomes
- - `monitor`: gathers health metrics and emits alerts and reports
+ - `executor`: claims one plan, executes steps, and verifies outcomes
+ - `parser`: claims downloaded articles from the database and parses them autonomously
+ - `monitor`: gathers health metrics, classifies status, and emits reports
 
  ```text
                     Orchestrator
                   agents start daemon
                           |
-             +------------+------------+
-             |            |            |
-          Planner      Executor      Monitor
-           plans         runs        observes
-             |            |            |
-             +------------+------------+
+        +---------+---------+---------+---------+
+        |         |         |         |         |
+     Planner   Executor   Parser    Monitor
+      plans      runs     parses    observes
+        |         |         |         |
+        +---------+---------+---------+
                           |
                  news48 CLI and tools
  ```
@@ -100,6 +101,7 @@ One-shot runs ⚡:
  ```bash
  uv run news48 agents run --agent planner
  uv run news48 agents run --agent executor
+ uv run news48 agents run --agent parser
  uv run news48 agents run --agent monitor
  ```
 
@@ -121,7 +123,8 @@ Status and control 🧭:
 
  - planner: every 1 minute
  - executor: every 1 minute
- - monitor: every 1440 minutes
+ - parser: every 1 minute
+ - monitor: every 120 minutes
 
  See schedule source in `agents/schedules.py`.
 
@@ -132,6 +135,7 @@ Status and control 🧭:
  - Agent tool inventory: `docs/agents-tools-inventory.md`
  - Planner instructions: `agents/instructions/planner.md`
  - Executor instructions: `agents/instructions/executor.md`
+ - Parser instructions: `agents/instructions/parser.md`
  - Monitor instructions: `agents/instructions/monitor.md`
 
 ## 🧬 Development and tests

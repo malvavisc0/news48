@@ -1,4 +1,4 @@
-# Skill: run-db-health
+# Skill: Execute database health plans
 
 ## Trigger
 Active when plan family is db-health.

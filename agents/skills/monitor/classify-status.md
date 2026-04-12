@@ -1,4 +1,4 @@
-# Skill: classify-status
+# Skill: Classify current system status
 
 ## Trigger
 Always active — monitor must derive HEALTHY/WARNING/CRITICAL without subjectivity.

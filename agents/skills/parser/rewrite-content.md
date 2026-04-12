@@ -1,4 +1,4 @@
-# Skill: rewrite-content
+# Skill: Rewrite content faithfully
 
 ## Trigger
 Always active — parser must produce simplified but faithful content.

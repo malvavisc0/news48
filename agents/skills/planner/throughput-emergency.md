@@ -1,4 +1,4 @@
-# Skill: throughput-emergency
+# Skill: Respond to throughput emergencies
 
 ## Trigger
 Conditional — active when backlog > 200 and non-improving.

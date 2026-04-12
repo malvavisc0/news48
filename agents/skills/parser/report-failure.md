@@ -1,4 +1,4 @@
-# Skill: report-failure
+# Skill: Report parsing failure clearly
 
 ## Trigger
 Conditional — active when quality gate or fidelity failure occurs.

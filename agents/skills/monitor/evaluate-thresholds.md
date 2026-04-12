@@ -1,4 +1,4 @@
-# Skill: evaluate-thresholds
+# Skill: Evaluate health thresholds
 
 ## Trigger
 Always active — monitor must compare metrics against thresholds.

@@ -1,4 +1,4 @@
-# Skill: run-fact-check
+# Skill: Execute fact-check plans
 
 ## Trigger
 Active when plan family is fact-check.

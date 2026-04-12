@@ -1,4 +1,4 @@
-# Skill: use-json-output
+# Skill: require JSON command output
 
 ## Trigger
 Always active — all agents must use structured JSON output.

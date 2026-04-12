@@ -1,4 +1,4 @@
-# Skill: claim-plan
+# Skill: Claim one eligible plan
 
 ## Trigger
 Always active — executor must claim exactly one plan per session.

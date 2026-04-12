@@ -1,4 +1,4 @@
-# Skill: compute-rates
+# Skill: Compute operational rates
 
 ## Trigger
 Always active — monitor must apply fixed formulas for failure rates.

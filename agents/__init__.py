@@ -5,6 +5,7 @@ from .monitor import run as run_monitor
 from .orchestrator import Orchestrator
 from .parser import get_agent as get_news_parser_agent
 from .parser import run as run_parser
+from .parser import run_autonomous as run_autonomous_parser
 from .planner import get_agent as get_planner_agent
 from .planner import run as run_planner
 
@@ -14,6 +15,7 @@ __all__ = [
     "get_monitor_agent",
     "get_news_parser_agent",
     "get_planner_agent",
+    "run_autonomous_parser",
     "run_executor",
     "run_monitor",
     "run_parser",

@@ -1,4 +1,4 @@
-# Skill: manage-steps
+# Skill: Update step progress accurately
 
 ## Trigger
 Always active — executor must safely manage step transitions.

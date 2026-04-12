@@ -1,4 +1,4 @@
-# Skill: run-retry
+# Skill: Execute retry plans
 
 ## Trigger
 Active when plan family is retry.

@@ -1,4 +1,4 @@
-# Skill: begin-monitoring-cycle
+# Skill: Start monitoring with evidence
 
 ## Trigger
 Always active — monitor must gather baseline metrics first.

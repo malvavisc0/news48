@@ -1,4 +1,4 @@
-# Skill: add-steps
+# Skill: Add execution steps when required
 
 ## Trigger
 Active when plan requires discovery of additional work.

@@ -6,6 +6,7 @@ Supports two modes:
   as an independent subprocess and tracking its outcome.
 """
 
+import importlib
 import json
 import logging
 import os
@@ -13,6 +14,7 @@ import signal
 import subprocess
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, cast
 
 from agents.schedules import (
@@ -27,6 +29,30 @@ from agents.schedules import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Default command prefix for forking agent subprocesses.
+# Override via the ORCHESTRATOR_CMD_PREFIX environment variable
+# (space-separated, e.g. "python -m news48").
+_DEFAULT_CMD_PREFIX = ["uv", "run", "news48"]
+
+_AGENT_MODULES = {
+    "planner": "agents.planner",
+    "executor": "agents.executor",
+    "parser": "agents.parser",
+    "monitor": "agents.monitor",
+}
+
+
+def _get_cmd_prefix() -> List[str]:
+    """Return the command prefix used to fork agent subprocesses.
+
+    Reads ``ORCHESTRATOR_CMD_PREFIX`` from the environment; falls back
+    to ``["uv", "run", "news48"]``.
+    """
+    override = os.environ.get("ORCHESTRATOR_CMD_PREFIX", "").strip()
+    if override:
+        return override.split()
+    return list(_DEFAULT_CMD_PREFIX)
 
 
 class Orchestrator:
@@ -51,6 +77,10 @@ class Orchestrator:
         }
         self.running: Dict[str, List[RunningAgent]] = {}
 
+    # ------------------------------------------------------------------
+    # State persistence
+    # ------------------------------------------------------------------
+
     def load_state(self) -> None:
         """Load schedule state from ``.orchestrator.json``.
 
@@ -61,56 +91,69 @@ class Orchestrator:
         Handles both legacy (single-dict) and current (list) formats
         for the ``running`` section.
         """
-        if _STATE_FILE.exists():
-            try:
-                data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError) as exc:
-                logger.warning(f"Could not load state: {exc}")
-                data = {}
+        if not _STATE_FILE.exists():
+            return
 
-            # Restore schedule state
-            for name, sched_data in data.get("schedules", {}).items():
-                if name in self.schedules:
-                    self.schedules[name].last_run = sched_data.get("last_run")
-                    self.schedules[name].last_result = sched_data.get("last_result")
-                    self.schedules[name].last_error = sched_data.get("last_error")
+        try:
+            data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Could not load state: %s", exc)
+            return
 
-            # Restore running agent records (processes are gone after restart,
-            # but we mark them as failed-unknown so we know they didn't finish)
-            for name, run_data in data.get("running", {}).items():
-                # Support both legacy (dict) and current (list) formats
-                entries = run_data if isinstance(run_data, list) else [run_data]
-                for entry in entries:
-                    pid = entry.get("pid", 0)
-                    if not _is_process_alive(pid):
-                        # Process is gone -- mark as completed with unknown
-                        if name in self.schedules:
-                            self.schedules[name].last_run = entry.get("started_at")
-                            self.schedules[name].last_result = "unknown"
-                            self.schedules[name].last_error = (
-                                "Process disappeared " "(orchestrator restarted?)"
-                            )
-                    else:
-                        # Process is still running from a previous session
-                        self.running.setdefault(name, []).append(
-                            RunningAgent(
-                                pid=pid,
-                                agent_name=name,
-                                started_at=entry.get("started_at", ""),
-                                log_file=entry.get("log_file", ""),
-                            )
+        # Restore schedule state
+        for name, sched_data in data.get("schedules", {}).items():
+            if name in self.schedules:
+                self.schedules[name].last_run = sched_data.get("last_run")
+                self.schedules[name].last_result = sched_data.get(
+                    "last_result"
+                )
+                self.schedules[name].last_error = sched_data.get("last_error")
+
+        # Restore running agent records (processes are gone after restart,
+        # but we mark them as failed-unknown so we know they didn't finish)
+        for name, run_data in data.get("running", {}).items():
+            # Support both legacy (dict) and current (list) formats
+            entries = run_data if isinstance(run_data, list) else [run_data]
+            for entry in entries:
+                pid = entry.get("pid", 0)
+                if not _is_process_alive(pid):
+                    # Process is gone -- mark as completed with unknown
+                    if name in self.schedules:
+                        self.schedules[name].last_run = entry.get("started_at")
+                        self.schedules[name].last_result = "unknown"
+                        self.schedules[name].last_error = (
+                            "Process disappeared " "(orchestrator restarted?)"
                         )
+                else:
+                    # Process is still running from a previous session
+                    self.running.setdefault(name, []).append(
+                        RunningAgent(
+                            pid=pid,
+                            agent_name=name,
+                            started_at=entry.get("started_at", ""),
+                            log_file=entry.get("log_file", ""),
+                        )
+                    )
 
-        # Autonomous recovery pass: normalize/requeue stale executing plans
-        # immediately on orchestrator startup.
+    def _recover_stale_plans(self) -> None:
+        """Run an autonomous recovery pass for stale executing plans.
+
+        Normalises and requeues plans that were left in ``executing``
+        status after an orchestrator crash or restart.  Separated from
+        :meth:`load_state` for clarity and testability.
+        """
         try:
             from agents.tools.planner import recover_stale_plans
 
             payload = json.loads(
-                recover_stale_plans("Orchestrator startup recovery after restart")
+                recover_stale_plans(
+                    "Orchestrator startup recovery after restart"
+                )
             )
             if payload.get("error"):
-                logger.warning("Plan recovery pass failed: %s", payload["error"])
+                logger.warning(
+                    "Plan recovery pass failed: %s", payload["error"]
+                )
             else:
                 result = payload.get("result", {})
                 logger.info(
@@ -150,7 +193,11 @@ class Orchestrator:
                 encoding="utf-8",
             )
         except OSError as exc:
-            logger.error(f"Could not save state: {exc}")
+            logger.error("Could not save state: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Scheduling helpers
+    # ------------------------------------------------------------------
 
     def _should_run(self, schedule: AgentSchedule) -> bool:
         """Check if an agent should run based on its schedule."""
@@ -179,28 +226,18 @@ class Orchestrator:
             schedule.last_result = result
             schedule.last_error = error
 
-    async def run_agent(
-        self,
-        name: Literal["planner", "executor", "monitor"],
-        task: str,
-    ) -> Dict[str, Any]:
-        """Run a specific agent inline (one-shot mode)."""
-        _AGENT_MODULES = {
-            "planner": "agents.planner",
-            "executor": "agents.executor",
-            "monitor": "agents.monitor",
-        }
-        if name not in _AGENT_MODULES:
-            return {
-                "agent": name,
-                "result": None,
-                "error": f"Unknown agent: {name}",
-            }
+    # ------------------------------------------------------------------
+    # One-shot (inline) mode
+    # ------------------------------------------------------------------
 
-        # Build task_context for skills composition
+    def _build_task_context(self, name: str) -> dict:
+        """Build the ``task_context`` dict for a given agent.
+
+        Returns an empty dict when no context is applicable.
+        """
         task_context: dict = {}
+
         if name == "executor":
-            # Peek at next plan family to load conditional executor skills
             try:
                 from agents.tools.planner import peek_next_plan
 
@@ -210,21 +247,67 @@ class Orchestrator:
             except Exception as exc:
                 logger.warning("Failed to peek next plan family: %s", exc)
 
-        import importlib
+        elif name == "planner":
+            try:
+                plans_dir = Path(".plans")
+                stale_plans = False
+                if plans_dir.exists():
+                    for plan_file in plans_dir.glob("*.json"):
+                        try:
+                            plan = json.loads(
+                                plan_file.read_text(encoding="utf-8")
+                            )
+                        except (OSError, ValueError):
+                            continue
+                        if plan.get("status") == "executing":
+                            stale_plans = True
+                            break
+                task_context["stale_plans"] = stale_plans
+            except Exception as exc:
+                logger.warning("Failed to build planner task context: %s", exc)
 
+        elif name == "monitor":
+            try:
+                email_ready = bool(
+                    os.getenv("SMTP_HOST", "")
+                    and os.getenv("SMTP_USER", "")
+                    and os.getenv("SMTP_PASS", "")
+                    and os.getenv("MONITOR_EMAIL_TO", "")
+                )
+                task_context["email_configured"] = email_ready
+            except Exception as exc:
+                logger.warning("Failed to build monitor task context: %s", exc)
+
+        return task_context
+
+    async def run_agent(
+        self,
+        name: Literal["planner", "executor", "parser", "monitor"],
+        task: str,
+    ) -> Dict[str, Any]:
+        """Run a specific agent inline (one-shot mode)."""
+        if name not in _AGENT_MODULES:
+            return {
+                "agent": name,
+                "result": None,
+                "error": f"Unknown agent: {name}",
+            }
+
+        task_context = self._build_task_context(name)
         module = importlib.import_module(_AGENT_MODULES[name])
 
         try:
-            # Only pass task_context if non-empty for backward compatibility
-            if task_context:
-                result = await module.run(task, task_context)
+            # Parser uses a dedicated autonomous entry point;
+            # all other agents accept task_context as an optional kwarg.
+            if name == "parser":
+                result = await module.run_autonomous(task)
             else:
-                result = await module.run(task)
+                result = await module.run(task, task_context)
             self._update_schedule(name, "success")
             self.save_state()
             return {"agent": name, "result": result, "error": None}
         except Exception as e:
-            logger.error(f"Agent {name} failed: {e}")
+            logger.error("Agent %s failed: %s", name, e)
             self._update_schedule(name, "error", str(e))
             self.save_state()
             return {"agent": name, "result": None, "error": str(e)}
@@ -243,7 +326,7 @@ class Orchestrator:
                 continue
             result = await self.run_agent(
                 cast(
-                    Literal["planner", "executor", "monitor"],
+                    Literal["planner", "executor", "parser", "monitor"],
                     name,
                 ),
                 schedule.task_prompt,
@@ -257,11 +340,15 @@ class Orchestrator:
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
+    # ------------------------------------------------------------------
+    # Daemon (subprocess) mode
+    # ------------------------------------------------------------------
+
     def fork_agent(self, name: str, task: Optional[str] = None) -> bool:
         """Fork an agent as an independent subprocess.
 
-        Runs ``uv run news48 agents run --agent <name>`` in a new
-        process, redirecting stdout/stderr to a log file.
+        Runs the agent CLI command in a new process, redirecting
+        stdout/stderr to a log file.
 
         Args:
             name: Agent name to fork.
@@ -276,7 +363,10 @@ class Orchestrator:
         if len(instances) >= max_concurrent:
             pids = ", ".join(str(r.pid) for r in instances)
             logger.warning(
-                f"Agent {name} at max concurrency " f"({max_concurrent}): PIDs {pids}"
+                "Agent %s at max concurrency (%d): PIDs %s",
+                name,
+                max_concurrent,
+                pids,
             )
             return False
 
@@ -286,23 +376,17 @@ class Orchestrator:
         # Add instance index to log filename for concurrent agents
         instance_idx = len(instances)
         if max_concurrent > 1:
-            log_file = str(_LOGS_DIR / f"{name}-{timestamp}-{instance_idx}.log")
+            log_file = str(
+                _LOGS_DIR / f"{name}-{timestamp}-{instance_idx}.log"
+            )
         else:
             log_file = str(_LOGS_DIR / f"{name}-{timestamp}.log")
 
-        cmd = [
-            "uv",
-            "run",
-            "news48",
-            "agents",
-            "run",
-            "--agent",
-            name,
-            "--json",
-        ]
+        cmd = _get_cmd_prefix() + ["agents", "run", "--agent", name, "--json"]
         if task:
             cmd.extend(["--task", task])
 
+        log_fh = None
         try:
             log_fh = open(log_file, "w", encoding="utf-8")
             proc = subprocess.Popen(
@@ -312,42 +396,68 @@ class Orchestrator:
                 cwd=os.getcwd(),
                 start_new_session=True,  # Detach from parent
             )
-            log_fh.close()  # Child inherited the fd
-            self.running.setdefault(name, []).append(
-                RunningAgent(
-                    pid=proc.pid,
-                    agent_name=name,
-                    started_at=now.isoformat(),
-                    log_file=log_file,
-                    process=proc,
-                )
-            )
-            logger.info(f"Forked agent {name} as PID {proc.pid} → {log_file}")
-            return True
         except Exception as exc:
-            logger.error(f"Failed to fork agent {name}: {exc}")
+            logger.error("Failed to fork agent %s: %s", name, exc)
             return False
+        finally:
+            # Always close the parent's copy of the log fd; the child
+            # inherited its own via the Popen file descriptor.
+            if log_fh is not None:
+                log_fh.close()
+
+        self.running.setdefault(name, []).append(
+            RunningAgent(
+                pid=proc.pid,
+                agent_name=name,
+                started_at=now.isoformat(),
+                log_file=log_file,
+                process=proc,
+            )
+        )
+
+        # Record the fork time so _should_run() doesn't re-trigger on
+        # the very next tick for non-concurrent agents.
+        self._update_schedule(name, "running")
+
+        logger.info("Forked agent %s as PID %d → %s", name, proc.pid, log_file)
+        return True
 
     def check_running(self) -> Dict[str, Dict[str, Any]]:
         """Poll running agent subprocesses for completion.
 
         For each completed process, updates the schedule state with
-        the exit code and cleans up the running tracker.
+        the exit code and cleans up the running tracker.  Also enforces
+        ``max_runtime_minutes`` — processes exceeding the limit are
+        killed and marked as timed-out.
 
         Returns:
-            Dict of completion keys (``name`` or ``name:pid``) with results.
+            Dict of completion keys (``name:pid``) with results.
         """
         completed: Dict[str, Dict[str, Any]] = {}
+        now = datetime.now(timezone.utc)
 
         for name in list(self.running.keys()):
             instances = self.running[name]
             still_running: List[RunningAgent] = []
+            schedule = self.schedules.get(name)
+            max_runtime = timedelta(
+                minutes=(schedule.max_runtime_minutes if schedule else 30)
+            )
 
             for running in instances:
                 proc = running.process
                 pid = running.pid
                 finished = False
                 comp_info: Optional[Dict[str, Any]] = None
+
+                # ---- timeout enforcement ----
+                try:
+                    started = datetime.fromisoformat(running.started_at)
+                    elapsed = now - started
+                except (ValueError, TypeError):
+                    elapsed = timedelta()
+
+                timed_out = elapsed >= max_runtime
 
                 # If we don't have a process handle (e.g., restored from
                 # state after restart), check if the PID is still alive
@@ -361,10 +471,41 @@ class Orchestrator:
                             "log_file": running.log_file,
                             "duration": _duration_since(running.started_at),
                         }
+                    elif timed_out:
+                        # Kill the orphaned process that exceeded runtime
+                        try:
+                            os.killpg(os.getpgid(pid), signal.SIGKILL)
+                        except OSError:
+                            pass
+                        finished = True
+                        comp_info = {
+                            "pid": pid,
+                            "exit_code": None,
+                            "result": "timeout",
+                            "error": (
+                                f"Killed after {elapsed} "
+                                f"(limit {max_runtime})"
+                            ),
+                            "log_file": running.log_file,
+                            "duration": _duration_since(running.started_at),
+                        }
+                        logger.warning(
+                            "Killed timed-out agent %s (PID %d) after %s",
+                            name,
+                            pid,
+                            elapsed,
+                        )
                 else:
                     # Poll the process
                     exit_code = proc.poll()
+
                     if exit_code is not None:
+                        # Reap the zombie immediately
+                        try:
+                            proc.wait(timeout=0)
+                        except Exception:
+                            pass
+
                         finished = True
                         result = "success" if exit_code == 0 else "error"
                         error_msg = None
@@ -382,11 +523,47 @@ class Orchestrator:
                         }
 
                         # Update schedule state
-                        schedule = self.schedules.get(name)
                         if schedule:
                             schedule.last_run = running.started_at
                             schedule.last_result = result
                             schedule.last_error = error_msg
+
+                    elif timed_out:
+                        # Process exceeded max_runtime — terminate it
+                        try:
+                            os.killpg(os.getpgid(pid), signal.SIGTERM)
+                            proc.wait(timeout=5)
+                        except Exception:
+                            try:
+                                os.killpg(os.getpgid(pid), signal.SIGKILL)
+                                proc.wait(timeout=2)
+                            except Exception:
+                                pass
+
+                        finished = True
+                        comp_info = {
+                            "pid": pid,
+                            "exit_code": proc.poll(),
+                            "result": "timeout",
+                            "error": (
+                                f"Killed after {elapsed} "
+                                f"(limit {max_runtime})"
+                            ),
+                            "log_file": running.log_file,
+                            "duration": _duration_since(running.started_at),
+                        }
+
+                        if schedule:
+                            schedule.last_run = running.started_at
+                            schedule.last_result = "timeout"
+                            schedule.last_error = comp_info["error"]
+
+                        logger.warning(
+                            "Killed timed-out agent %s (PID %d) after %s",
+                            name,
+                            pid,
+                            elapsed,
+                        )
 
                 if finished and comp_info:
                     # Use name:pid as key when multiple instances possible
@@ -405,7 +582,7 @@ class Orchestrator:
     def tick(self) -> Dict[str, Any]:
         """Run one orchestrator cycle.
 
-        1. Check running processes for completion.
+        1. Check running processes for completion / timeout.
         2. Fork due agents (at most one new instance per agent per tick).
         3. Save state.
 
@@ -426,7 +603,9 @@ class Orchestrator:
         self.save_state()
 
         # Count total running instances
-        total_running = sum(len(instances) for instances in self.running.values())
+        total_running = sum(
+            len(instances) for instances in self.running.values()
+        )
 
         return {
             "completed": completed,
@@ -438,8 +617,9 @@ class Orchestrator:
 
     def start(self, tick_seconds: int = 60) -> None:
         """Run the orchestrator in a continuous loop."""
-        logger.info(f"Orchestrator starting (tick every {tick_seconds}s)")
+        logger.info("Orchestrator starting (tick every %ds)", tick_seconds)
         self.load_state()
+        self._recover_stale_plans()
 
         try:
             while True:
@@ -450,25 +630,36 @@ class Orchestrator:
 
                 if n_c or n_f:
                     logger.info(
-                        f"Tick: {n_f} forked, {n_c} completed, " f"{n_r} running"
+                        "Tick: %d forked, %d completed, %d running",
+                        n_f,
+                        n_c,
+                        n_r,
                     )
                     for comp_key, info in result["completed"].items():
                         logger.info(
-                            f"  {comp_key}: {info['result']} "
-                            f"(exit={info.get('exit_code')}, "
-                            f"duration={info.get('duration', '?')})"
+                            "  %s: %s (exit=%s, duration=%s)",
+                            comp_key,
+                            info["result"],
+                            info.get("exit_code"),
+                            info.get("duration", "?"),
                         )
                     for name in result["forked"]:
                         instances = self.running.get(name, [])
                         if instances:
                             logger.info(
-                                f"  {name}: forked → " f"PID {instances[-1].pid}"
+                                "  %s: forked → PID %d",
+                                name,
+                                instances[-1].pid,
                             )
 
                 time.sleep(tick_seconds)
         except KeyboardInterrupt:
             logger.info("Orchestrator stopped by user")
             self.save_state()
+
+    # ------------------------------------------------------------------
+    # Agent control
+    # ------------------------------------------------------------------
 
     def stop_agent(self, name: str) -> Dict[str, Any]:
         """Stop all running instances of an agent.
@@ -521,7 +712,9 @@ class Orchestrator:
                     "pid": running.pid,
                     "started_at": running.started_at,
                     "log_file": running.log_file,
-                    "signal": ("SIGKILL" if running.pid in force_killed else "SIGTERM"),
+                    "signal": (
+                        "SIGKILL" if running.pid in force_killed else "SIGTERM"
+                    ),
                     "released_plan_count": released["count"],
                     "released_plan_ids": released["released"],
                 }
@@ -594,6 +787,7 @@ class Orchestrator:
                 "enabled": schedule.enabled,
                 "interval_minutes": schedule.interval_minutes,
                 "max_concurrent": schedule.max_concurrent,
+                "max_runtime_minutes": schedule.max_runtime_minutes,
                 "last_run": schedule.last_run,
                 "last_result": schedule.last_result,
                 "last_error": schedule.last_error,

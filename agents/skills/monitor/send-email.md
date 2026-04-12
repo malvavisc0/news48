@@ -1,4 +1,4 @@
-# Skill: send-email
+# Skill: Send monitoring email
 
 ## Trigger
 Conditional — active when status is WARNING or CRITICAL.

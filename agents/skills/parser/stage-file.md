@@ -1,4 +1,4 @@
-# Skill: stage-file
+# Skill: Stage parsed content to file
 
 ## Trigger
 Always active — parser must use safe file handoff via /tmp.

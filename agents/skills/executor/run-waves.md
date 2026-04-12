@@ -1,4 +1,4 @@
-# Skill: run-waves
+# Skill: Execute work in waves
 
 ## Trigger
 Active when plan family is fetch, download, or parse.

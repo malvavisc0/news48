@@ -1,4 +1,4 @@
-# Skill: verify-result
+# Skill: Verify parser result
 
 ## Trigger
 Always active — parser must confirm parsed_at is set.

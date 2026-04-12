@@ -22,16 +22,21 @@ def get_agent(task_context: dict | None = None) -> FunctionAgent:
     if not api_base:
         raise ValueError("Missing API_BASE env.")
 
-    from agents.tools import get_system_info, read_file, run_shell_command, send_email
+    from agents.tools import (
+        get_system_info,
+        read_file,
+        run_shell_command,
+        send_email,
+    )
 
     ctx = task_context or {}
 
     return FunctionAgent(
         name="Monitor",
         description=(
-            "System health observer that gathers metrics via CLI commands, "
-            "reasons about patterns and anomalies, classifies alerts by "
-            "severity, and delivers reports via email."
+            "System health observer that gathers metrics, reasons about "
+            "patterns and anomalies, classifies alerts by severity, and "
+            "delivers reports via email."
         ),
         llm=OpenAILike(
             model=model,

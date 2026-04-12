@@ -24,6 +24,7 @@ class AgentSchedule:
     interval_minutes: int
     enabled: bool = True
     max_concurrent: int = 1
+    max_runtime_minutes: int = 30
     last_run: Optional[str] = None
     last_result: Optional[str] = None
     last_error: Optional[str] = None
@@ -37,7 +38,9 @@ class RunningAgent:
     agent_name: str
     started_at: str
     log_file: str
-    process: Optional[subprocess.Popen] = field(default=None, repr=False, compare=False)
+    process: Optional[subprocess.Popen] = field(
+        default=None, repr=False, compare=False
+    )
 
 
 # Default schedules
@@ -45,31 +48,40 @@ DEFAULT_SCHEDULES: Dict[str, AgentSchedule] = {
     "planner": AgentSchedule(
         agent_name="planner",
         task_prompt=(
-            "Run a full planning cycle. Gather evidence, check existing "
-            "plans, identify all needed work across pipeline, health, "
-            "fact-checking, and feed maintenance, create plans with proper "
-            "dependencies, and confirm nothing else needs planning."
+            "Run one planning cycle. Gather evidence, inspect plans, detect "
+            "missing work, and create or update only the plans the Executor "
+            "needs. Do not execute operational work."
         ),
-        interval_minutes=1,
+        interval_minutes=5,
     ),
     "executor": AgentSchedule(
         agent_name="executor",
         task_prompt=(
-            "Claim and execute one pending plan. Run fetch, download, and "
-            "parse as background processes, complete the final verification "
-            "step, and set the plan status when done."
+            "Run one execution cycle. Claim one eligible plan, execute its "
+            "steps, verify the success conditions, and set the final plan "
+            "status. Do not create plans."
         ),
         interval_minutes=1,
-        max_concurrent=3,
+        max_concurrent=5,
+    ),
+    "parser": AgentSchedule(
+        agent_name="parser",
+        task_prompt=(
+            "Run one parser cycle. Claim eligible downloaded articles from "
+            "the database, parse one claimed article at a time, update the "
+            "article, and release the claim when finished."
+        ),
+        interval_minutes=2,
+        max_concurrent=5,
     ),
     "monitor": AgentSchedule(
         agent_name="monitor",
         task_prompt=(
-            "Run a monitoring cycle. Gather system metrics, check database "
-            "health, assess feed freshness, detect backlogs and failures, "
-            "classify alerts by severity, and send the report via email."
+            "Run one monitoring cycle. Gather health metrics, classify "
+            "system status, report concrete findings, and send email only if "
+            "email is configured and required."
         ),
-        interval_minutes=120,  # 1 hour
+        interval_minutes=120,  # 2 hours
     ),
 }
 

@@ -1,4 +1,4 @@
-# Skill: recommend-actions
+# Skill: Recommend next actions
 
 ## Trigger
 Conditional — active when alerts exist.

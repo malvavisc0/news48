@@ -1,4 +1,4 @@
-# Skill: deduplicate-plans
+# Skill: Avoid duplicate plans
 
 ## Trigger
 Always active — planner must avoid duplicate work.

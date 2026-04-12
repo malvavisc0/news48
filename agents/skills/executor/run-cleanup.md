@@ -1,4 +1,4 @@
-# Skill: run-cleanup
+# Skill: Execute cleanup plans
 
 ## Trigger
 Active when plan family is retention or cleanup.
