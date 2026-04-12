@@ -29,6 +29,7 @@ def get_agent(task_context: dict | None = None) -> FunctionAgent:
         perform_web_search,
         read_file,
         run_shell_command,
+        save_lesson,
         update_plan,
     )
 
@@ -56,6 +57,7 @@ def get_agent(task_context: dict | None = None) -> FunctionAgent:
             get_system_info,
             perform_web_search,
             fetch_webpage_content,
+            save_lesson,
         ],
         system_prompt=compose_agent_instructions("executor", ctx),
         verbose=False,

@@ -11,6 +11,7 @@ Tools are organized into the following modules:
 | [`bypass`](../agents/tools/bypass.py) | Webpage content fetching with anti-bot bypass |
 | [`email`](../agents/tools/email.py) | Email delivery for monitoring reports |
 | [`files`](../agents/tools/files.py) | Unified file reading (content, metadata, chunks) |
+| [`lessons`](../agents/tools/lessons.py) | Lessons learned — persistent cross-run agent memory |
 | [`planner`](../agents/tools/planner.py) | Persistent execution plan management |
 | [`searxng`](../agents/tools/searxng.py) | Web search via SearXNG |
 | [`shell`](../agents/tools/shell.py) | Shell command execution |
@@ -309,7 +310,46 @@ def run_shell_command(
 
 ---
 
-### 7. System Module
+### 7. Lessons Module
+
+#### `save_lesson`
+
+Save a lesson learned to the persistent `.lessons.md` file. Agents use this to persist knowledge across runs — correct command syntax, process insights, error recovery techniques, and feed-specific quirks. Lessons are automatically loaded into every agent's system prompt at startup.
+
+**Signature:**
+```python
+def save_lesson(
+    reason: str,
+    agent_name: str,
+    category: str,
+    lesson: str,
+) -> str
+```
+
+**Parameters:**
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `reason` | `str` | Required | Why this lesson is being saved |
+| `agent_name` | `str` | Required | Which agent learned this (`executor`, `parser`, `planner`, `monitor`) |
+| `category` | `str` | Required | Category for grouping (e.g., "Command Syntax", "Process Insights") |
+| `lesson` | `str` | Required | The lesson text — should be specific and actionable |
+
+**Behavior:**
+- Creates `.lessons.md` with header if file doesn't exist
+- Creates agent section and category subsection if they don't exist
+- Appends the lesson as a bullet point under the correct section
+- Idempotent: skips if the exact lesson text already exists
+- All lessons are loaded for all agents at startup (cross-pollination)
+
+**Returns:** JSON string with:
+- `result`: Confirmation message with agent/category and lesson preview
+- `error`: Empty on success, or error description
+
+**Internal helper:** `_load_lessons()` reads the full `.lessons.md` content and is called by `compose_agent_instructions()` to inject lessons into every agent's system prompt.
+
+---
+
+### 8. System Module
 
 #### `get_system_info`
 
@@ -351,7 +391,8 @@ def get_system_info() -> str
 | System | `get_system_info` |
 | Planning | `create_plan`, `update_plan`, `claim_plan`, `list_plans` |
 | Communication | `send_email` |
-| **Total** | **10 tools** |
+| Learning | `save_lesson` |
+| **Total** | **11 tools** |
 
 ---
 
@@ -361,10 +402,10 @@ Each active runtime agent uses a specific subset of tools:
 
 | Agent | Tools | Purpose |
 |-------|-------|---------|
-| **Planner** | `run_shell_command`, `read_file`, `get_system_info`, `create_plan`, `update_plan`, `list_plans` | Gather evidence, detect gaps, create minimal executable plans, avoid duplicate work |
-| **Executor** | `claim_plan`, `update_plan`, `run_shell_command`, `read_file`, `get_system_info`, `perform_web_search`, `fetch_webpage_content` | Claim and execute one pending plan, verify success conditions, perform fact-check evidence lookups |
-| **Monitor** | `run_shell_command`, `read_file`, `get_system_info`, `send_email` | Gather metrics, classify alerts, and deliver reports when email is configured |
-| **Parser** | `run_shell_command`, `read_file` | Parse one claimed article at a time, update the article record, and release the processing claim |
+| **Planner** | `run_shell_command`, `read_file`, `get_system_info`, `create_plan`, `update_plan`, `list_plans`, `save_lesson` | Gather evidence, detect gaps, create minimal executable plans, avoid duplicate work, persist learned insights |
+| **Executor** | `claim_plan`, `update_plan`, `run_shell_command`, `read_file`, `get_system_info`, `perform_web_search`, `fetch_webpage_content`, `save_lesson` | Claim and execute one pending plan, verify success conditions, perform fact-check evidence lookups, save command syntax and process lessons |
+| **Monitor** | `run_shell_command`, `read_file`, `get_system_info`, `send_email`, `save_lesson` | Gather metrics, classify alerts, deliver reports when email is configured, persist threshold and timing observations |
+| **Parser** | `run_shell_command`, `read_file`, `save_lesson` | Parse one claimed article at a time, update the article record, release the processing claim, and save content handling lessons |
 
 ### Design Notes
 
@@ -373,3 +414,4 @@ Each active runtime agent uses a specific subset of tools:
 - **Monitor is read-only for system state**: it does not create or update plans, and sends email only when configuration is available and the current status requires it.
 - **Fact-checking is executed by Executor**: fact-check work is produced by Planner plans and executed through Executor tool access to search and page fetch tools.
 - **Parser is autonomous and DB-claim based**: it is scheduler-driven, does not use plan files, and prevents duplicate parse work by claiming articles in the database before parsing.
+- **All agents learn**: every agent has access to `save_lesson` and all accumulated lessons are injected into every agent's system prompt at startup, enabling cross-agent knowledge sharing.

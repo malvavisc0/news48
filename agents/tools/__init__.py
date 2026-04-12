@@ -1,6 +1,7 @@
 from .bypass import fetch_webpage_content
 from .email import send_email
 from .files import read_file
+from .lessons import save_lesson
 from .planner import claim_plan, create_plan, list_plans, update_plan
 from .searxng import perform_web_search
 from .shell import run_shell_command
@@ -17,4 +18,5 @@ __all__ = [
     "perform_web_search",
     "fetch_webpage_content",
     "send_email",
+    "save_lesson",
 ]

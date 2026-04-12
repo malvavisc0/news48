@@ -28,6 +28,7 @@ def get_agent(task_context: dict | None = None) -> FunctionAgent:
         list_plans,
         read_file,
         run_shell_command,
+        save_lesson,
         update_plan,
     )
 
@@ -54,6 +55,7 @@ def get_agent(task_context: dict | None = None) -> FunctionAgent:
             create_plan,
             update_plan,
             list_plans,
+            save_lesson,
         ],
         system_prompt=compose_agent_instructions("planner", ctx),
         verbose=False,

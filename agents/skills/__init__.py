@@ -166,6 +166,12 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
         agents=("planner", "executor", "parser", "monitor"),
         always=True,
     ),
+    "lessons-learned": SkillDef(
+        id="lessons-learned",
+        file="shared/lessons-learned.md",
+        agents=("planner", "executor", "parser", "monitor"),
+        always=True,
+    ),
     # -------------------------------------------------------------------------
     # Planner skills
     # -------------------------------------------------------------------------
@@ -638,5 +644,13 @@ def compose_agent_instructions(
         parts.append("")
         parts.append("<!-- SKILLS -->")
         parts.extend(skill_contents)
+
+    # Append lessons learned if available
+    from agents.tools.lessons import _load_lessons
+
+    lessons = _load_lessons()
+    if lessons:
+        parts.append("")
+        parts.append(lessons)
 
     return "\n\n".join(parts)

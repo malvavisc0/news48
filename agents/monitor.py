@@ -26,6 +26,7 @@ def get_agent(task_context: dict | None = None) -> FunctionAgent:
         get_system_info,
         read_file,
         run_shell_command,
+        save_lesson,
         send_email,
     )
 
@@ -50,6 +51,7 @@ def get_agent(task_context: dict | None = None) -> FunctionAgent:
             read_file,
             get_system_info,
             send_email,
+            save_lesson,
         ],
         system_prompt=compose_agent_instructions("monitor", ctx),
         verbose=False,

@@ -150,7 +150,7 @@ def get_agent(task_context: dict | None = None) -> FunctionAgent:
     if not api_base:
         raise ValueError("Missing API_BASE env.")
 
-    from agents.tools import read_file, run_shell_command
+    from agents.tools import read_file, run_shell_command, save_lesson
 
     ctx = task_context or {}
 
@@ -160,7 +160,7 @@ def get_agent(task_context: dict | None = None) -> FunctionAgent:
             "Parser agent that handles one claimed article at a time and "
             "updates the article record with verified parsed output."
         ),
-        tools=[run_shell_command, read_file],
+        tools=[run_shell_command, read_file, save_lesson],
         llm=OpenAILike(
             model=model,
             api_base=api_base,

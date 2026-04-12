@@ -26,7 +26,7 @@ Always active — planner must prioritize goals in correct order.
 - Coverage goals should be phrased as plan coverage or bounded backlog reduction when execution depends on external systems.
 
 ## Throughput Emergency Override
-When a throughput emergency is active (see the throughput-emergency procedure loaded in this prompt), the priority order changes:
+When a throughput emergency is active (backlog > 200 and non-improving across two consecutive cycles), the priority order changes:
 - **Only plan goals 1–3** (feed freshness, article completeness, article parsing)
 - **Defer goals 4–9** until the emergency clears (both backlog conditions are false for one full cycle)
 - This override takes precedence over the normal priority table above
