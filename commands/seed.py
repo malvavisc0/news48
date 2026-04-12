@@ -12,6 +12,7 @@ from helpers import load_urls
 from ._common import emit_error, emit_json, require_db, status_msg
 
 _MONITOR_DIR = Path(".monitor")
+_LESSONS_FILE = Path(".lessons.md")
 
 
 def _write_initial_monitor_report(seed_result: dict) -> None:
@@ -35,7 +36,8 @@ def _write_initial_monitor_report(seed_result: dict) -> None:
         },
         "alerts": [],
         "recommendations": [
-            "System freshly seeded. " "Run initial fetch cycle to populate articles."
+            "System freshly seeded. "
+            "Run initial fetch cycle to populate articles."
         ],
     }
     report_path = _MONITOR_DIR / "latest-report.json"
@@ -65,11 +67,22 @@ def _seed(seed_file: str) -> dict:
         "skipped": len(urls) - count,
     }
 
-    # Create initial monitor report so agents don't fail on missing file
+    # Create initial files so agents don't fail on missing files
     if count > 0:
         _write_initial_monitor_report(result)
+        _ensure_lessons_file()
 
     return result
+
+
+def _ensure_lessons_file() -> None:
+    """Create .lessons.md if it does not exist.
+
+    Ensures the lessons file is present from the start so agents
+    and CLI commands that read it don't encounter a missing file.
+    """
+    if not _LESSONS_FILE.exists():
+        _LESSONS_FILE.write_text("# Lessons Learned\n", encoding="utf-8")
 
 
 def seed(
