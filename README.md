@@ -158,6 +158,13 @@ uv run news48 parse --limit 10
 uv run news48 stats --json
 uv run news48 cleanup status --json
 uv run news48 cleanup health --json
+
+# Manage lessons learned
+uv run news48 lessons list                          # view all lessons
+uv run news48 lessons list --agent executor --json  # filter by agent
+uv run news48 lessons add --agent executor \
+  --category "Command Syntax" \
+  --lesson "Use timeout=600 for fact-check"         # add manually
 ```
 
 ### Agent Operations

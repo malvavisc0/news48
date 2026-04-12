@@ -610,7 +610,77 @@ Expected: `{"error": "..."}` to stdout, exit code 1
 
 ---
 
-## 15. Full Pipeline Walkthrough (stage by stage)
+## 15. Lessons
+
+### 15.1 Lessons list -- empty (no .lessons.md)
+```bash
+rm -f .lessons.md
+uv run news48 lessons list
+```
+Expected: `No lessons found (.lessons.md does not exist).`
+
+### 15.2 Lessons list -- JSON empty
+```bash
+uv run news48 lessons list --json
+```
+Expected: `{"lessons": [], "total": 0}`
+
+### 15.3 Lessons add -- add a lesson
+```bash
+uv run news48 lessons add --agent executor --category "Command Syntax" --lesson "Use timeout=600 for fact-check" --json
+```
+Expected: `{"result": "Lesson saved for executor/Command Syntax: ...", "error": ""}`
+
+### 15.4 Lessons add -- second lesson, different agent
+```bash
+uv run news48 lessons add --agent parser --category "Feed Quirks" --lesson "Some feeds use non-standard dates" --json
+```
+Expected: `{"result": "Lesson saved for parser/Feed Quirks: ...", "error": ""}`
+
+### 15.5 Lessons list -- shows all lessons
+```bash
+uv run news48 lessons list
+```
+Expected: Human-readable grouped output with executor and parser sections.
+
+### 15.6 Lessons list -- JSON with all lessons
+```bash
+uv run news48 lessons list --json
+```
+Expected: `{"lessons": [...], "total": 2}`
+
+### 15.7 Lessons list -- filter by agent
+```bash
+uv run news48 lessons list --agent executor --json
+```
+Expected: Only executor lessons returned (total: 1).
+
+### 15.8 Lessons list -- filter by category
+```bash
+uv run news48 lessons list --category "Feed" --json
+```
+Expected: Only "Feed Quirks" lessons returned (substring match).
+
+### 15.9 Lessons add -- idempotent (duplicate skipped)
+```bash
+uv run news48 lessons add --agent executor --category "Command Syntax" --lesson "Use timeout=600 for fact-check" --json
+```
+Expected: `{"result": "Lesson already exists for executor/Command Syntax", "error": ""}`
+
+### 15.10 Lessons add -- invalid agent
+```bash
+uv run news48 lessons add --agent badname --category "Test" --lesson "test" --json
+```
+Expected: `{"error": "Invalid agent 'badname'. Must be one of: ..."}`, exit code 1.
+
+### 15.11 Cleanup
+```bash
+rm -f .lessons.md
+```
+
+---
+
+## 16. Full Pipeline Walkthrough (stage by stage)
 
 ```bash
 # 1. Start fresh
