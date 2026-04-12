@@ -87,22 +87,16 @@ def _find_active_duplicate_plan(
         if _task_family(plan.get("task", "")) != family:
             continue
 
-        if (plan.get("plan_kind") or "execution").strip().lower() != (
-            target_plan_kind
-        ):
+        if (plan.get("plan_kind") or "execution").strip().lower() != (target_plan_kind):
             continue
 
         if plan.get("parent_id") != target_parent:
             continue
 
-        if (plan.get("scope_type") or "").strip().lower() != (
-            target_scope_type
-        ):
+        if (plan.get("scope_type") or "").strip().lower() != (target_scope_type):
             continue
 
-        if (plan.get("scope_value") or "").strip().lower() != (
-            target_scope_value
-        ):
+        if (plan.get("scope_value") or "").strip().lower() != (target_scope_value):
             continue
 
         candidates.append(plan)
@@ -303,9 +297,7 @@ def archive_terminal_plans() -> dict:
             plan_file.replace(dest)
             archived += 1
         except OSError as exc:
-            logger.warning(
-                "Failed to archive plan %s: %s", plan_file.name, exc
-            )
+            logger.warning("Failed to archive plan %s: %s", plan_file.name, exc)
             errors += 1
 
     return {"archived": archived, "errors": errors}
@@ -463,9 +455,7 @@ def create_plan(
 
         # Validate success_conditions
         if not success_conditions:
-            return _safe_json(
-                {"result": "", "error": "success_conditions is required"}
-            )
+            return _safe_json({"result": "", "error": "success_conditions is required"})
 
         for i, condition in enumerate(success_conditions):
             if not isinstance(condition, str):
@@ -614,8 +604,7 @@ def update_plan(
             return _safe_json(
                 {
                     "result": "",
-                    "error": f"Plan '{plan_id}' not found. "
-                    f"Use create_plan first.",
+                    "error": f"Plan '{plan_id}' not found. " f"Use create_plan first.",
                 }
             )
 
@@ -663,15 +652,11 @@ def update_plan(
             prev_result = target_step.get("result")
             result_changed = bool(result) and result != prev_result
 
-            if plan_is_terminal and (
-                next_status != current_status or result_changed
-            ):
+            if plan_is_terminal and (next_status != current_status or result_changed):
                 return _safe_json(
                     {
                         "result": "",
-                        "error": (
-                            "Plan is already terminal and cannot be " "mutated"
-                        ),
+                        "error": ("Plan is already terminal and cannot be " "mutated"),
                     }
                 )
 
@@ -721,14 +706,10 @@ def update_plan(
                 return _safe_json(
                     {
                         "result": "",
-                        "error": (
-                            "Plan is already terminal and " "cannot be mutated"
-                        ),
+                        "error": ("Plan is already terminal and " "cannot be mutated"),
                     }
                 )
-            plan["steps"] = [
-                s for s in plan["steps"] if s["id"] not in remove_set
-            ]
+            plan["steps"] = [s for s in plan["steps"] if s["id"] not in remove_set]
             changed = True
 
         # Add steps if requested
@@ -737,9 +718,7 @@ def update_plan(
                 return _safe_json(
                     {
                         "result": "",
-                        "error": (
-                            "Plan is already terminal and " "cannot be mutated"
-                        ),
+                        "error": ("Plan is already terminal and " "cannot be mutated"),
                     }
                 )
             next_num = len(plan["steps"]) + 1
@@ -771,15 +750,12 @@ def update_plan(
             requested_status = plan_status.lower()
             if plan.get(
                 "status"
-            ) in _TERMINAL_PLAN_STATUSES and requested_status != plan.get(
-                "status"
-            ):
+            ) in _TERMINAL_PLAN_STATUSES and requested_status != plan.get("status"):
                 return _safe_json(
                     {
                         "result": "",
                         "error": (
-                            "Plan is already terminal and "
-                            "cannot change status"
+                            "Plan is already terminal and " "cannot change status"
                         ),
                     }
                 )
@@ -913,8 +889,7 @@ def _requeue_stale_plan(plan: dict) -> None:
     plan["requeue_count"] = plan.get("requeue_count", 0) + 1
     plan["requeued_at"] = timestamp
     plan["requeue_reason"] = (
-        f"Plan was stale: no update for "
-        f"{_STALE_PLAN_TIMEOUT_MINUTES} minutes"
+        f"Plan was stale: no update for " f"{_STALE_PLAN_TIMEOUT_MINUTES} minutes"
     )
     plan["updated_at"] = timestamp
     plan["claimed_by"] = None
@@ -1147,9 +1122,7 @@ def list_plans(reason: str, status: str = "") -> str:
         plans_dir = _ensure_plans_dir()
         status_set: set[str] = set()
         if status:
-            status_set = {
-                s.strip().lower() for s in status.split(",") if s.strip()
-            }
+            status_set = {s.strip().lower() for s in status.split(",") if s.strip()}
         plans = []
 
         for plan_file in plans_dir.glob("*.json"):

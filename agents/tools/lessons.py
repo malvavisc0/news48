@@ -53,8 +53,7 @@ def save_lesson(
             return _safe_json(
                 {
                     "result": (
-                        f"Lesson already exists for "
-                        f"{agent_name}/{category}"
+                        f"Lesson already exists for " f"{agent_name}/{category}"
                     ),
                     "error": "",
                 }
@@ -106,9 +105,7 @@ def save_lesson(
                 content[cat_start:agent_block_end],
                 re.MULTILINE,
             )
-            insert_pos = (
-                cat_start + next_cat.start() if next_cat else agent_block_end
-            )
+            insert_pos = cat_start + next_cat.start() if next_cat else agent_block_end
             # Insert lesson before the next section
             content = (
                 content[:insert_pos].rstrip()

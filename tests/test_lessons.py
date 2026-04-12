@@ -167,9 +167,7 @@ def test_save_lesson_scoped_to_agent_block(tmp_lessons):
     planner_idx = content.index("## planner")
     executor_idx = content.index("## executor")
     lesson_idx = content.index("- Always verify output")
-    assert (
-        lesson_idx > executor_idx
-    ), "Lesson was inserted before the executor section"
+    assert lesson_idx > executor_idx, "Lesson was inserted before the executor section"
     # Planner section should NOT contain the new lesson
     planner_block = content[planner_idx:executor_idx]
     assert "- Always verify output" not in planner_block

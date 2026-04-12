@@ -82,9 +82,7 @@ async def _parse_claimed_article(article: dict, owner: str) -> dict:
             "error": str(exc),
         }
     finally:
-        clear_article_processing_claim(
-            db_path, int(article["id"]), owner=owner
-        )
+        clear_article_processing_claim(db_path, int(article["id"]), owner=owner)
         if tmp_path:
             try:
                 os.unlink(tmp_path)
@@ -113,9 +111,7 @@ async def run_cycle(limit: int = 1, feed_domain: str | None = None) -> dict:
 
     for article in candidates:
         article_id = int(article["id"])
-        got = claim_articles_for_processing(
-            db_path, [article_id], "parse", owner
-        )
+        got = claim_articles_for_processing(db_path, [article_id], "parse", owner)
         if article_id not in got:
             continue
 

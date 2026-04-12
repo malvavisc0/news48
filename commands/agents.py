@@ -49,13 +49,9 @@ def agents_status(
                 f"{'Yes' if agent_status.get('enabled', True) else 'No'}"
             )
             print(
-                f"  Interval:    "
-                f"{agent_status.get('interval_minutes', 0)} minutes"
+                f"  Interval:    " f"{agent_status.get('interval_minutes', 0)} minutes"
             )
-            print(
-                f"  Next run:    "
-                f"{agent_status.get('next_run', 'immediate')}"
-            )
+            print(f"  Next run:    " f"{agent_status.get('next_run', 'immediate')}")
             max_c = agent_status.get("max_concurrent", 1)
             if max_c > 1:
                 print(f"  Concurrency: {max_c}")
@@ -65,9 +61,7 @@ def agents_status(
                 label = f"{count} instance{'s' if count != 1 else ''}"
                 print(f"  RUNNING:     {label}")
                 for info in infos:
-                    print(
-                        f"    PID {info['pid']} " f"since {info['started_at']}"
-                    )
+                    print(f"    PID {info['pid']} " f"since {info['started_at']}")
 
 
 @agents_app.command(name="run")
@@ -92,8 +86,7 @@ def agents_run(
     if agent:
         if agent not in VALID_AGENTS:
             emit_error(
-                f"Unknown agent: {agent}. "
-                f"Valid: {', '.join(VALID_AGENTS)}",
+                f"Unknown agent: {agent}. " f"Valid: {', '.join(VALID_AGENTS)}",
                 as_json=output_json,
             )
             return
@@ -155,9 +148,7 @@ def agents_start(
     )
     console.print()
 
-    table = Table(
-        show_header=True, header_style="bold dim", border_style="dim"
-    )
+    table = Table(show_header=True, header_style="bold dim", border_style="dim")
     table.add_column("Agent", style="bold", min_width=10)
     table.add_column("Interval", justify="right", min_width=10)
     table.add_column("Slots", justify="right", min_width=6)
@@ -260,9 +251,7 @@ def agents_dashboard(
                 if tailer_key not in tailers and log_file:
                     # Keep per-instance buffer keyed by tailer_key
                     if tailer_key not in dashboard.buffers:
-                        dashboard.buffers[tailer_key] = EventBuffer(
-                            max_lines=100
-                        )
+                        dashboard.buffers[tailer_key] = EventBuffer(max_lines=100)
                     buffer = dashboard.buffers[tailer_key]
                     stop_event = threading.Event()
                     thread = threading.Thread(
@@ -318,9 +307,7 @@ def agents_dashboard(
 
 @agents_app.command(name="stop")
 def agents_stop(
-    agent: str = typer.Option(
-        None, "--agent", "-a", help="Specific agent to stop"
-    ),
+    agent: str = typer.Option(None, "--agent", "-a", help="Specific agent to stop"),
     output_json: bool = typer.Option(False, "--json"),
 ) -> None:
     """Stop running agent(s)."""

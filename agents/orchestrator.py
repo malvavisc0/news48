@@ -104,9 +104,7 @@ class Orchestrator:
         for name, sched_data in data.get("schedules", {}).items():
             if name in self.schedules:
                 self.schedules[name].last_run = sched_data.get("last_run")
-                self.schedules[name].last_result = sched_data.get(
-                    "last_result"
-                )
+                self.schedules[name].last_result = sched_data.get("last_result")
                 self.schedules[name].last_error = sched_data.get("last_error")
 
         # Restore running agent records (processes are gone after restart,
@@ -146,14 +144,10 @@ class Orchestrator:
             from agents.tools.planner import recover_stale_plans
 
             payload = json.loads(
-                recover_stale_plans(
-                    "Orchestrator startup recovery after restart"
-                )
+                recover_stale_plans("Orchestrator startup recovery after restart")
             )
             if payload.get("error"):
-                logger.warning(
-                    "Plan recovery pass failed: %s", payload["error"]
-                )
+                logger.warning("Plan recovery pass failed: %s", payload["error"])
             else:
                 result = payload.get("result", {})
                 logger.info(
@@ -338,9 +332,7 @@ class Orchestrator:
                 if plans_dir.exists():
                     for plan_file in plans_dir.glob("*.json"):
                         try:
-                            plan = json.loads(
-                                plan_file.read_text(encoding="utf-8")
-                            )
+                            plan = json.loads(plan_file.read_text(encoding="utf-8"))
                         except (OSError, ValueError):
                             continue
                         if plan.get("status") == "executing":
@@ -460,9 +452,7 @@ class Orchestrator:
         # Add instance index to log filename for concurrent agents
         instance_idx = len(instances)
         if max_concurrent > 1:
-            log_file = str(
-                _LOGS_DIR / f"{name}-{timestamp}-{instance_idx}.log"
-            )
+            log_file = str(_LOGS_DIR / f"{name}-{timestamp}-{instance_idx}.log")
         else:
             log_file = str(_LOGS_DIR / f"{name}-{timestamp}.log")
 
@@ -567,8 +557,7 @@ class Orchestrator:
                             "exit_code": None,
                             "result": "timeout",
                             "error": (
-                                f"Killed after {elapsed} "
-                                f"(limit {max_runtime})"
+                                f"Killed after {elapsed} " f"(limit {max_runtime})"
                             ),
                             "log_file": running.log_file,
                             "duration": _duration_since(running.started_at),
@@ -630,8 +619,7 @@ class Orchestrator:
                             "exit_code": proc.poll(),
                             "result": "timeout",
                             "error": (
-                                f"Killed after {elapsed} "
-                                f"(limit {max_runtime})"
+                                f"Killed after {elapsed} " f"(limit {max_runtime})"
                             ),
                             "log_file": running.log_file,
                             "duration": _duration_since(running.started_at),
@@ -690,9 +678,7 @@ class Orchestrator:
         self._write_heartbeat()
 
         # Count total running instances
-        total_running = sum(
-            len(instances) for instances in self.running.values()
-        )
+        total_running = sum(len(instances) for instances in self.running.values())
 
         return {
             "completed": completed,
@@ -801,9 +787,7 @@ class Orchestrator:
                     "pid": running.pid,
                     "started_at": running.started_at,
                     "log_file": running.log_file,
-                    "signal": (
-                        "SIGKILL" if running.pid in force_killed else "SIGTERM"
-                    ),
+                    "signal": ("SIGKILL" if running.pid in force_killed else "SIGTERM"),
                     "released_plan_count": released["count"],
                     "released_plan_ids": released["released"],
                 }
