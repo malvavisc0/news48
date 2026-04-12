@@ -1,0 +1,288 @@
+{
+    "date": "2026-04-12",
+    "assessor": "architect-mode",
+    "tier": "T1",
+    "checkpoints": {
+        "1.1": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "begin-planning-cycle.md:5 — if feeds.total == 0, run news48 seed seed.txt --json"
+        },
+        "1.2": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "begin-planning-cycle.md:8 — creates discovery remediation plan on seed failure, does NOT loop"
+        },
+        "1.3": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "code",
+            "evidence": "orchestrator.py:136-160 — _recover_stale_plans() defined; orchestrator.py:695 — called on startup"
+        },
+        "1.4": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "code",
+            "evidence": "orchestrator.py:162-180 — _recover_stale_articles(); database/articles.py:1281 — release_stale_article_claims()"
+        },
+        "1.5": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "code",
+            "evidence": "orchestrator.py:126-134 — load_state() re-attaches alive PIDs; handle-orchestrator-restart.md exists with 5 rules"
+        },
+        "1.6": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "code",
+            "evidence": "orchestrator.py:182-203 — _archive_old_plans(); agents/tools/planner.py:262 — archive_terminal_plans()"
+        },
+        "2.1": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "begin-monitoring-cycle.md:9-17 — lists all 7 evidence commands"
+        },
+        "2.2": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "begin-monitoring-cycle.md:25 — 0/0 is undefined, null, insufficient sample; thresholds.md:20-24 — lifetime rates"
+        },
+        "2.3": {
+            "result": "PARTIAL",
+            "value": 0.5,
+            "layer": "instruction",
+            "evidence": "thresholds.md is canonical source; run-feed-health.md:8 embeds '7 days' value contextually"
+        },
+        "2.4": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "thresholds.md:17-18 — fact-check completions 24h + oldest eligible item rows present"
+        },
+        "2.5": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "check-disk-space.md — monitors /tmp and project dir; WARNING >80%, CRITICAL >90%"
+        },
+        "2.6": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "begin-planning-cycle.md:2 — checks if report timestamp is older than 2x monitor interval"
+        },
+        "2.7": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "send-email.md:4 — scope gates to WARNING/CRITICAL; line 19 — HEALTHY = Do not send"
+        },
+        "2.8": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "send-email.md:6-7 — pre-flight check verifies email_configured in task context"
+        },
+        "3.1": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "verify-plan.md:18-26 — writes .plans/feedback/; build-plan.md:14 — reads feedback before creating plans"
+        },
+        "3.2": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "plan-retry.md — retries download-failed and parse-failed up to 3 attempts"
+        },
+        "3.3": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "run-retry.md:4 — creates child parse plans for Parser agent, does not re-parse directly"
+        },
+        "3.4": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "run-retry.md:14-18 — executor skips domain after 3 in-plan failures; planner escalates to feed-health"
+        },
+        "3.5": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "handle-unreachable-feeds.md — 30+ day detection, recovery attempt, discovery remediation plan"
+        },
+        "3.6": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "remediate-stuck.md — requeue_count >= 2 as strong remediation trigger"
+        },
+        "3.7": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "both",
+            "evidence": "run-waves.md:14-38 — per-PID exit code checking; line 36 — only failed step marked failed"
+        },
+        "3.8": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "code",
+            "evidence": "commands/plans.py:38 — _remediate_plan(); line 185 — plans remediate command; tests/test_plans_command.py:85"
+        },
+        "4.1": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "run-waves.md:8 — at most 4 parallel processes with & + wait"
+        },
+        "4.2": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "prioritize-goals.md:28-32 — throughput emergency override defers goals 4-9"
+        },
+        "4.3": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "run-command.md:6,17 — pass --limit and repeat until backlog cleared or stalled"
+        },
+        "4.4": {
+            "result": "FAIL",
+            "value": 0.0,
+            "layer": "code",
+            "evidence": "grep for dynamic concurrency adjustment returns 0 results — no runtime code"
+        },
+        "5.1": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "write-metrics-history.md — mkdir -p .metrics, timestamped JSON, required keys, retention"
+        },
+        "5.2": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "throughput-emergency.md:22-34 — reads .metrics/, compares current vs previous backlog"
+        },
+        "5.3": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "throughput-emergency.md:3 — exit when both backlog conditions false for one full cycle; prioritize-goals.md:31"
+        },
+        "5.4": {
+            "result": "FAIL",
+            "value": 0.0,
+            "layer": "code",
+            "evidence": "grep for adaptive interval tuning returns 0 results — no runtime code"
+        },
+        "6.1": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "error-taxonomy.md — 16+ structured codes; enforce-quality.md:27-31 — uses canonical codes"
+        },
+        "6.2": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "fail-safely.md:5 — break loops after 5 repeated tool errors with same signature"
+        },
+        "6.3": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "fail-safely.md:2 — never retry same failed action more than twice"
+        },
+        "6.4": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "both",
+            "evidence": "run-waves.md:36 — only failed step marked failed; others continue"
+        },
+        "6.5": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "run-fact-check.md:8 — only fact-unchecked eligible; lists ineligible statuses explicitly"
+        },
+        "6.6": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "deduplicate-plans.md — check list_plans before creating; one plan per concern"
+        },
+        "6.7": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "enforce-quality.md:10 — content min 200 chars absolute; uses parse.out_of_bounds code"
+        },
+        "6.8": {
+            "result": "PASS",
+            "value": 1.0,
+            "layer": "instruction",
+            "evidence": "grep for cross-references returns 0 results; enforce-quality.md reference to shared/error-taxonomy.md is a canonical resource (excluded)"
+        }
+    },
+    "dimensions": {
+        "self_starting": {
+            "score": 5.0,
+            "weight": 0.15,
+            "pass": 6,
+            "partial": 0,
+            "fail": 0,
+            "total": 6
+        },
+        "self_monitoring": {
+            "score": 4.69,
+            "weight": 0.20,
+            "pass": 7,
+            "partial": 1,
+            "fail": 0,
+            "total": 8
+        },
+        "self_healing": {
+            "score": 5.0,
+            "weight": 0.25,
+            "pass": 8,
+            "partial": 0,
+            "fail": 0,
+            "total": 8
+        },
+        "self_scaling": {
+            "score": 3.75,
+            "weight": 0.10,
+            "pass": 3,
+            "partial": 0,
+            "fail": 1,
+            "total": 4
+        },
+        "self_optimizing": {
+            "score": 3.75,
+            "weight": 0.10,
+            "pass": 3,
+            "partial": 0,
+            "fail": 1,
+            "total": 4
+        },
+        "error_containment": {
+            "score": 5.0,
+            "weight": 0.20,
+            "pass": 8,
+            "partial": 0,
+            "fail": 0,
+            "total": 8
+        }
+    },
+    "overall": 4.69,
+    "level": "Autonomous",
+    "notes": "T1 codebase review only. 4.4 + 5.4 require runtime Python code. 2.3 PARTIAL due to threshold value embedded in run-feed-health.md."
+}
