@@ -243,7 +243,7 @@ def test_compose_includes_shared_skills():
     """Composed prompt includes shared skill content."""
     result = compose_agent_instructions("executor", {})
     # Shared skills should be in the output — check by heading
-    assert "# Skill: use-json-output" in result
+    assert "# Skill: require JSON command output" in result
 
 
 def test_compose_executor_with_fact_check_includes_run_fact_check():
@@ -251,7 +251,7 @@ def test_compose_executor_with_fact_check_includes_run_fact_check():
     result = compose_agent_instructions(
         "executor", {"plan_family": "fact-check"}
     )
-    assert "# Skill: run-fact-check" in result
+    assert "# Skill: Execute fact-check plans" in result
 
 
 def test_compose_executor_with_download_includes_run_waves():
@@ -259,49 +259,49 @@ def test_compose_executor_with_download_includes_run_waves():
     result = compose_agent_instructions(
         "executor", {"plan_family": "download"}
     )
-    assert "# Skill: run-waves" in result
+    assert "# Skill: Execute work in waves" in result
 
 
 def test_compose_executor_with_parse_includes_run_waves():
     """Executor with parse plan_family does not load parser-specific skills."""
     result = compose_agent_instructions("executor", {"plan_family": "parse"})
-    assert "# Skill: run-waves" not in result
+    assert "# Skill: Execute work in waves" not in result
 
 
 def test_compose_executor_with_cleanup_includes_run_cleanup():
     """Executor with cleanup plan_family includes run-cleanup skill."""
     result = compose_agent_instructions("executor", {"plan_family": "cleanup"})
-    assert "# Skill: run-cleanup" in result
+    assert "# Skill: Execute cleanup plans" in result
 
 
 def test_compose_executor_with_fetch_excludes_run_fact_check():
     """Executor with fetch family does NOT load run-fact-check."""
     result = compose_agent_instructions("executor", {"plan_family": "fetch"})
-    assert "# Skill: run-fact-check" not in result
+    assert "# Skill: Execute fact-check plans" not in result
 
 
 def test_compose_monitor_with_critical_includes_send_email():
     """Monitor with CRITICAL status includes send-email skill."""
     result = compose_agent_instructions("monitor", {"status": "CRITICAL"})
-    assert "# Skill: send-email" in result
+    assert "# Skill: Send monitoring email" in result
 
 
 def test_compose_monitor_with_warning_includes_send_email():
     """Monitor with WARNING status includes send-email skill."""
     result = compose_agent_instructions("monitor", {"status": "WARNING"})
-    assert "# Skill: send-email" in result
+    assert "# Skill: Send monitoring email" in result
 
 
 def test_compose_monitor_with_healthy_excludes_send_email():
     """Monitor with HEALTHY status does NOT include send-email skill."""
     result = compose_agent_instructions("monitor", {"status": "HEALTHY"})
-    assert "# Skill: send-email" not in result
+    assert "# Skill: Send monitoring email" not in result
 
 
 def test_compose_monitor_without_email_config_excludes_send_email():
     """Monitor omits send-email when email is not configured."""
     result = compose_agent_instructions("monitor", {"email_configured": False})
-    assert "# Skill: send-email" not in result
+    assert "# Skill: Send monitoring email" not in result
 
 
 def test_compose_monitor_with_email_config_and_warning_includes_send_email():
@@ -310,26 +310,26 @@ def test_compose_monitor_with_email_config_and_warning_includes_send_email():
         "monitor",
         {"email_configured": True, "status": "WARNING"},
     )
-    assert "# Skill: send-email" in result
+    assert "# Skill: Send monitoring email" in result
 
 
 def test_compose_planner_empty_context_loads_core():
     """Planner with empty context loads core skills."""
     result = compose_agent_instructions("planner", {})
     # Core planner skills should be present — check by heading
-    assert "# Skill: begin-planning-cycle" in result
+    assert "# Skill: Start planning with evidence" in result
 
 
 def test_compose_parser_loads_all_parser_skills():
     """Parser loads all its always-on skills with empty context."""
     result = compose_agent_instructions("parser", {})
-    assert "# Skill: read-source" in result
+    assert "# Skill: Read the source before parsing" in result
 
 
 def test_compose_monitor_loads_all_monitor_skills():
     """Monitor loads all its always-on skills with empty context."""
     result = compose_agent_instructions("monitor", {})
-    assert "# Skill: begin-monitoring-cycle" in result
+    assert "# Skill: Start monitoring with evidence" in result
 
 
 def test_base_prompt_sizes_are_reasonable(tmp_path, monkeypatch):

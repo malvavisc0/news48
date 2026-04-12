@@ -59,7 +59,9 @@ def _task_family(task: str) -> str:
     return t
 
 
-def _find_active_duplicate_plan(task: str, parent_id: str | None) -> dict | None:
+def _find_active_duplicate_plan(
+    task: str, parent_id: str | None
+) -> dict | None:
     """Find an active plan in the same family to prevent duplicates."""
     plans_dir = _ensure_plans_dir()
     family = _task_family(task)
@@ -173,25 +175,25 @@ def _normalize_plan_for_consistency(plan: dict) -> bool:
         plan["claimed_at"] = None
         status = "pending"
         for step in steps:
-            if step.get("status") == "in_progress":
+            if step.get("status") == "executing":
                 step["status"] = "pending"
                 step["updated_at"] = timestamp
         changed = True
 
-    # If a non-executing plan has in-progress steps,
+    # If a non-executing plan has executing steps,
     # reset those steps to pending.
     if status != "executing":
         for step in steps:
-            if step.get("status") == "in_progress":
+            if step.get("status") == "executing":
                 step["status"] = "pending"
                 step["updated_at"] = timestamp
                 changed = True
 
-    # If a plan is terminal, force all in_progress steps to terminal fallback.
+    # If a plan is terminal, force all executing steps to terminal fallback.
     if status in _TERMINAL_PLAN_STATUSES:
         fallback = "failed" if status == "failed" else "completed"
         for step in steps:
-            if step.get("status") == "in_progress":
+            if step.get("status") == "executing":
                 step["status"] = fallback
                 step["updated_at"] = timestamp
                 changed = True
@@ -374,7 +376,9 @@ def create_plan(
 
         # Validate success_conditions
         if not success_conditions:
-            return _safe_json({"result": "", "error": "success_conditions is required"})
+            return _safe_json(
+                {"result": "", "error": "success_conditions is required"}
+            )
 
         for i, condition in enumerate(success_conditions):
             if not isinstance(condition, str):
@@ -459,7 +463,7 @@ def update_plan(
     """Update a step status and optionally add/remove steps.
 
     ## When to Use
-    Use this tool to mark a step as in_progress, completed, or failed.
+    Use this tool to mark a step as executing, completed, or failed.
     You can also dynamically add or remove steps from the plan.
 
     ## Why to Use
@@ -472,7 +476,7 @@ def update_plan(
     - `reason` (str): Why you're updating this step
     - `plan_id` (str): ID from create_plan response
     - `step_id` (str): ID of the step to update (e.g., "step-1")
-    - `status` (str): One of: pending, in_progress, completed, failed
+    - `status` (str): One of: pending, executing, completed, failed
     - `result` (str): Optional outcome message to store
     - `add_steps` (list[str] | None): Optional steps to append
     - `remove_steps` (list[str] | None): Optional step IDs to remove
@@ -483,7 +487,7 @@ def update_plan(
     - `error`: Empty on success, or error description
     """
     timestamp = _now()
-    valid_statuses = {"pending", "in_progress", "completed", "failed"}
+    valid_statuses = {"pending", "executing", "completed", "failed"}
     valid_plan_statuses = {"pending", "executing", "completed", "failed"}
 
     try:
@@ -494,7 +498,8 @@ def update_plan(
             return _safe_json(
                 {
                     "result": "",
-                    "error": f"Plan '{plan_id}' not found. " f"Use create_plan first.",
+                    "error": f"Plan '{plan_id}' not found. "
+                    f"Use create_plan first.",
                 }
             )
 
@@ -542,11 +547,15 @@ def update_plan(
             prev_result = target_step.get("result")
             result_changed = bool(result) and result != prev_result
 
-            if plan_is_terminal and (next_status != current_status or result_changed):
+            if plan_is_terminal and (
+                next_status != current_status or result_changed
+            ):
                 return _safe_json(
                     {
                         "result": "",
-                        "error": ("Plan is already terminal and cannot be " "mutated"),
+                        "error": (
+                            "Plan is already terminal and cannot be " "mutated"
+                        ),
                     }
                 )
 
@@ -554,11 +563,11 @@ def update_plan(
             allowed = {
                 "pending": {
                     "pending",
-                    "in_progress",
+                    "executing",
                     "completed",
                     "failed",
                 },
-                "in_progress": {"in_progress", "completed", "failed"},
+                "executing": {"executing", "completed", "failed"},
                 "completed": {"completed"},
                 "failed": {"failed"},
             }
@@ -596,10 +605,14 @@ def update_plan(
                 return _safe_json(
                     {
                         "result": "",
-                        "error": ("Plan is already terminal and " "cannot be mutated"),
+                        "error": (
+                            "Plan is already terminal and " "cannot be mutated"
+                        ),
                     }
                 )
-            plan["steps"] = [s for s in plan["steps"] if s["id"] not in remove_set]
+            plan["steps"] = [
+                s for s in plan["steps"] if s["id"] not in remove_set
+            ]
             changed = True
 
         # Add steps if requested
@@ -608,7 +621,9 @@ def update_plan(
                 return _safe_json(
                     {
                         "result": "",
-                        "error": ("Plan is already terminal and " "cannot be mutated"),
+                        "error": (
+                            "Plan is already terminal and " "cannot be mutated"
+                        ),
                     }
                 )
             next_num = len(plan["steps"]) + 1
@@ -640,12 +655,15 @@ def update_plan(
             requested_status = plan_status.lower()
             if plan.get(
                 "status"
-            ) in _TERMINAL_PLAN_STATUSES and requested_status != plan.get("status"):
+            ) in _TERMINAL_PLAN_STATUSES and requested_status != plan.get(
+                "status"
+            ):
                 return _safe_json(
                     {
                         "result": "",
                         "error": (
-                            "Plan is already terminal and " "cannot change status"
+                            "Plan is already terminal and "
+                            "cannot change status"
                         ),
                     }
                 )
@@ -700,7 +718,7 @@ def _serialize_plan(plan: dict) -> dict:
     steps = plan.get("steps", [])
     completed = sum(1 for s in steps if s["status"] == "completed")
     failed = sum(1 for s in steps if s["status"] == "failed")
-    in_progress = sum(1 for s in steps if s["status"] == "in_progress")
+    executing = sum(1 for s in steps if s["status"] == "executing")
     pending = sum(1 for s in steps if s["status"] == "pending")
 
     return {
@@ -715,7 +733,7 @@ def _serialize_plan(plan: dict) -> dict:
             "total": len(steps),
             "completed": completed,
             "failed": failed,
-            "in_progress": in_progress,
+            "executing": executing,
             "pending": pending,
         },
         "created_at": plan["created_at"],
@@ -764,7 +782,7 @@ def _is_plan_stale(plan: dict) -> bool:
 def _requeue_stale_plan(plan: dict) -> None:
     """Reset a stale executing plan back to pending.
 
-    Reverts all in_progress steps to pending, increments requeue_count,
+    Reverts all executing steps to pending, increments requeue_count,
     and sets requeued_at and requeue_reason.
 
     Args:
@@ -775,7 +793,8 @@ def _requeue_stale_plan(plan: dict) -> None:
     plan["requeue_count"] = plan.get("requeue_count", 0) + 1
     plan["requeued_at"] = timestamp
     plan["requeue_reason"] = (
-        f"Plan was stale: no update for " f"{_STALE_PLAN_TIMEOUT_MINUTES} minutes"
+        f"Plan was stale: no update for "
+        f"{_STALE_PLAN_TIMEOUT_MINUTES} minutes"
     )
     plan["updated_at"] = timestamp
     plan["claimed_by"] = None
@@ -783,7 +802,7 @@ def _requeue_stale_plan(plan: dict) -> None:
 
     exceeded_limit = plan["requeue_count"] >= _MAX_REQUEUE_COUNT
     for step in plan.get("steps", []):
-        if step.get("status") == "in_progress":
+        if step.get("status") == "executing":
             step["status"] = "failed" if exceeded_limit else "pending"
             step["updated_at"] = timestamp
 
@@ -837,9 +856,9 @@ def release_plans_for_pid(pid: int) -> dict:
         plan["claimed_at"] = None
         plan["updated_at"] = timestamp
 
-        # Reset in_progress steps back to pending
+        # Reset executing steps back to pending
         for step in plan.get("steps", []):
-            if step.get("status") == "in_progress":
+            if step.get("status") == "executing":
                 step["status"] = "pending"
                 step["updated_at"] = timestamp
 
@@ -1004,7 +1023,9 @@ def list_plans(reason: str, status: str = "") -> str:
         plans_dir = _ensure_plans_dir()
         status_set: set[str] = set()
         if status:
-            status_set = {s.strip().lower() for s in status.split(",") if s.strip()}
+            status_set = {
+                s.strip().lower() for s in status.split(",") if s.strip()
+            }
         plans = []
 
         for plan_file in plans_dir.glob("*.json"):
