@@ -551,7 +551,18 @@ def create_plan(
 
         _write_plan(plan)
 
-        return _safe_json({"result": _serialize_plan(plan), "error": ""})
+        response: dict = {"result": _serialize_plan(plan), "error": ""}
+
+        if normalized_plan_kind == "campaign":
+            response["warning"] = (
+                "Campaign plans are NOT directly executable by the executor. "
+                "You MUST create at least one child execution plan with "
+                f'campaign_id="{plan_id}" in this same planning cycle. '
+                "A campaign with zero children will be auto-failed by "
+                "remediation."
+            )
+
+        return _safe_json(response)
     except Exception as exc:
         return _safe_json({"result": "", "error": str(exc)})
 

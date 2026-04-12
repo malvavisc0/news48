@@ -36,8 +36,7 @@ def _write_initial_monitor_report(seed_result: dict) -> None:
         },
         "alerts": [],
         "recommendations": [
-            "System freshly seeded. "
-            "Run initial fetch cycle to populate articles."
+            "System freshly seeded. " "Run initial fetch cycle to populate articles."
         ],
     }
     report_path = _MONITOR_DIR / "latest-report.json"

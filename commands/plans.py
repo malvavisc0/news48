@@ -35,7 +35,23 @@ def _iter_plans(status: str = "") -> list[dict]:
     return items
 
 
-def _remediate_plan(plan: dict[str, Any], parent_statuses: dict[str, str]) -> list[str]:
+def _has_active_children(campaign_id: str, all_plans: list[dict[str, Any]]) -> bool:
+    """Check whether a campaign has any active child plans."""
+    for p in all_plans:
+        if p.get("campaign_id") == campaign_id and p.get("status") in {
+            "pending",
+            "executing",
+            "completed",
+        }:
+            return True
+    return False
+
+
+def _remediate_plan(
+    plan: dict[str, Any],
+    parent_statuses: dict[str, str],
+    all_plans: list[dict[str, Any]] | None = None,
+) -> list[str]:
     """Mutate a plan in-place to repair common planner/executor corruption."""
     actions: list[str] = []
 
@@ -60,6 +76,18 @@ def _remediate_plan(plan: dict[str, Any], parent_statuses: dict[str, str]) -> li
     if parent_id and parent_statuses.get(parent_id) == "failed":
         plan["parent_id"] = None
         actions.append("cleared_failed_parent")
+
+    # Fail orphaned campaigns — campaigns with no active child plans
+    if (
+        plan.get("plan_kind") == "campaign"
+        and plan.get("status") == "pending"
+        and all_plans is not None
+    ):
+        campaign_id = plan.get("id", "")
+        if campaign_id and not _has_active_children(campaign_id, all_plans):
+            plan["status"] = "failed"
+            plan["requeue_reason"] = "orphaned_campaign_no_children"
+            actions.append("failed_orphaned_campaign")
 
     return actions
 
@@ -199,7 +227,7 @@ def plans_remediate(
     }
 
     for plan in plans:
-        actions = _remediate_plan(plan, parent_statuses)
+        actions = _remediate_plan(plan, parent_statuses, all_plans=plans)
         if not actions:
             continue
         report["modified"] += 1

@@ -151,8 +151,7 @@ def lessons_add(
     """Add a new lesson manually."""
     if agent.lower() not in AGENT_NAMES:
         emit_error(
-            f"Invalid agent '{agent}'. "
-            f"Must be one of: {', '.join(AGENT_NAMES)}",
+            f"Invalid agent '{agent}'. " f"Must be one of: {', '.join(AGENT_NAMES)}",
             as_json=output_json,
         )
 
