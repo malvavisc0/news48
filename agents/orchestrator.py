@@ -249,6 +249,30 @@ class Orchestrator:
 
         elif name == "planner":
             try:
+                from commands._common import require_db
+                from database import get_article_stats, get_articles_paginated
+
+                db_path = require_db()
+                article_stats = get_article_stats(db_path)
+                _, fact_unchecked_total = get_articles_paginated(
+                    db_path,
+                    limit=1,
+                    status="fact-unchecked",
+                )
+
+                task_context["backlog_high"] = bool(
+                    max(
+                        int(article_stats.get("download_backlog") or 0),
+                        int(article_stats.get("parse_backlog") or 0),
+                    )
+                    > 200
+                )
+                task_context["fact_check_backlog"] = fact_unchecked_total > 0
+                task_context["failed_backlog"] = bool(
+                    int(article_stats.get("download_failed") or 0)
+                    + int(article_stats.get("parse_failed") or 0)
+                )
+
                 plans_dir = Path(".plans")
                 stale_plans = False
                 if plans_dir.exists():

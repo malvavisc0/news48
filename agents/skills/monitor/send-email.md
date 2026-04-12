@@ -1,6 +1,6 @@
 # Skill: Send monitoring email
 
-## Trigger
+## Scope
 Conditional — active when status is WARNING or CRITICAL.
 
 ## Rules

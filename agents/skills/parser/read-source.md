@@ -1,6 +1,6 @@
 # Skill: Read the source before parsing
 
-## Trigger
+## Scope
 Always active — parser must read HTML before extracting.
 
 ## Rules

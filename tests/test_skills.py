@@ -1,6 +1,7 @@
 """Tests for the skills architecture."""
 
 import json
+from pathlib import Path
 
 from agents.skills import (
     PLAN_FAMILY_SKILLS,
@@ -220,6 +221,52 @@ def test_get_skills_for_agent_uses_plan_family_skills_for_cleanup():
     )
 
 
+def test_get_skills_for_agent_planner_preloads_runtime_branches():
+    """Planner preloads evidence-gated skills discovered during the cycle."""
+    skills = set(_get_skills_for_agent("planner", {}))
+    for skill_id in {
+        "throughput-emergency",
+        "plan-fact-check",
+        "plan-retry",
+        "remediate-stuck",
+    }:
+        assert skill_id in skills
+
+
+def test_get_skills_for_agent_parser_preloads_runtime_branches():
+    """Parser preloads type/failure branches resolved after source read."""
+    skills = set(_get_skills_for_agent("parser", {}))
+    assert "adapt-to-type" in skills
+    assert "report-failure" in skills
+
+
+def test_get_skills_for_agent_monitor_includes_all_core_analysis_skills():
+    """Monitor includes the always-on analysis skills from business logic."""
+    skills = set(_get_skills_for_agent("monitor", {}))
+    for skill_id in {
+        "begin-monitoring-cycle",
+        "compute-rates",
+        "evaluate-thresholds",
+        "classify-status",
+        "review-fact-check",
+    }:
+        assert skill_id in skills
+
+
+def test_get_skills_for_agent_monitor_preloads_alerting_branches():
+    """Monitor preloads alert/recommendation branches before status exists."""
+    skills = set(_get_skills_for_agent("monitor", {}))
+    assert "generate-alerts" in skills
+    assert "recommend-actions" in skills
+    assert "send-email" not in skills
+
+
+def test_get_skills_for_agent_monitor_preloads_send_email_when_configured():
+    """Monitor preloads send-email when delivery is configured."""
+    skills = set(_get_skills_for_agent("monitor", {"email_configured": True}))
+    assert "send-email" in skills
+
+
 def test_compose_returns_string():
     """compose_agent_instructions returns a string."""
     result = compose_agent_instructions("executor", {})
@@ -243,7 +290,7 @@ def test_compose_includes_shared_skills():
     """Composed prompt includes shared skill content."""
     result = compose_agent_instructions("executor", {})
     # Shared skills should be in the output — check by heading
-    assert "# Skill: require JSON command output" in result
+    assert "# Skill: Require JSON command output" in result
 
 
 def test_compose_executor_with_fact_check_includes_run_fact_check():
@@ -282,19 +329,25 @@ def test_compose_executor_with_fetch_excludes_run_fact_check():
 
 def test_compose_monitor_with_critical_includes_send_email():
     """Monitor with CRITICAL status includes send-email skill."""
-    result = compose_agent_instructions("monitor", {"status": "CRITICAL"})
+    result = compose_agent_instructions(
+        "monitor", {"email_configured": True, "status": "CRITICAL"}
+    )
     assert "# Skill: Send monitoring email" in result
 
 
 def test_compose_monitor_with_warning_includes_send_email():
     """Monitor with WARNING status includes send-email skill."""
-    result = compose_agent_instructions("monitor", {"status": "WARNING"})
+    result = compose_agent_instructions(
+        "monitor", {"email_configured": True, "status": "WARNING"}
+    )
     assert "# Skill: Send monitoring email" in result
 
 
 def test_compose_monitor_with_healthy_excludes_send_email():
     """Monitor with HEALTHY status does NOT include send-email skill."""
-    result = compose_agent_instructions("monitor", {"status": "HEALTHY"})
+    result = compose_agent_instructions(
+        "monitor", {"email_configured": True, "status": "HEALTHY"}
+    )
     assert "# Skill: Send monitoring email" not in result
 
 
@@ -318,18 +371,62 @@ def test_compose_planner_empty_context_loads_core():
     result = compose_agent_instructions("planner", {})
     # Core planner skills should be present — check by heading
     assert "# Skill: Start planning with evidence" in result
+    assert "# Skill: Respond to throughput emergencies" in result
 
 
 def test_compose_parser_loads_all_parser_skills():
     """Parser loads all its always-on skills with empty context."""
     result = compose_agent_instructions("parser", {})
     assert "# Skill: Read the source before parsing" in result
+    assert "# Skill: Adapt parsing to article type" in result
 
 
 def test_compose_monitor_loads_all_monitor_skills():
     """Monitor loads all its always-on skills with empty context."""
     result = compose_agent_instructions("monitor", {})
     assert "# Skill: Start monitoring with evidence" in result
+    assert "# Skill: Compute monitoring rates" in result
+    assert "# Skill: Generate monitoring alerts" in result
+
+
+def test_executor_business_logic_matches_runtime_loading_notes():
+    """Executor business-logic doc matches current runtime family behavior."""
+    content = Path("agents/skills/executor/business-logic.md").read_text(
+        encoding="utf-8"
+    )
+    assert "plan_family:fetch` or `plan_family:download" in content
+    assert "Parse-family plans may still be executed" in content
+
+
+def test_parser_business_logic_matches_caller_verification_model():
+    """Parser business logic notes caller-owned persistence verification."""
+    content = Path("agents/skills/parser/business-logic.md").read_text(
+        encoding="utf-8"
+    )
+    verify_skill = Path("agents/skills/parser/verify-result.md").read_text(
+        encoding="utf-8"
+    )
+    assert "caller verifies the" in content
+    assert "Do not run extra verification commands" in verify_skill
+
+
+def test_monitor_business_logic_uses_corrected_rate_and_evidence_model():
+    """Monitor business logic reflects corrected rate formulas and evidence."""
+    content = Path("agents/skills/monitor/business-logic.md").read_text(
+        encoding="utf-8"
+    )
+    assert "fact-unchecked + fact-checked" in content
+    assert "download_failures+parse_backlog+parsed" in content
+    assert "no invented helper metrics" in content
+
+
+def test_planner_business_logic_includes_remediation_branch():
+    """Planner business logic keeps the explicit remediation decision path."""
+    content = Path("agents/skills/planner/business-logic.md").read_text(
+        encoding="utf-8"
+    )
+    assert "CheckRemediation -->|Yes| CheckRemediate" in content
+    assert "queue-repair action" in content
 
 
 def test_base_prompt_sizes_are_reasonable(tmp_path, monkeypatch):

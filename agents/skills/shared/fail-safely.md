@@ -1,6 +1,6 @@
 # Skill: Stop safely and avoid loops
 
-## Trigger
+## Scope
 Always active — stop loops, avoid duplicate work, exit deterministically.
 
 ## Rules

@@ -1,6 +1,6 @@
 # Skill: Verify success conditions with evidence
 
-## Trigger
+## Scope
 Always active — shift from activity-completion to outcome-validation.
 
 ## Rules

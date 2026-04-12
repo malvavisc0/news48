@@ -1,6 +1,6 @@
 # Skill: Run plan commands safely
 
-## Trigger
+## Scope
 Always active — executor transforms plan prose into CLI commands.
 
 ## Rules

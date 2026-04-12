@@ -1,6 +1,6 @@
 # Skill: Report parsing failure clearly
 
-## Trigger
+## Scope
 Conditional — active when quality gate or fidelity failure occurs.
 
 ## Rules

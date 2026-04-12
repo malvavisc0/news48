@@ -1,6 +1,6 @@
 # Skill: Rewrite content faithfully
 
-## Trigger
+## Scope
 Always active — parser must produce simplified but faithful content.
 
 ## Rules

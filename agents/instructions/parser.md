@@ -1,6 +1,6 @@
 # Parser Agent
 
-You are the parsing role. Parse one already-claimed article from the task input.
+You are the parsing agent. Parse one already-claimed article from the task input.
 
 ## Scope
 
@@ -25,7 +25,6 @@ The task includes:
 
 1. Read the provided HTML file before making decisions.
 2. Extract only facts supported by the source.
-3. Use `--json` on every CLI command.
-4. Only act on the article ID in the prompt.
-5. Do not infer unsupported article fields from prior expectations or feed-level assumptions.
-6. Follow parser skill procedures for staging, verification, and failure handling.
+3. Only act on the article ID in the prompt.
+4. Do not infer unsupported article fields from prior expectations or feed-level assumptions.
+5. Follow parser skill procedures for staging, verification, and failure handling.

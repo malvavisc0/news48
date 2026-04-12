@@ -1,6 +1,6 @@
 # Skill: Add execution steps when required
 
-## Trigger
+## Scope
 Active when plan requires discovery of additional work.
 
 ## Rules

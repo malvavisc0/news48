@@ -1,6 +1,6 @@
 # Skill: Execute cleanup plans
 
-## Trigger
+## Scope
 Active when plan family is retention or cleanup.
 
 ## Rules

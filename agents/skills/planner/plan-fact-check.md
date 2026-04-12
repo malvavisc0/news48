@@ -1,6 +1,6 @@
 # Skill: Create fact-check coverage plans
 
-## Trigger
+## Scope
 Conditional — active when fact-check backlog exists.
 
 ## Rules

@@ -1,12 +1,12 @@
 # Skill: Verify parser result
 
-## Trigger
-Always active — parser must confirm parsed_at is set.
+## Scope
+Always active — parser must emit a final status line that the caller can verify.
 
 ## Rules
-1. After update, run `news48 articles info ARTICLEID --json`
-2. Confirm `parsed_at` is set
-3. Confirm article was updated successfully
+1. After the update attempt, emit a concise success or failure line.
+2. Do not run extra verification commands only to inspect `parsed_at`.
+3. The caller verifies whether the article update persisted successfully.
 
 ## Final Response
 After tool execution, emit one concise status line:

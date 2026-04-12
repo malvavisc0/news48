@@ -1,6 +1,6 @@
 # Skill: Build minimal executable plans
 
-## Trigger
+## Scope
 Always active — planner creates execution plans.
 
 ## Rules

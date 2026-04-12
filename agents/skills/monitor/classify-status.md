@@ -1,6 +1,6 @@
 # Skill: Classify current system status
 
-## Trigger
+## Scope
 Always active — monitor must derive HEALTHY/WARNING/CRITICAL without subjectivity.
 
 ## Rules

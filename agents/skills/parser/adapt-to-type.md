@@ -1,6 +1,6 @@
 # Skill: Adapt parsing to article type
 
-## Trigger
+## Scope
 Conditional — active for non-standard article types.
 
 ## Rules

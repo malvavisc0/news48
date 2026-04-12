@@ -1,6 +1,6 @@
 # Skill: Execute database health plans
 
-## Trigger
+## Scope
 Active when plan family is db-health.
 
 ## Rules

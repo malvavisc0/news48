@@ -1,6 +1,6 @@
 # Skill: Review fact-check coverage
 
-## Trigger
+## Scope
 Always active — monitor must surface fact-check backlog drift.
 
 ## Rules

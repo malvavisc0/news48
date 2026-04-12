@@ -1,6 +1,6 @@
-# Skill: require JSON command output
+# Skill: Require JSON command output
 
-## Trigger
+## Scope
 Always active — all agents must use structured JSON output.
 
 ## Rules

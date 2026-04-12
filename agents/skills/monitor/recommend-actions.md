@@ -1,6 +1,6 @@
 # Skill: Recommend next actions
 
-## Trigger
+## Scope
 Conditional — active when alerts exist.
 
 ## Rules

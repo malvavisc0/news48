@@ -1,10 +1,10 @@
 # Skill: Enforce parser quality
 
-## Trigger
+## Scope
 Always active — parser must block low-quality or invented output.
 
 ## Quality Gate (Before Final Update)
-Ensure all are true:
+Ensure all are true before writing content:
 - Title non-empty, factual, 8-140 chars
 - Summary 1-3 sentences, 40-420 chars, not equal to title
 - Content at least 600 chars (unless source genuinely brief)
@@ -18,12 +18,13 @@ Ensure all are true:
 - Preserve uncertainty words where source uncertain
 - Preserve attribution for disputed statements
 
-If any check fails:
+## Failure Handling
+If any quality gate or fidelity check fails:
 ```bash
 news48 articles fail ARTICLEID --error "Failed parser quality gate: <reason>" --json
 ```
 
-Reason codes:
+Failure reason codes:
 - `quality_gate.summary_duplicate_title`
 - `quality_gate.summary_out_of_bounds`
 - `quality_gate.title_out_of_bounds`

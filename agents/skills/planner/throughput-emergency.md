@@ -1,6 +1,6 @@
 # Skill: Respond to throughput emergencies
 
-## Trigger
+## Scope
 Conditional — active when backlog > 200 and non-improving.
 
 ## Rules

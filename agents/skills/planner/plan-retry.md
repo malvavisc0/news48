@@ -1,6 +1,6 @@
 # Skill: Create retry plans for failed work
 
-## Trigger
+## Scope
 Conditional — active when failed backlog exists.
 
 ## Rules

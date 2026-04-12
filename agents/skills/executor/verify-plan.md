@@ -1,6 +1,6 @@
 # Skill: Verify plan completion with evidence
 
-## Trigger
+## Scope
 Always active — executor must verify outcomes against success conditions.
 
 ## Rules

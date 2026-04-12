@@ -1,6 +1,6 @@
 # Skill: Avoid duplicate plans
 
-## Trigger
+## Scope
 Always active — planner must avoid duplicate work.
 
 ## Rules

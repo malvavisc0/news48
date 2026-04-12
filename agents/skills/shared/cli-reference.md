@@ -1,6 +1,6 @@
 # Skill: Use only documented CLI commands
 
-## Trigger
+## Scope
 Always active — all agents must know which CLI commands exist and how to invoke them.
 
 ## Core Rules

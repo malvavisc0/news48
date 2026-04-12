@@ -1,6 +1,6 @@
 # Skill: Extract source-supported facts
 
-## Trigger
+## Scope
 Always active — parser must extract only explicit source evidence.
 
 ## Rules

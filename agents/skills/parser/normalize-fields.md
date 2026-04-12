@@ -1,6 +1,6 @@
 # Skill: Normalize parsed fields
 
-## Trigger
+## Scope
 Always active — parser must enforce canonical taxonomy.
 
 ## Rules

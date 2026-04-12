@@ -1,6 +1,6 @@
 # Skill: Update step progress accurately
 
-## Trigger
+## Scope
 Always active — executor must safely manage step transitions.
 
 ## Rules

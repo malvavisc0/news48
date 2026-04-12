@@ -1,6 +1,6 @@
 # Skill: Claim one eligible plan
 
-## Trigger
+## Scope
 Always active — executor must claim exactly one plan per session.
 
 ## Rules

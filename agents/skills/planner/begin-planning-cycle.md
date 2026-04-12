@@ -1,6 +1,6 @@
 # Skill: Start planning with evidence
 
-## Trigger
+## Scope
 Always active — planner must start each cycle with evidence gathering.
 
 ## Rules

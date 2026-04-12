@@ -1,6 +1,6 @@
 # Skill: Execute work in waves
 
-## Trigger
+## Scope
 Active when plan family is fetch, download, or parse.
 
 ## Rules

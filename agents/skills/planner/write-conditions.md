@@ -1,6 +1,6 @@
 # Skill: Write realistic success conditions
 
-## Trigger
+## Scope
 Always active — planner must define success conditions before steps.
 
 ## Rules

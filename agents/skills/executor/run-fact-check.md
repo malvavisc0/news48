@@ -1,6 +1,6 @@
 # Skill: Execute fact-check plans
 
-## Trigger
+## Scope
 Active when plan family is fact-check.
 
 ## Rules

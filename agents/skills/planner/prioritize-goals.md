@@ -1,6 +1,6 @@
 # Skill: Prioritize planner goals
 
-## Trigger
+## Scope
 Always active — planner must prioritize goals in correct order.
 
 ## Goal Priority Order
