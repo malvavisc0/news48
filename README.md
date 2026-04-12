@@ -1,68 +1,92 @@
+<div align="center">
+
 # 🗞️ news48
 
-Autonomous news ingestion and verification pipeline with self-learning AI agents ⚙️
+**Autonomous news ingestion and verification pipeline with self-learning AI agents**
 
- `news48` collects feed entries, downloads article pages, parses structured content with an LLM, applies retention policy, and continuously coordinates recurring work through scheduled agents — **agents that learn from their mistakes and get smarter over time**.
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)](#prerequisites)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![uv](https://img.shields.io/badge/pkg-uv-DE5FE9?logo=uv&logoColor=white)](#quick-start)
 
-## ✨ What it does
+</div>
 
-- 📡 Feed ingestion from RSS and Atom sources
-- 🔄 Article lifecycle pipeline: fetch -> download -> parse
-- 🧪 Fact-check workflow support with verdict storage
-- 🧹 Retention and database health tooling
-- 🤖 Autonomous orchestration with planner, executor, parser, and monitor agents
-- 🧠 **Self-learning agents** that persist lessons across runs
+---
 
-## 🧠 Active autonomous architecture
+news48 collects feed entries, downloads article pages, parses structured content with an LLM, applies retention policy, and continuously coordinates recurring work through scheduled agents — **agents that learn from their mistakes and get smarter over time**.
 
- The current runtime model uses four scheduled agents:
+## Table of Contents
 
- - `planner`: detects gaps and creates executable plans
- - `executor`: claims one plan, executes steps, and verifies outcomes
- - `parser`: claims downloaded articles from the database and parses them autonomously
- - `monitor`: gathers health metrics, classifies status, and emits reports
+- [Features](#-features)
+- [Architecture](#-architecture)
+- [Self-Learning Agents](#-self-learning-agents)
+- [Quick Start](#-quick-start)
+- [Usage](#-usage)
+  - [Manual Pipeline](#manual-pipeline)
+  - [Agent Operations](#agent-operations)
+- [Schedule Defaults](#-schedule-defaults)
+- [Documentation](#-documentation)
+- [Development](#-development)
+- [License](#-license)
 
- ```text
-                      Orchestrator
-                    agents start daemon
-                            |
-            +-------+-------+-------+
-            |       |       |       |
-         Planner Executor Parser  Monitor
-          plans    runs   parses  observes
-            |       |       |       |
-            +-------+-------+-------+
-                    |               |
-           news48 CLI & tools    .lessons.md
-                                 (agents learn
-                                  across runs)
- ```
+## ✨ Features
 
- Reference implementation:
-- Orchestration loop in `agents/orchestrator.py`
-- Schedules in `agents/schedules.py`
-- CLI entry points in `commands/agents.py`
+| | |
+|---|---|
+| 📡 **Feed Ingestion** | RSS and Atom sources with automatic deduplication |
+| 🔄 **Article Pipeline** | End-to-end lifecycle: fetch → download → parse |
+| 🧪 **Fact-Checking** | Integrated verification workflow with verdict storage |
+| 🧹 **Retention & Health** | Automated cleanup and database health tooling |
+| 🤖 **Autonomous Agents** | Planner, executor, parser, and monitor run on schedules |
+| 🧠 **Self-Learning** | Agents persist lessons across runs and improve over time |
 
-## 🧠 Agents that learn
+## 🏗️ Architecture
 
-news48 agents **learn from their mistakes** and accumulate knowledge across runs. When an agent discovers something — correct command syntax after a failed attempt, a process insight, a feed-specific quirk, or an error recovery technique — it saves the lesson to a persistent file (`.lessons.md`). On every subsequent run, all accumulated lessons are automatically loaded into every agent's prompt.
-
-This means the system **gets smarter over time**:
+Four scheduled agents run under a single orchestrator daemon:
 
 ```
-Run 1:  Executor fails with wrong timeout → discovers 600s is correct → saves lesson
-Run 2:  Executor starts with "timeout for fact-check should be 600s" already in memory
+                    ┌─────────────┐
+                    │ Orchestrator │
+                    │ agents start │
+                    └──────┬──────┘
+           ┌───────┬───────┼───────┐
+           ▼       ▼       ▼       ▼
+       ┌───────┐┌───────┐┌──────┐┌───────┐
+       │Planner││Executor││Parser││Monitor│
+       │ plans ││  runs  ││parses││observes│
+       └───┬───┘└───┬───┘└──┬───┘└───┬───┘
+           └───────┬───────┘         │
+                   ▼                 ▼
+          news48 CLI & tools    .lessons.md
+                              (shared memory)
 ```
 
-### How it works
+| Agent | Role |
+|-------|------|
+| **Planner** | Detects gaps and creates executable plans |
+| **Executor** | Claims a plan, executes steps, verifies outcomes |
+| **Parser** | Claims downloaded articles and parses them autonomously |
+| **Monitor** | Gathers health metrics, classifies status, emits reports |
 
-- **Save**: Agents call the `save_lesson` tool whenever they discover something worth remembering
-- **Load**: At startup, `compose_agent_instructions()` reads `.lessons.md` and appends all lessons to the system prompt
-- **Cross-pollination**: All agents see all lessons — executor learns from planner's insights, monitor learns from parser's quirks
-- **Idempotent**: Duplicate lessons are automatically skipped
-- **Human-auditable**: Lessons are stored as plain markdown, easy to read and prune
+> **Source:** orchestration loop in [`agents/orchestrator.py`](agents/orchestrator.py), schedules in [`agents/schedules.py`](agents/schedules.py), CLI entry points in [`commands/agents.py`](commands/agents.py).
 
-### What agents learn
+## 🧠 Self-Learning Agents
+
+news48 agents **learn from their mistakes** and accumulate knowledge across runs. When an agent discovers something — correct command syntax, a process insight, a feed-specific quirk, or an error recovery technique — it saves the lesson to `.lessons.md`. On every subsequent run, all accumulated lessons are loaded into every agent's prompt.
+
+```
+Run 1:  Executor fails with wrong timeout → discovers 600s works → saves lesson
+Run 2:  Executor starts with "timeout for fact-check should be 600s" already loaded
+```
+
+**How it works:**
+
+- **Save** — agents call `save_lesson` whenever they discover something worth remembering
+- **Load** — `compose_agent_instructions()` reads `.lessons.md` and injects lessons into the system prompt
+- **Cross-pollination** — all agents see all lessons (executor learns from planner, monitor learns from parser)
+- **Idempotent** — duplicate lessons are automatically skipped
+- **Human-auditable** — plain markdown, easy to read and prune
+
+**What agents learn:**
 
 | Category | Examples |
 |----------|----------|
@@ -73,115 +97,102 @@ Run 2:  Executor starts with "timeout for fact-check should be 600s" already in 
 | Best Practices | Patterns that lead to better outcomes |
 | Timing & Thresholds | Correct batch sizes, intervals, limits |
 
-The lessons file is gitignored (instance-specific) and accumulates over time. See `agents/skills/shared/lessons-learned.md` for the agent-facing skill documentation.
+> The lessons file is gitignored (instance-specific). See [`agents/skills/shared/lessons-learned.md`](agents/skills/shared/lessons-learned.md) for the agent-facing skill documentation.
 
-## 🚀 Quick start
+## 🚀 Quick Start
 
-1) Install dependencies 📦
+### Prerequisites
 
- ```bash
- uv sync
- ```
+- Python **3.12+**
+- [uv](https://docs.astral.sh/uv/) package manager
+- An OpenAI-compatible LLM endpoint
+- A [Byparr](https://github.com/TheBeastLT/Byparr) instance for downloading
 
-2) Configure environment 🔐
+### Installation
 
- ```bash
- cp .env.example .env
- ```
+```bash
+# 1. Install dependencies
+uv sync
 
- Set at minimum:
+# 2. Configure environment
+cp .env.example .env
+```
 
- - `DATABASE_PATH`
- - `BYPARR_API_URL`
- - `API_BASE`
- - `MODEL`
- - `API_KEY`
+Edit `.env` and set the required variables:
 
- Optional for monitoring email:
+| Variable | Required | Description |
+|----------|:--------:|-------------|
+| `DATABASE_PATH` | ✅ | Path to SQLite database |
+| `BYPARR_API_URL` | ✅ | Byparr service URL |
+| `API_BASE` | ✅ | LLM API base URL |
+| `API_KEY` | ✅ | LLM API key |
+| `MODEL` | ✅ | Model identifier |
+| `CONTEXT_WINDOW` | | Context window size (default: 1048576) |
+| `SEARXNG_URL` | | SearXNG instance for search |
+| `SMTP_HOST` | | SMTP server for monitor email alerts |
+| `SMTP_PORT` | | SMTP port (default: 587) |
+| `SMTP_USER` | | SMTP username |
+| `SMTP_PASS` | | SMTP password |
+| `SMTP_FROM` | | Sender email address |
+| `MONITOR_EMAIL_TO` | | Recipient for monitor alerts |
 
- - `SMTP_HOST`
- - `SMTP_PORT`
- - `SMTP_USER`
- - `SMTP_PASS`
- - `SMTP_FROM`
- - `MONITOR_EMAIL_TO`
+```bash
+# 3. Verify installation
+uv run news48 --help
+```
 
-3) Verify CLI ✅
+## 📖 Usage
 
- ```bash
- uv run news48 --help
- ```
+### Manual Pipeline
 
-## 🛠️ Core manual workflow
+```bash
+# Seed feeds from a file
+uv run news48 seed seed.txt
 
- ```bash
- # seed feeds
- uv run news48 seed seed.txt
+# Run pipeline stages
+uv run news48 fetch
+uv run news48 download --limit 10
+uv run news48 parse --limit 10
 
- # run pipeline stages
- uv run news48 fetch
- uv run news48 download --limit 10
- uv run news48 parse --limit 10
+# Inspect system state
+uv run news48 stats --json
+uv run news48 cleanup status --json
+uv run news48 cleanup health --json
+```
 
- # inspect system
- uv run news48 stats --json
- uv run news48 cleanup status --json
- uv run news48 cleanup health --json
- ```
+### Agent Operations
 
-## 🤖 Agent operations
+**One-shot runs:**
 
-One-shot runs ⚡:
+```bash
+uv run news48 agents run --agent planner
+uv run news48 agents run --agent executor
+uv run news48 agents run --agent parser
+uv run news48 agents run --agent monitor
+```
 
- ```bash
- uv run news48 agents run --agent planner
- uv run news48 agents run --agent executor
- uv run news48 agents run --agent parser
- uv run news48 agents run --agent monitor
- ```
+**Continuous autonomous mode:**
 
-Continuous autonomous scheduling ♻️:
+```bash
+uv run news48 agents start          # start the orchestrator daemon
+uv run news48 agents status --json  # check running agents
+uv run news48 agents dashboard      # live dashboard
+uv run news48 agents stop           # graceful shutdown
+```
 
- ```bash
- uv run news48 agents start
- ```
+## 🧬 Development
 
-Status and control 🧭:
+```bash
+# Run test suite
+uv run pytest
 
- ```bash
- uv run news48 agents status --json
- uv run news48 agents dashboard
- uv run news48 agents stop
- ```
+# Format code
+uv run black .
+uv run isort .
+```
 
-## ⏱️ Current schedule defaults
-
- - planner: every 5 minutes
- - executor: every 1 minute (up to 5 concurrent)
- - parser: every 1 minute (up to 5 concurrent)
- - monitor: every 120 minutes
-
- See schedule source in `agents/schedules.py`.
-
-## 📚 Documentation map
-
- - Workflow guide: `docs/workflow-guide.md`
- - CLI test coverage: `docs/cli-testing-guide.md`
- - Agent tool inventory: `docs/agents-tools-inventory.md`
- - Architecture review: `plans/architecture-review.md`
- - Planner instructions: `agents/instructions/planner.md`
- - Executor instructions: `agents/instructions/executor.md`
- - Parser instructions: `agents/instructions/parser.md`
- - Monitor instructions: `agents/instructions/monitor.md`
-
-## 🧬 Development and tests
-
- ```bash
- uv run pytest
- ```
-
- Key test suites include agent behavior, planner tools, lessons learned, streaming, and database claim paths.
+Key test suites cover agent behavior, planner tools, lessons learned, streaming, and database claim paths.
 
 ## 📄 License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE) for details.
