@@ -30,6 +30,7 @@ flowchart TD
 | Skill | Purpose |
 |-------|---------|
 | `begin-planning-cycle` | Evidence gathering and bootstrap |
+| `read-monitor-report` | Read monitor's latest report for Monitor recommendations |
 | `prioritize-goals` | Priority order: feed freshness → article completeness → parsing → failure recovery → fact-check → stuck plans → retention → feed health → DB health |
 | `write-conditions` | Success conditions before steps, outcome not activity |
 | `build-plan` | Minimal steps, verification step, no CLI commands in descriptions |

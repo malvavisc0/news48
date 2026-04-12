@@ -9,6 +9,7 @@ Tools are organized into the following modules:
 | Module | File |
 |--------|------|
 | [`bypass`](../agents/tools/bypass.py) | Webpage content fetching with anti-bot bypass |
+| [`email`](../agents/tools/email.py) | Email delivery for monitoring reports |
 | [`files`](../agents/tools/files.py) | Unified file reading (content, metadata, chunks) |
 | [`planner`](../agents/tools/planner.py) | Persistent execution plan management |
 | [`searxng`](../agents/tools/searxng.py) | Web search via SearXNG |
@@ -44,11 +45,42 @@ async def fetch_webpage_content(
 - `result.results`: List of successful fetches with URL and content
 - `result.errors`: List of failed fetches with error details
 - `error`: Empty on success, or summary message on failure
-- `metadata`: Timestamp, reason, success flags
 
 ---
 
-### 2. Files Module
+### 2. Email Module
+
+#### `send_email`
+
+Send an email report. Used by the Monitor agent for delivering alerts.
+
+**Signature:**
+```python
+def send_email(
+    reason: str,
+    to: str = "",
+    subject: str = "",
+    body: str = "",
+) -> str
+```
+
+**Parameters:**
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `reason` | `str` | Required | Why you are sending this email |
+| `to` | `str` | `""` | Recipient email (defaults to `MONITOR_EMAIL_TO` env var) |
+| `subject` | `str` | `""` | Email subject line |
+| `body` | `str` | `""` | Plain-text email body |
+
+**Returns:** JSON string with:
+- `result`: `"sent"` on success
+- `error`: Empty on success, or error description
+
+**Requires:** `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, and either `to` param or `MONITOR_EMAIL_TO` env var.
+
+---
+
+### 3. Files Module
 
 #### `read_file`
 
@@ -85,31 +117,52 @@ def read_file(
 
 ---
 
-### 3. Planner Module
+### 4. Planner Module
 
 #### `create_plan`
 
-Create a new execution plan, persisted to `.plans/{id}.json`.
+Create a new execution plan, persisted to `.plans/{id}.json`. Includes built-in duplicate detection and pipeline dependency inference.
 
 **Signature:**
 ```python
-def create_plan(reason: str, task: str, steps: list[str]) -> str
+def create_plan(
+    reason: str,
+    task: str,
+    steps: list[str],
+    success_conditions: list[str],
+    parent_id: str = "",
+    plan_kind: str = "execution",
+    scope_type: str = "",
+    scope_value: str = "",
+    campaign_id: str = "",
+) -> str
 ```
 
 **Parameters:**
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | `reason` | `str` | Required | Why planning is needed |
-| `task` | `str` | Required | Overall task description |
+| `task` | `str` | Required | Overall task description (non-empty) |
 | `steps` | `list[str]` | Required | Ordered list of step descriptions |
+| `success_conditions` | `list[str]` | Required | Non-empty list of verifiable outcome statements |
+| `parent_id` | `str` | `""` | Optional parent plan ID for sequencing |
+| `plan_kind` | `str` | `"execution"` | Plan type: `execution` or `campaign` |
+| `scope_type` | `str` | `""` | Optional scope key (e.g., `feed`) |
+| `scope_value` | `str` | `""` | Optional scope value (e.g., a feed domain) |
+| `campaign_id` | `str` | `""` | Optional grouping plan ID for related child plans |
+
+**Validation:**
+- `task` must be a non-empty string (whitespace-only is rejected)
+- `success_conditions` must be a non-empty list with all non-blank entries
+- Duplicate detection prevents creating plans with the same family, scope, and parent
 
 **Returns:** JSON string with:
-- `result`: Plan object with id, task, steps, progress
-- `metadata.plan_id`: The plan ID for subsequent `update_plan` calls
+- `result`: Plan object with id, task, success_conditions, steps, progress
+- `error`: Empty on success, or validation error message
 
 #### `update_plan`
 
-Update a step status and optionally add/remove steps.
+Update a step status and optionally add/remove steps or change the plan status.
 
 **Signature:**
 ```python
@@ -121,6 +174,7 @@ def update_plan(
     result: str = "",
     add_steps: list[str] | None = None,
     remove_steps: list[str] | None = None,
+    plan_status: str = "",
 ) -> str
 ```
 
@@ -130,18 +184,68 @@ def update_plan(
 | `reason` | `str` | Required | Why you are updating this step |
 | `plan_id` | `str` | Required | ID from `create_plan` response |
 | `step_id` | `str` | Required | ID of the step to update (e.g., "step-1") |
-| `status` | `str` | Required | One of: pending, in_progress, completed, failed |
+| `status` | `str` | Required | One of: `pending`, `executing`, `completed`, `failed` |
 | `result` | `str` | `""` | Optional outcome message |
 | `add_steps` | `list[str] \| None` | `None` | Optional steps to append |
 | `remove_steps` | `list[str] \| None` | `None` | Optional step IDs to remove |
+| `plan_status` | `str` | `""` | Optional explicit plan status override |
+
+**Step status transitions:**
+- `pending` → `pending`, `executing`, `completed`, `failed`
+- `executing` → `executing`, `completed`, `failed`
+- `completed` → `completed` (idempotent only)
+- `failed` → `failed` (idempotent only)
 
 **Returns:** JSON string with:
 - `result`: Updated plan with all steps and progress
 - `error`: Empty on success, or error description
 
+#### `claim_plan`
+
+Find and claim the oldest eligible pending plan. Atomically selects and claims one plan so no other executor can grab the same plan.
+
+**Signature:**
+```python
+def claim_plan(reason: str) -> str
+```
+
+**Parameters:**
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `reason` | `str` | Required | Why you are claiming a plan |
+
+**Eligibility rules:**
+- Plan status must be `pending`
+- Plan kind must not be `campaign`
+- No `parent_id`, or parent plan status is `completed`
+- Stale executing plans are automatically requeued before claiming
+
+**Returns:** JSON string with:
+- `result`: The claimed plan object (status set to `executing`), or `{"status": "no_eligible_plans", "message": "..."}` when nothing can be claimed
+- `error`: Empty on success
+
+#### `list_plans`
+
+List all plans, optionally filtered by status. Used by the Planner to check for existing work before creating new plans.
+
+**Signature:**
+```python
+def list_plans(reason: str, status: str = "") -> str
+```
+
+**Parameters:**
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `reason` | `str` | Required | Why you are listing plans |
+| `status` | `str` | `""` | Optional filter: `pending`, `executing`, `completed`, `failed`, or comma-separated |
+
+**Returns:** JSON string with:
+- `result`: List of plan summaries (plan_id, task, status, parent_id, total_steps, created_at, updated_at, stale, requeue_count)
+- `error`: Empty on success
+
 ---
 
-### 4. SearXNG Module
+### 5. SearXNG Module
 
 #### `perform_web_search`
 
@@ -170,22 +274,22 @@ def perform_web_search(
 **Returns:** JSON string with:
 - `result.count`: Number of results
 - `result.findings`: Array of normalized results
-- `metadata.page_stats`: Requested/succeeded/failed page counts
+- `result.page_stats`: Requested/succeeded/failed page counts
 
 **Note:** Requires `SEARXNG_URL` environment variable.
 
 ---
 
-### 5. Shell Module
+### 6. Shell Module
 
 #### `run_shell_command`
 
-Execute a shell command and return its output.
+Execute a shell command and return its output. All `news48` invocations are automatically resolved to use the current Python interpreter.
 
 **Signature:**
 ```python
 def run_shell_command(
-    reason: str, command: str, timeout: int = 120
+    reason: str, command: str, timeout: Optional[int] = 120
 ) -> str
 ```
 
@@ -205,7 +309,7 @@ def run_shell_command(
 
 ---
 
-### 6. System Module
+### 7. System Module
 
 #### `get_system_info`
 
@@ -245,8 +349,9 @@ def get_system_info() -> str
 | File access | `read_file` |
 | Web access | `perform_web_search`, `fetch_webpage_content` |
 | System | `get_system_info` |
-| Planning | `create_plan`, `update_plan` |
-| **Total** | **7 tools** |
+| Planning | `create_plan`, `update_plan`, `claim_plan`, `list_plans` |
+| Communication | `send_email` |
+| **Total** | **10 tools** |
 
 ---
 
@@ -259,12 +364,12 @@ Each active runtime agent uses a specific subset of tools:
 | **Planner** | `run_shell_command`, `read_file`, `get_system_info`, `create_plan`, `update_plan`, `list_plans` | Gather evidence, detect gaps, create minimal executable plans, avoid duplicate work |
 | **Executor** | `claim_plan`, `update_plan`, `run_shell_command`, `read_file`, `get_system_info`, `perform_web_search`, `fetch_webpage_content` | Claim and execute one pending plan, verify success conditions, perform fact-check evidence lookups |
 | **Monitor** | `run_shell_command`, `read_file`, `get_system_info`, `send_email` | Gather metrics, classify alerts, and deliver reports when email is configured |
-| **Parser** | `run_shell_command`, `read_file` | Claim downloaded articles from the database, parse one claimed article at a time, update the article, and release the claim |
+| **Parser** | `run_shell_command`, `read_file` | Parse one claimed article at a time, update the article record, and release the processing claim |
 
 ### Design Notes
 
 - **Planner is plan-authoring only**: it never claims or executes plans; it focuses on evidence-driven plan creation and sequencing.
 - **Executor is execution-only**: it does not create plans directly; it claims pending plans and drives steps to completion or failure with verification evidence.
-- **Monitor is read-only for system state**: it does not create or update plans, and sends email only when configuration is available and the current run requires it.
+- **Monitor is read-only for system state**: it does not create or update plans, and sends email only when configuration is available and the current status requires it.
 - **Fact-checking is executed by Executor**: fact-check work is produced by Planner plans and executed through Executor tool access to search and page fetch tools.
 - **Parser is autonomous and DB-claim based**: it is scheduler-driven, does not use plan files, and prevents duplicate parse work by claiming articles in the database before parsing.

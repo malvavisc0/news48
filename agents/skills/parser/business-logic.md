@@ -7,8 +7,7 @@ flowchart TD
     ReadHTML --> TypeCheck{Non-standard type?}
     TypeCheck -->|Yes| Adapt[Adapt structure<br/>to article type]
     TypeCheck -->|No| Extract
-    Adapt --> Extract
-    ReadHTML --> Extract[Extract facts<br/>only from source]
+    Adapt --> Extract[Extract facts<br/>only from source]
     Extract --> Normalize[Normalize fields<br/>country codes, categories,<br/>sentiment, tags]
     Normalize --> QualityGate{Quality gate<br/>checks pass?}
     QualityGate -->|No| Fail[/Emit PARSE_FAIL<br/>reason_code/]

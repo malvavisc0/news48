@@ -247,7 +247,7 @@ def test_get_skills_for_agent_monitor_includes_all_core_analysis_skills():
         "begin-monitoring-cycle",
         "compute-rates",
         "evaluate-thresholds",
-        "classify-status",
+        "thresholds",
         "review-fact-check",
     }:
         assert skill_id in skills

@@ -25,22 +25,10 @@ Use only fields present in `news48 stats --json` article metrics:
 If denominator is 0, rate is 0. Note "insufficient sample" — do not extrapolate.
 
 ### Step 3: Compare Against Thresholds
-
-| Metric | Warning | Critical |
-|--------|---------|----------|
-| Database size | 100 MB | 500 MB |
-| Feed stale | 7 days | 14 days |
-| Download failure rate | 10% | 25% |
-| Parse failure rate | 10% | 25% |
-| Articles older than 48h | present | 100+ |
-| Empty article backlog | 50 | 200 |
-| Downloaded backlog | 50 | 200 |
+Use the **thresholds** skill for the canonical threshold table. Compare each computed metric against those values.
 
 ### Step 4: Classify Status
-Compute strictly in this order:
-1. `CRITICAL` if any critical threshold is breached
-2. `WARNING` if no critical but one or more warning thresholds are breached
-3. `HEALTHY` otherwise
+Use the classification rules in the **thresholds** skill.
 
 ### Step 5: Generate Report
 Structure the output as:
@@ -49,7 +37,13 @@ Structure the output as:
 3. **Alerts** — each alert: severity, description, reasoning (cite CLI evidence)
 4. **Recommendations** — concrete next steps for Planner/Executor
 
-### Step 6: Send Email (if configured and status is WARNING or CRITICAL)
+### Step 6: Persist Report
+Write the report to `.monitor/latest-report.json` using the `write-monitor-report` skill. This file is read by the Planner at the start of each planning cycle.
+
+### Step 7: Persist Metrics History
+Write a timestamped metrics file to `.metrics/` using the `write-metrics-history` skill. This enables trend analysis across cycles.
+
+### Step 8: Send Email (if configured and status is WARNING or CRITICAL)
 - Use `send_email` tool (not CLI)
 - Subject: `[news48] Monitor Report - <status>` + `[URGENT]` for CRITICAL
 - Body: Full report text from Step 5

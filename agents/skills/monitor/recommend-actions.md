@@ -8,7 +8,7 @@ Map observed issues to concrete next commands.
 
 ### Database Size Warning
 1. Check retention: `news48 cleanup status --json`
-2. Recommend: `news48 cleanup run`
+2. Recommend: `news48 cleanup purge --json`
 
 ### Feed Stale Warning
 1. List stale feeds: `news48 feeds list --json`

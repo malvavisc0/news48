@@ -1,5 +1,10 @@
 # Skill: Use only documented CLI commands
 
+> **Note**: This file is a general reference and is **not loaded at runtime** by any agent.
+> Each agent loads its own restricted CLI reference (e.g. `cli-reference-planner.md`)
+> via the `SKILL_REGISTRY`. Keep this file in sync with the agent-specific files for
+> documentation purposes only.
+
 ## Scope
 Always active — all agents must know which CLI commands exist and how to invoke them.
 

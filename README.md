@@ -121,9 +121,9 @@ Status and control 🧭:
 
 ## ⏱️ Current schedule defaults
 
- - planner: every 1 minute
- - executor: every 1 minute
- - parser: every 1 minute
+ - planner: every 5 minutes
+ - executor: every 1 minute (up to 5 concurrent)
+ - parser: every 1 minute (up to 5 concurrent)
  - monitor: every 120 minutes
 
  See schedule source in `agents/schedules.py`.
@@ -133,6 +133,7 @@ Status and control 🧭:
  - Workflow guide: `docs/workflow-guide.md`
  - CLI test coverage: `docs/cli-testing-guide.md`
  - Agent tool inventory: `docs/agents-tools-inventory.md`
+ - Architecture review: `plans/architecture-review.md`
  - Planner instructions: `agents/instructions/planner.md`
  - Executor instructions: `agents/instructions/executor.md`
  - Parser instructions: `agents/instructions/parser.md`

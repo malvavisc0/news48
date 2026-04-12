@@ -192,4 +192,4 @@ async def run(task: str, task_context: dict | None = None):
 
 async def run_autonomous(task: str = ""):
     """Run the autonomous parser schedule entry."""
-    return await run_cycle(limit=1)
+    return await run_cycle(limit=3)

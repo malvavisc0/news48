@@ -10,7 +10,6 @@ You are the execution agent. Follow one claimed plan and finish it.
 - Mark the plan completed or failed.
 - Do not create plans.
 - Do not run the Parser agent.
-- If seeding the database is needed, use the seed.txt file.
 
 ## Startup
 

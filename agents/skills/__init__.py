@@ -14,6 +14,7 @@ files before an agent starts running.
     │   ├── gather-evidence.md
     │   ├── verify-outcomes.md
     │   ├── fail-safely.md
+    │   ├── thresholds.md
     │   ├── cli-reference-planner.md
     │   ├── cli-reference-executor.md
     │   ├── cli-reference-parser.md
@@ -21,6 +22,7 @@ files before an agent starts running.
     ├── planner/
     │   ├── business-logic.md     # Mermaid diagram + skill reference
     │   ├── begin-planning-cycle.md
+    │   ├── read-monitor-report.md
     │   ├── prioritize-goals.md
     │   ├── deduplicate-plans.md
     │   ├── read-db-state.md
@@ -58,11 +60,12 @@ files before an agent starts running.
         ├── business-logic.md     # Mermaid diagram + skill reference
         ├── begin-monitoring-cycle.md
         ├── evaluate-thresholds.md
-        ├── classify-status.md
         ├── compute-rates.md
         ├── generate-alerts.md
         ├── recommend-actions.md
         ├── review-fact-check.md
+        ├── write-monitor-report.md
+        ├── write-metrics-history.md
         └── send-email.md
 """
 
@@ -135,12 +138,30 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
         agents=("planner", "executor", "parser", "monitor"),
         always=True,
     ),
+    "thresholds": SkillDef(
+        id="thresholds",
+        file="shared/thresholds.md",
+        agents=("planner", "monitor"),
+        always=True,
+    ),
+    "error-taxonomy": SkillDef(
+        id="error-taxonomy",
+        file="shared/error-taxonomy.md",
+        agents=("planner", "executor", "parser", "monitor"),
+        always=True,
+    ),
     # -------------------------------------------------------------------------
     # Planner skills
     # -------------------------------------------------------------------------
     "begin-planning-cycle": SkillDef(
         id="begin-planning-cycle",
         file="planner/begin-planning-cycle.md",
+        agents=("planner",),
+        always=True,
+    ),
+    "read-monitor-report": SkillDef(
+        id="read-monitor-report",
+        file="planner/read-monitor-report.md",
         agents=("planner",),
         always=True,
     ),
@@ -341,19 +362,21 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
         agents=("parser",),
         always=True,
     ),
+    # Parser intra-cycle branch skills: these are always preloaded via
+    # runtime_branch_skills because their conditions (non_standard_type,
+    # quality_gate_failure) are only discoverable after the agent starts
+    # reading the source article or evaluating quality gates.
     "adapt-to-type": SkillDef(
         id="adapt-to-type",
         file="parser/adapt-to-type.md",
         agents=("parser",),
-        always=False,
-        condition_key="non_standard_type",
+        always=True,
     ),
     "report-failure": SkillDef(
         id="report-failure",
         file="parser/report-failure.md",
         agents=("parser",),
-        always=False,
-        condition_key="quality_gate_failure",
+        always=True,
     ),
     "business-logic-parser": SkillDef(
         id="business-logic-parser",
@@ -388,15 +411,21 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
         agents=("monitor",),
         always=True,
     ),
-    "classify-status": SkillDef(
-        id="classify-status",
-        file="monitor/classify-status.md",
-        agents=("monitor",),
-        always=True,
-    ),
     "review-fact-check": SkillDef(
         id="review-fact-check",
         file="monitor/review-fact-check.md",
+        agents=("monitor",),
+        always=True,
+    ),
+    "write-monitor-report": SkillDef(
+        id="write-monitor-report",
+        file="monitor/write-monitor-report.md",
+        agents=("monitor",),
+        always=True,
+    ),
+    "write-metrics-history": SkillDef(
+        id="write-metrics-history",
+        file="monitor/write-metrics-history.md",
         agents=("monitor",),
         always=True,
     ),

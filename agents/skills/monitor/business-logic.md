@@ -32,9 +32,11 @@ flowchart TD
 |-------|---------|
 | `begin-monitoring-cycle` | 6-step workflow: evidence → rates → thresholds → classify → report → email |
 | `evaluate-thresholds` | Compare metrics, note "insufficient sample" when denominator=0 |
-| `classify-status` | CRITICAL > WARNING > HEALTHY (strict order) |
 | `compute-rates` | Use only proved stats fields; no invented helper metrics |
 | `review-fact-check` | fact-unchecked backlog, completions in 24h, oldest item age |
+| `thresholds` | Canonical threshold table and classification rules |
+| `write-monitor-report` | Persist report to `.monitor/latest-report.json` for Planner to read |
+| `write-metrics-history` | Persist cycle metrics to `.metrics/` for trend analysis |
 
 ## Conditional Skills
 
@@ -43,18 +45,6 @@ flowchart TD
 | `generate-alerts` | threshold_breached - Threshold is breached |
 | `recommend-actions` | alerts_exist - Alerts exist |
 | `send-email` | status:WARNING|CRITICAL - Status is WARNING or CRITICAL |
-
-## Thresholds
-
-| Metric | Warning | Critical |
-|--------|---------|----------|
-| Database size | 100 MB | 500 MB |
-| Feed stale | 7 days | 14 days |
-| Download failure rate | 10% | 25% |
-| Parse failure rate | 10% | 25% |
-| Articles older than 48h | present | 100+ |
-| Empty backlog | 50 | 200 |
-| Downloaded backlog | 50 | 200 |
 
 ## Notes
 

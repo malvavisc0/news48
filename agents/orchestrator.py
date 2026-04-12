@@ -165,6 +165,46 @@ class Orchestrator:
         except Exception as exc:
             logger.warning("Plan recovery startup hook failed: %s", exc)
 
+    def _archive_old_plans(self) -> None:
+        """Archive terminal plans older than 24 hours on startup.
+
+        Moves completed/failed plans to ``.plans/archive/`` so that
+        ``claim_plan()`` and ``list_plans()`` scans remain fast.
+        """
+        try:
+            from agents.tools.planner import archive_terminal_plans
+
+            result = archive_terminal_plans()
+            if result.get("archived"):
+                logger.info(
+                    "Plan archival: moved %s plan(s) to archive",
+                    result["archived"],
+                )
+            if result.get("errors"):
+                logger.warning(
+                    "Plan archival: %s error(s) during archival",
+                    result["errors"],
+                )
+        except Exception as exc:
+            logger.warning("Plan archival startup hook failed: %s", exc)
+
+    _HEARTBEAT_FILE = Path(".orchestrator.heartbeat")
+
+    def _write_heartbeat(self) -> None:
+        """Write a heartbeat file with the current timestamp.
+
+        External monitoring (systemd, Docker healthcheck, cron) can
+        check this file's modification time to detect orchestrator
+        crashes. If the heartbeat is older than 2× the tick interval,
+        the orchestrator is likely dead.
+        """
+        try:
+            self._HEARTBEAT_FILE.write_text(
+                datetime.now(timezone.utc).isoformat(), encoding="utf-8"
+            )
+        except OSError as exc:
+            logger.debug("Failed to write heartbeat file: %s", exc)
+
     def save_state(self) -> None:
         """Persist schedule state to ``.orchestrator.json``."""
         data: Dict[str, Any] = {
@@ -626,6 +666,9 @@ class Orchestrator:
         # 3. Save state
         self.save_state()
 
+        # 4. Write heartbeat
+        self._write_heartbeat()
+
         # Count total running instances
         total_running = sum(
             len(instances) for instances in self.running.values()
@@ -644,6 +687,7 @@ class Orchestrator:
         logger.info("Orchestrator starting (tick every %ds)", tick_seconds)
         self.load_state()
         self._recover_stale_plans()
+        self._archive_old_plans()
 
         try:
             while True:

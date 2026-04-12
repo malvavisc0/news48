@@ -640,9 +640,9 @@ All agents are LlamaIndex `FunctionAgent` instances except the Orchestrator, whi
 
 The orchestrator runs agents on a schedule:
 
-- **Planner**: Every 1 minute
-- **Executor**: Every 1 minute
-- **Parser**: Every 1 minute
+- **Planner**: Every 5 minutes
+- **Executor**: Every 1 minute (up to 5 concurrent)
+- **Parser**: Every 1 minute (up to 5 concurrent)
 - **Monitor**: Every 120 minutes
 
 > **Note**: Agent schedules are currently configured in code. A future
@@ -652,7 +652,7 @@ The orchestrator runs agents on a schedule:
 
 | Operation | Manual CLI Command | Autonomous Agent |
 |-----------|-------------------|------------------|
-| Run recurring pipeline cycle | `uv run news48 fetch && uv run news48 download --limit 10 && uv run news48 parse --limit 10 && uv run news48 cleanup run` | Planner + Executor + Parser loop |
+| Run recurring pipeline cycle | `uv run news48 fetch && uv run news48 download --limit 10 && uv run news48 parse --limit 10 && uv run news48 cleanup purge --force` | Planner + Executor + Parser loop |
 | Purge old articles | `uv run news48 cleanup purge --force` | Executor via explicit cleanup plan steps |
 | Check database health | `uv run news48 cleanup health` | Monitor Agent (every 120m) |
 | View retention status | `uv run news48 cleanup status` | Monitor Agent (alerts) |

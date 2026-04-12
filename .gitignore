@@ -13,7 +13,10 @@ wheels/
 .files/
 .logs/
 .plans/
+.monitor/
+.metrics/
 .orchestrator.json
+.orchestrator.heartbeat
 
 # SQLite database
 *.db

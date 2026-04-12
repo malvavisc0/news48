@@ -261,6 +261,56 @@ def _ensure_plans_dir() -> Path:
     return _PLANS_DIR
 
 
+_ARCHIVE_DIR = _PLANS_DIR / "archive"
+_ARCHIVE_AGE_HOURS = 24
+
+
+def archive_terminal_plans() -> dict:
+    """Move terminal plans older than 24 hours to the archive directory.
+
+    This keeps ``claim_plan()`` and ``list_plans()`` scans fast by
+    removing old completed/failed plans from the main directory.
+
+    Returns:
+        Dict with ``archived`` count and ``errors`` count.
+    """
+    plans_dir = _ensure_plans_dir()
+    _ARCHIVE_DIR.mkdir(exist_ok=True)
+
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(hours=_ARCHIVE_AGE_HOURS)
+    ).isoformat()
+
+    archived = 0
+    errors = 0
+
+    for plan_file in plans_dir.glob("*.json"):
+        try:
+            plan = json.loads(plan_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        if plan.get("status") not in _TERMINAL_PLAN_STATUSES:
+            continue
+
+        updated_at = plan.get("updated_at", "")
+        if not updated_at or updated_at > cutoff:
+            continue
+
+        # Move to archive
+        dest = _ARCHIVE_DIR / plan_file.name
+        try:
+            plan_file.replace(dest)
+            archived += 1
+        except OSError as exc:
+            logger.warning(
+                "Failed to archive plan %s: %s", plan_file.name, exc
+            )
+            errors += 1
+
+    return {"archived": archived, "errors": errors}
+
+
 def _plan_path(plan_id: str) -> Path:
     """Get the file path for a plan.
 
