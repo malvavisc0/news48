@@ -14,3 +14,5 @@ Always active — executor transforms plan prose into CLI commands.
 3. Increase timeout only when logs show active progress.
 4. Always pass `--json` to every `news48` command.
 5. Use `--feed` for per-domain steps; omit when plan scope requires broader execution.
+6. When `news48 download` is used for feed-scoped backlog work, pass `--limit` explicitly when needed and repeat the command until the plan outcome is reached, no eligible backlog remains, or progress stalls.
+7. Do not assume one command invocation satisfies a large backlog just because the command succeeded.

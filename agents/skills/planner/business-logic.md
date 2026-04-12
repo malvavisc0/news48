@@ -11,12 +11,16 @@ flowchart TD
     CheckRemediation -->|Yes| CheckRemediate[news48 plans remediate --apply]
     CheckRemediate --> RefreshGather
     CheckRemediation -->|No| CheckPlans{Active plans<br/>exist?}
-    CheckPlans -->|No same-family| MissingWork[Detect missing work]
+    CheckPlans -->|No same-scope work| MissingWork[Detect missing work]
     CheckPlans -->|Same family exists| Noop[/No-op - reuse existing/]
     MissingWork --> Prioritize[Prioritize Goals<br/>by priority order]
     Prioritize --> Validate[Validate success conditions<br/>against planning policy]
-    Validate --> Create[/Create plan with<br/>success_conditions + steps/]
-    Create --> Coherent{Plan queue<br/>coherent?}
+    Validate --> Campaign{Broad backlog<br/>needs grouped execution?}
+    Campaign -->|Yes| CreateCampaign[/Create campaign plan/]
+    CreateCampaign --> CreateChildren[/Create feed-scoped child plans/]
+    Campaign -->|No| Create[/Create plan with<br/>success_conditions + steps/]
+    CreateChildren --> Coherent{Plan queue<br/>coherent?}
+    Create --> Coherent
     Coherent -->|Yes| Stop([Stop])
     Coherent -->|No| MissingWork
 ```
@@ -46,3 +50,8 @@ flowchart TD
   after evidence gathering inside the same cycle.
 - `news48 plans remediate --apply --json` is a queue-repair action, not normal
   plan creation. Use it before deciding a new remediation plan is needed.
+- Campaign plans are grouping records; feed/domain child plans are the units the
+  executor should actually claim.
+- Retention is not optional: if cleanup evidence shows expired articles, the
+  planner should create cleanup work that drives the database back to zero
+  articles older than 48 hours.

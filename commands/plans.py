@@ -35,7 +35,9 @@ def _iter_plans(status: str = "") -> list[dict]:
     return items
 
 
-def _remediate_plan(plan: dict[str, Any], parent_statuses: dict[str, str]) -> list[str]:
+def _remediate_plan(
+    plan: dict[str, Any], parent_statuses: dict[str, str]
+) -> list[str]:
     """Mutate a plan in-place to repair common planner/executor corruption."""
     actions: list[str] = []
 
@@ -69,10 +71,16 @@ def _dedupe_active_plans(plans: list[dict[str, Any]]) -> list[tuple[str, str]]:
     active = [p for p in plans if p.get("status") in {"pending", "executing"}]
     active.sort(key=lambda p: p.get("created_at", ""))
 
-    seen: dict[tuple[str, str | None], dict[str, Any]] = {}
+    seen: dict[tuple[str, str | None, str, str, str], dict[str, Any]] = {}
     deduped: list[tuple[str, str]] = []
     for plan in active:
-        key = (_task_family(plan.get("task", "")), plan.get("parent_id"))
+        key = (
+            _task_family(plan.get("task", "")),
+            plan.get("parent_id"),
+            plan.get("plan_kind", "execution"),
+            plan.get("scope_type", ""),
+            plan.get("scope_value", ""),
+        )
         existing = seen.get(key)
         if not existing:
             seen[key] = plan
@@ -99,8 +107,12 @@ def plans_list(
         {
             "plan_id": plan["id"],
             "task": plan["task"],
+            "plan_kind": plan.get("plan_kind", "execution"),
             "status": plan["status"],
             "parent_id": plan.get("parent_id"),
+            "scope_type": plan.get("scope_type", ""),
+            "scope_value": plan.get("scope_value", ""),
+            "campaign_id": plan.get("campaign_id"),
             "total_steps": len(plan.get("steps", [])),
             "created_at": plan.get("created_at"),
             "updated_at": plan.get("updated_at"),
@@ -137,7 +149,12 @@ def plans_show(
     print(f"Plan: {plan['id']}")
     print(f"Task: {plan['task']}")
     print(f"Status: {plan['status']}")
+    print(f"Kind: {plan.get('plan_kind', 'execution')}")
     print(f"Parent: {plan.get('parent_id')}")
+    scope_type = plan.get("scope_type") or "-"
+    scope_value = plan.get("scope_value") or "-"
+    print(f"Scope: {scope_type}:{scope_value}")
+    print(f"Campaign: {plan.get('campaign_id') or '-'}")
     print("Success Conditions:")
     for condition in plan.get("success_conditions", []):
         print(f"  - {condition}")

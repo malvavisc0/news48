@@ -57,7 +57,9 @@ async def _ensure_solution(
     """Get or refresh the bypass solution for *domain*."""
     async with domain_lock:
         cached = solutions.get(domain)
-        need_refresh = cached is None or (stale is not None and cached is stale)
+        need_refresh = cached is None or (
+            stale is not None and cached is stale
+        )
         if need_refresh:
             solutions[domain] = await get_byparr_solution(
                 target_url=f"https://{domain}/",
@@ -136,7 +138,9 @@ async def _download_article(
                 MAX_RETRIES + 1,
             )
             status_msg(f"Failed: {url} - {last_error}")
-            mark_article_download_failed(db_path, article["id"], str(last_error))
+            mark_article_download_failed(
+                db_path, article["id"], str(last_error)
+            )
             return False
         finally:
             clear_article_processing_claim(
@@ -220,7 +224,9 @@ async def _download(
                 force=force,
             )
         )
-        articles = [article for article in candidates if article["id"] in claimed]
+        articles = [
+            article for article in candidates if article["id"] in claimed
+        ]
         if not articles:
             status_msg("All failed downloads are already being processed")
             return {
@@ -232,7 +238,9 @@ async def _download(
             }
         status_msg(f"Found {len(articles)} failed downloads to retry")
     else:
-        candidates = get_empty_articles(db_path, limit, feed_domain=feed_domain)
+        candidates = get_empty_articles(
+            db_path, limit, feed_domain=feed_domain
+        )
         if not candidates:
             status_msg("No articles need downloading")
             return {
@@ -251,7 +259,9 @@ async def _download(
                 force=force,
             )
         )
-        articles = [article for article in candidates if article["id"] in claimed]
+        articles = [
+            article for article in candidates if article["id"] in claimed
+        ]
         if not articles:
             status_msg("All candidate downloads are already being processed")
             return {
@@ -281,7 +291,9 @@ async def _download(
             claim_owner=claim_owner,
         )
 
-    results = await asyncio.gather(*(_throttled(i, a) for i, a in enumerate(articles)))
+    results = await asyncio.gather(
+        *(_throttled(i, a) for i, a in enumerate(articles))
+    )
 
     downloaded = sum(1 for r in results if r)
     failed = sum(1 for r in results if not r)
@@ -297,7 +309,7 @@ async def _download(
 
 def download(
     limit: int = typer.Option(
-        10,
+        50,
         "--limit",
         "-l",
         help="Maximum number of articles to download",
@@ -309,7 +321,9 @@ def download(
         help="Delay between download starts in seconds",
     ),
     feed: str = typer.Option(None, "--feed", help="Filter by feed domain"),
-    retry: bool = typer.Option(False, "--retry", "-r", help="Retry failed downloads"),
+    retry: bool = typer.Option(
+        False, "--retry", "-r", help="Retry failed downloads"
+    ),
     article: int = typer.Option(
         None, "--article", help="Download a specific article by ID"
     ),

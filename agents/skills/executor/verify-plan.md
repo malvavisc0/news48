@@ -16,6 +16,7 @@ Always active — executor must verify outcomes against success conditions.
 4. Mark plan `completed` only when ALL valid conditions pass and no invalid conditions exist.
 5. Mark plan `failed` when verification is complete and valid conditions are not met.
 6. If any condition is invalid, fail the plan as a plan-quality defect rather than claiming execution alone failed.
+7. Before failing a batched execution plan, verify whether more command calls are still required by the plan rather than treating one partial batch as final evidence.
 
 ## Evidence Commands by Condition Type
 | Condition type | Evidence command |

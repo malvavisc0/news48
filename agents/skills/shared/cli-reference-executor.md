@@ -28,7 +28,7 @@ Use these commands to observe system state:
 
 ## Pipeline Execution Commands
 - `news48 fetch --json` — fetch RSS/Atom feeds, insert article metadata.
-- `news48 download --json` — download full HTML content for articles.
+- `news48 download --json` — download full HTML content for articles. Supports `--feed` and `--limit`; current default batch size is 50 when `--limit` is omitted.
 - `news48 parse --json` — reserved for the Parser agent. Executor must NOT run this; ensure downloaded articles are ready for the scheduled parser.
 
 ## Article Mutation Commands

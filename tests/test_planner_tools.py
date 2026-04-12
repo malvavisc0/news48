@@ -420,6 +420,221 @@ def test_create_plan_dedupes_active_same_family(tmp_path, monkeypatch):
     assert second["plan_id"] == first["plan_id"]
 
 
+def test_update_plan_rejects_terminal_plan_restatus_even_if_step_matches(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    created = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download empty articles",
+            steps=["Download", "Verify"],
+            success_conditions=["No empty articles"],
+        )
+    )["result"]
+
+    json.loads(
+        planner_tools.update_plan(
+            reason="finish",
+            plan_id=created["plan_id"],
+            step_id="step-1",
+            status="completed",
+            plan_status="failed",
+        )
+    )
+
+    payload = json.loads(
+        planner_tools.update_plan(
+            reason="duplicate finalization",
+            plan_id=created["plan_id"],
+            step_id="step-1",
+            status="failed",
+            plan_status="failed",
+        )
+    )
+
+    assert payload["result"] == ""
+    assert "already terminal" in payload["error"]
+
+
+def test_create_plan_allows_multiple_feed_scoped_download_children(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    campaign = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Coordinate download backlog for stale feeds",
+            steps=["Track feed download coverage"],
+            success_conditions=[
+                "Feed download child plans exist for target feeds"
+            ],
+            plan_kind="campaign",
+            scope_type="campaign",
+            scope_value="download-backlog",
+        )
+    )["result"]
+
+    feed_a = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download empty articles for arstechnica.com",
+            steps=[
+                "Download arstechnica.com articles",
+                "Verify arstechnica.com backlog is reduced",
+            ],
+            success_conditions=[
+                "Eligible empty backlog for arstechnica.com is reduced"
+            ],
+            scope_type="feed",
+            scope_value="arstechnica.com",
+            campaign_id=campaign["plan_id"],
+        )
+    )["result"]
+
+    feed_b = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download empty articles for theverge.com",
+            steps=[
+                "Download theverge.com articles",
+                "Verify theverge.com backlog is reduced",
+            ],
+            success_conditions=[
+                "Eligible empty backlog for theverge.com is reduced"
+            ],
+            scope_type="feed",
+            scope_value="theverge.com",
+            campaign_id=campaign["plan_id"],
+        )
+    )["result"]
+
+    assert campaign["plan_kind"] == "campaign"
+    assert feed_a["plan_id"] != campaign["plan_id"]
+    assert feed_b["plan_id"] != feed_a["plan_id"]
+    assert feed_a["campaign_id"] == campaign["plan_id"]
+    assert feed_b["campaign_id"] == campaign["plan_id"]
+
+
+def test_create_plan_dedupes_same_feed_scoped_download_child(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    first = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download empty articles for arstechnica.com",
+            steps=[
+                "Download arstechnica.com articles",
+                "Verify arstechnica.com backlog is reduced",
+            ],
+            success_conditions=[
+                "Eligible empty backlog for arstechnica.com is reduced"
+            ],
+            scope_type="feed",
+            scope_value="arstechnica.com",
+        )
+    )["result"]
+
+    second = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download empty articles for arstechnica.com now",
+            steps=[
+                "Download arstechnica.com articles",
+                "Verify arstechnica.com backlog is reduced",
+            ],
+            success_conditions=[
+                "Eligible empty backlog for arstechnica.com is reduced"
+            ],
+            scope_type="feed",
+            scope_value="arstechnica.com",
+        )
+    )["result"]
+
+    assert second["plan_id"] == first["plan_id"]
+
+
+def test_claim_plan_skips_campaign_plans(tmp_path, monkeypatch):
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    campaign = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Coordinate download backlog for stale feeds",
+            steps=["Track feed download coverage"],
+            success_conditions=[
+                "Feed download child plans exist for target feeds"
+            ],
+            plan_kind="campaign",
+            scope_type="campaign",
+            scope_value="download-backlog",
+        )
+    )["result"]
+
+    child = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download empty articles for arstechnica.com",
+            steps=[
+                "Download arstechnica.com articles",
+                "Verify arstechnica.com backlog is reduced",
+            ],
+            success_conditions=[
+                "Eligible empty backlog for arstechnica.com is reduced"
+            ],
+            scope_type="feed",
+            scope_value="arstechnica.com",
+            campaign_id=campaign["plan_id"],
+        )
+    )["result"]
+
+    claimed = json.loads(planner_tools.claim_plan("test"))["result"]
+    assert claimed["plan_id"] == child["plan_id"]
+
+
+def test_peek_next_plan_skips_campaign_plans(tmp_path, monkeypatch):
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    campaign = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Coordinate download backlog for stale feeds",
+            steps=["Track feed download coverage"],
+            success_conditions=[
+                "Feed download child plans exist for target feeds"
+            ],
+            plan_kind="campaign",
+            scope_type="campaign",
+            scope_value="download-backlog",
+        )
+    )["result"]
+
+    child = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download empty articles for arstechnica.com",
+            steps=[
+                "Download arstechnica.com articles",
+                "Verify arstechnica.com backlog is reduced",
+            ],
+            success_conditions=[
+                "Eligible empty backlog for arstechnica.com is reduced"
+            ],
+            scope_type="feed",
+            scope_value="arstechnica.com",
+            campaign_id=campaign["plan_id"],
+        )
+    )["result"]
+
+    family = planner_tools.peek_next_plan()
+    assert family == "download"
+    assert child["plan_kind"] == "execution"
+
+
 def test_create_plan_infers_download_parent_from_active_fetch(
     tmp_path, monkeypatch
 ):

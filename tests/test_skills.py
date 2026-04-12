@@ -278,6 +278,7 @@ def test_compose_includes_base_prompt():
     """Composed prompt includes base prompt content."""
     result = compose_agent_instructions("executor", {})
     assert "Executor Agent" in result or "# Executor" in result
+    assert "make as many calls as needed" in result
 
 
 def test_compose_includes_skills_marker_when_skills_exist():
@@ -291,6 +292,7 @@ def test_compose_includes_shared_skills():
     result = compose_agent_instructions("executor", {})
     # Shared skills should be in the output — check by heading
     assert "# Skill: Require JSON command output" in result
+    assert "current default batch size is 50" in result
 
 
 def test_compose_executor_with_fact_check_includes_run_fact_check():
@@ -372,6 +374,7 @@ def test_compose_planner_empty_context_loads_core():
     # Core planner skills should be present — check by heading
     assert "# Skill: Start planning with evidence" in result
     assert "# Skill: Respond to throughput emergencies" in result
+    assert "Retention compliance is mandatory whenever" in result
 
 
 def test_compose_parser_loads_all_parser_skills():

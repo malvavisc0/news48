@@ -13,6 +13,7 @@ Always active — planner must define success conditions before steps.
 7. Do not use a condition that depends on a field, status, or metric the system does not actually expose.
 8. Before finalizing a plan, review each condition and remove any one that fails the self-check below.
 9. Treat the bad-pattern list as illustrative, not exhaustive.
+10. If execution uses batched commands such as `news48 download --limit`, write conditions that remain valid across repeated calls and do not imply one batch clears the whole backlog.
 
 ## Self-Check Before Plan Creation
 For each condition, verify all of the following:
@@ -43,6 +44,7 @@ Reject a condition if it does any of the following, regardless of wording:
 - `≥90% of target feeds have last_fetched_at within last 120 minutes`
 - `No articles remain in empty status` (internal: coverage plan ensures download plans exist)
 - `Download success rate >= 75%`
+- `Eligible empty backlog for arstechnica.com is reduced to zero after repeated download batches`
 - `No pending plans remain blocked by failed parent plans`
 
 ## Bad Patterns
@@ -55,6 +57,7 @@ Reject a condition if it does any of the following, regardless of wording:
 - ~~`System reports zero feeds, zero articles, and zero plans`~~ (observational no-op, not meaningful work)
 - ~~`Every seeded feed has been fetched successfully at least once`~~ (same forbidden meaning as zero never-fetched tolerance)
 - ~~`Fetch run shows articles_found > 0 for each feed`~~ (uses aggregate evidence as if it were per-feed proof)
+- ~~`All 646 empty articles for a feed are downloaded after one download call`~~ (ignores batching and command limits)
 
 ## Thresholds
 | Metric | Warning | Critical |

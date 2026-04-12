@@ -60,12 +60,19 @@ def _task_family(task: str) -> str:
 
 
 def _find_active_duplicate_plan(
-    task: str, parent_id: str | None
+    task: str,
+    parent_id: str | None,
+    scope_type: str = "",
+    scope_value: str = "",
+    plan_kind: str = "execution",
 ) -> dict | None:
     """Find an active plan in the same family to prevent duplicates."""
     plans_dir = _ensure_plans_dir()
     family = _task_family(task)
     target_parent = parent_id or None
+    target_scope_type = (scope_type or "").strip().lower()
+    target_scope_value = (scope_value or "").strip().lower()
+    target_plan_kind = (plan_kind or "execution").strip().lower()
     candidates = []
 
     for plan_file in plans_dir.glob("*.json"):
@@ -80,7 +87,22 @@ def _find_active_duplicate_plan(
         if _task_family(plan.get("task", "")) != family:
             continue
 
+        if (plan.get("plan_kind") or "execution").strip().lower() != (
+            target_plan_kind
+        ):
+            continue
+
         if plan.get("parent_id") != target_parent:
+            continue
+
+        if (plan.get("scope_type") or "").strip().lower() != (
+            target_scope_type
+        ):
+            continue
+
+        if (plan.get("scope_value") or "").strip().lower() != (
+            target_scope_value
+        ):
             continue
 
         candidates.append(plan)
@@ -107,6 +129,9 @@ def _find_active_plan_by_family(family: str) -> dict | None:
             continue
 
         if plan.get("status") not in _ACTIVE_PLAN_STATUSES:
+            continue
+
+        if plan.get("plan_kind", "execution") != "execution":
             continue
 
         if _task_family(plan.get("task", "")) != family:
@@ -274,6 +299,10 @@ def _read_plan(plan_id: str) -> dict:
     plan.setdefault("requeue_count", 0)
     plan.setdefault("requeued_at", None)
     plan.setdefault("requeue_reason", None)
+    plan.setdefault("plan_kind", "execution")
+    plan.setdefault("scope_type", "")
+    plan.setdefault("scope_value", "")
+    plan.setdefault("campaign_id", None)
 
     return plan
 
@@ -331,6 +360,10 @@ def create_plan(
     steps: list[str],
     success_conditions: list[str],
     parent_id: str = "",
+    plan_kind: str = "execution",
+    scope_type: str = "",
+    scope_value: str = "",
+    campaign_id: str = "",
 ) -> str:
     """Create a new execution plan, persist to .plans/{id}.json.
 
@@ -353,6 +386,10 @@ def create_plan(
       statements. Each condition must describe an outcome (not an action)
       that can be verified using CLI commands like `news48 ... --json`.
     - `parent_id` (str): Optional parent plan ID for sequencing
+    - `plan_kind` (str): Optional plan type: `execution` or `campaign`
+    - `scope_type` (str): Optional scope key, e.g. `feed`
+    - `scope_value` (str): Optional scope value, e.g. a feed domain
+    - `campaign_id` (str): Optional grouping plan ID for related child plans
 
     ## Validation
     - `task` must be a non-empty string (whitespace-only is rejected)
@@ -396,13 +433,38 @@ def create_plan(
                     }
                 )
 
+        normalized_plan_kind = (plan_kind or "execution").strip().lower()
+        if normalized_plan_kind not in {"execution", "campaign"}:
+            return _safe_json(
+                {
+                    "result": "",
+                    "error": "plan_kind must be 'execution' or 'campaign'",
+                }
+            )
+
+        normalized_scope_type = (scope_type or "").strip().lower()
+        normalized_scope_value = (scope_value or "").strip().lower()
+        normalized_campaign_id = (campaign_id or "").strip() or None
+
         resolved_parent_id = _infer_parent_plan_id(task, parent_id or None)
 
-        duplicate = _find_active_duplicate_plan(task, resolved_parent_id)
+        duplicate = _find_active_duplicate_plan(
+            task,
+            resolved_parent_id,
+            normalized_scope_type,
+            normalized_scope_value,
+            normalized_plan_kind,
+        )
         # Backward-compatible dedupe: also reuse same-family active plans
         # that were created before dependency inference (parent_id None).
         if not duplicate and resolved_parent_id is not None:
-            duplicate = _find_active_duplicate_plan(task, None)
+            duplicate = _find_active_duplicate_plan(
+                task,
+                None,
+                normalized_scope_type,
+                normalized_scope_value,
+                normalized_plan_kind,
+            )
         if duplicate:
             return _safe_json(
                 {
@@ -430,8 +492,12 @@ def create_plan(
         plan = {
             "id": plan_id,
             "task": task,
+            "plan_kind": normalized_plan_kind,
             "status": "pending",
             "parent_id": resolved_parent_id,
+            "scope_type": normalized_scope_type,
+            "scope_value": normalized_scope_value,
+            "campaign_id": normalized_campaign_id,
             "success_conditions": success_conditions,
             "created_at": timestamp,
             "updated_at": timestamp,
@@ -724,8 +790,12 @@ def _serialize_plan(plan: dict) -> dict:
     return {
         "plan_id": plan["id"],
         "task": plan["task"],
+        "plan_kind": plan.get("plan_kind", "execution"),
         "status": plan["status"],
         "parent_id": plan.get("parent_id"),
+        "scope_type": plan.get("scope_type", ""),
+        "scope_value": plan.get("scope_value", ""),
+        "campaign_id": plan.get("campaign_id"),
         "success_conditions": plan.get("success_conditions", []),
         "steps": steps,
         "total_steps": len(steps),
@@ -925,6 +995,7 @@ def claim_plan(reason: str) -> str:
     ## How It Works
     A plan is eligible when:
     - Its status is ``pending``
+    - Its ``plan_kind`` is not ``campaign``
     - It has no ``parent_id``, OR the parent plan's status is ``completed``
 
     Stale executing plans (no update for 60 minutes) are automatically
@@ -978,6 +1049,9 @@ def claim_plan(reason: str) -> str:
         pending_plans.sort(key=lambda p: p.get("created_at", ""))
 
         for plan in pending_plans:
+            if plan.get("plan_kind", "execution") == "campaign":
+                continue
+
             parent_id = plan.get("parent_id")
             if parent_id:
                 parent = all_plans.get(parent_id)
@@ -1079,6 +1153,9 @@ def peek_next_plan() -> str | None:
 
     pending.sort(key=lambda p: p.get("created_at", ""))
     for plan in pending:
+        if plan.get("plan_kind", "execution") == "campaign":
+            continue
+
         parent_id = plan.get("parent_id")
         if parent_id:
             parent = all_plans.get(parent_id)

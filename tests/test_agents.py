@@ -52,7 +52,7 @@ class TestOrchestrator:
         orchestrator = Orchestrator()
         assert orchestrator.schedules["planner"].interval_minutes == 5
         assert orchestrator.schedules["executor"].interval_minutes == 1
-        assert orchestrator.schedules["parser"].interval_minutes == 2
+        assert orchestrator.schedules["parser"].interval_minutes == 1
         assert orchestrator.schedules["monitor"].interval_minutes == 120
 
     def test_should_run_when_never_run(self):

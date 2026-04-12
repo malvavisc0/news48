@@ -19,6 +19,8 @@ Always active — planner must prioritize goals in correct order.
 ## Success Condition Guidelines
 - Bootstrap first when there are zero feeds in the database.
 - Feed freshness: ≥90% of feeds have last_fetched_at within threshold.
+- Retention compliance is mandatory whenever `news48 cleanup status --json` shows one or more expired articles.
+- Cleanup success conditions should require zero articles older than 48 hours after execution.
 - Never require 100% success for external network resources.
 - Example: "At least 90% of feeds (≥50/55) have last_fetched_at within 120 minutes"
 - Coverage goals should be phrased as plan coverage or bounded backlog reduction when execution depends on external systems.

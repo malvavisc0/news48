@@ -71,7 +71,7 @@ DEFAULT_SCHEDULES: Dict[str, AgentSchedule] = {
             "the database, parse one claimed article at a time, update the "
             "article, and release the claim when finished."
         ),
-        interval_minutes=2,
+        interval_minutes=1,
         max_concurrent=5,
     ),
     "monitor": AgentSchedule(
