@@ -25,6 +25,12 @@ Always active — planner must prioritize goals in correct order.
 - Example: "At least 90% of feeds (≥50/55) have last_fetched_at within 120 minutes"
 - Coverage goals should be phrased as plan coverage or bounded backlog reduction when execution depends on external systems.
 
+## Throughput Emergency Override
+When a throughput emergency is active (see the throughput-emergency procedure loaded in this prompt), the priority order changes:
+- **Only plan goals 1–3** (feed freshness, article completeness, article parsing)
+- **Defer goals 4–9** until the emergency clears (both backlog conditions are false for one full cycle)
+- This override takes precedence over the normal priority table above
+
 ## Anti-Patterns
 - Do not create a plan whose task is only to verify the system is empty.
 - Do not create a plan whose success conditions only restate current state without driving work.

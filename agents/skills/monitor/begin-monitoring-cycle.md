@@ -25,10 +25,10 @@ Use only fields present in `news48 stats --json` article metrics:
 If denominator is 0, rate is 0. Note "insufficient sample" — do not extrapolate.
 
 ### Step 3: Compare Against Thresholds
-Use the **thresholds** skill for the canonical threshold table. Compare each computed metric against those values.
+Compare each computed metric against the canonical threshold table (loaded as a separate document in this prompt). Do not duplicate threshold values here — the table is the single source of truth.
 
 ### Step 4: Classify Status
-Use the classification rules in the **thresholds** skill.
+Classify strictly in this order: CRITICAL if any critical threshold is breached, WARNING if no critical but one or more warning thresholds are breached, HEALTHY otherwise.
 
 ### Step 5: Generate Report
 Structure the output as:
@@ -38,10 +38,10 @@ Structure the output as:
 4. **Recommendations** — concrete next steps for Planner/Executor
 
 ### Step 6: Persist Report
-Write the report to `.monitor/latest-report.json` using the `write-monitor-report` skill. This file is read by the Planner at the start of each planning cycle.
+Write the report to `.monitor/latest-report.json` (see the report-writing procedure loaded in this prompt). This file is read by the Planner at the start of each planning cycle.
 
 ### Step 7: Persist Metrics History
-Write a timestamped metrics file to `.metrics/` using the `write-metrics-history` skill. This enables trend analysis across cycles.
+Write a timestamped metrics file to `.metrics/` (see the metrics-history procedure loaded in this prompt). This enables trend analysis across cycles.
 
 ### Step 8: Send Email (if configured and status is WARNING or CRITICAL)
 - Use `send_email` tool (not CLI)
@@ -56,4 +56,4 @@ Do not send email when status is HEALTHY unless explicitly requested.
 - Recommend actions for Planner/Executor — do not execute them yourself.
 - If email is unavailable, state that clearly in the output.
 - Use threshold-based language for external signals; avoid absolute claims when remote systems can fail.
-- If a branch condition is discovered mid-cycle (breach found, alerts needed, fact-check drift found), follow the matching skill in the same run.
+- If a branch condition is discovered mid-cycle (breach found, alerts needed, fact-check drift found), follow the matching procedure in the same run.

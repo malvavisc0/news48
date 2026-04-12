@@ -4,10 +4,10 @@
 Always active — monitor must compare metrics against thresholds to classify status.
 
 ## Thresholds Reference
-Use the **thresholds** skill for the canonical threshold table and classification rules. This skill provides the evaluation procedure only.
+The canonical threshold table is loaded as a separate document in this prompt. This procedure describes how to apply it.
 
 ## Evaluation Procedure
 1. Gather metrics from CLI evidence.
-2. Compare each metric against the thresholds defined in the **thresholds** skill.
-3. Classify using the rules in the **thresholds** skill.
-4. Note "insufficient sample" when a denominator is 0 — do not extrapolate.
+2. Compare each metric against the canonical threshold table loaded in the prompt.
+3. Classify strictly in this order: CRITICAL if any critical threshold is breached, WARNING if no critical but one or more warning thresholds are breached, HEALTHY otherwise.
+4. When a denominator is 0 or a metric cannot be computed from evidence, record "insufficient sample" — do not extrapolate or treat as a zero rate.

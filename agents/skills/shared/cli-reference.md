@@ -50,7 +50,8 @@ Other state-changing commands:
 - `news48 feeds delete IDENTIFIER --json`
 - `news48 seed FILE --json`
 - `news48 plans cancel PLAN_ID --json`
-- `news48 plans remediate --json`
+- `news48 plans remediate --json` — preview repairs
+- `news48 plans remediate --apply --json` — apply repairs
 - `news48 cleanup purge --json`
 
 ## Commands Without `--json`

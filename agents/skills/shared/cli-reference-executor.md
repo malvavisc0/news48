@@ -3,28 +3,7 @@
 ## Scope
 Always active — executor must only use documented commands.
 
-## Core Rules
-1. Only use commands listed here. Do not invent commands, subcommands, flags, fields, or statuses.
-2. Always pass `--json` to every `news48` command.
-3. Pass `--json` as a CLI flag, not as a tool parameter.
-4. Choose the narrowest command that proves the claim you need to make.
-5. Remember that some CLI statuses are derived views over multiple database fields.
-
-## Evidence Commands
-Use these commands to observe system state:
-- `news48 stats --json` — broad system snapshot.
-- `news48 plans list --json` — pending and executing plans.
-- `news48 plans show PLAN_ID --json` — plan details and step status.
-- `news48 feeds list --json` — all feeds with freshness info.
-- `news48 feeds info IDENTIFIER --json` — single feed details.
-- `news48 fetches list --json` — recent fetch run outcomes.
-- `news48 articles list --json` — article backlog by status.
-- `news48 articles info IDENTIFIER --json` — single article details.
-- `news48 articles content IDENTIFIER --json` — stored HTML content.
-- `news48 cleanup status --json` — retention policy state.
-- `news48 cleanup health --json` — database health metrics.
-- `news48 agents status --json` — scheduler state.
-- `news48 logs list --json` — recent agent log entries.
+Evidence commands are loaded separately in the shared evidence commands reference. This file lists executor-specific action commands only.
 
 ## Pipeline Execution Commands
 - `news48 fetch --json` — fetch RSS/Atom feeds, insert article metadata.
@@ -64,4 +43,3 @@ Do not pass `--json` to these commands:
 2. Use item inspection commands second for details: `plans show`, `feeds info`, `articles info`.
 3. Use pipeline execution commands to drive work forward.
 4. Use mutation commands only when the current plan step requires state changes.
-5. If a needed command or flag is not listed here, do not invent it.

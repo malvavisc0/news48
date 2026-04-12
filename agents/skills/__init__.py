@@ -15,10 +15,12 @@ files before an agent starts running.
     │   ├── verify-outcomes.md
     │   ├── fail-safely.md
     │   ├── thresholds.md
+    │   ├── cli-reference-evidence.md  # Shared evidence cmds
     │   ├── cli-reference-planner.md
     │   ├── cli-reference-executor.md
     │   ├── cli-reference-parser.md
-    │   └── cli-reference-monitor.md
+    │   ├── cli-reference-monitor.md
+    │   └── handle-orchestrator-restart.md
     ├── planner/
     │   ├── business-logic.md     # Mermaid diagram + skill reference
     │   ├── begin-planning-cycle.md
@@ -31,7 +33,8 @@ files before an agent starts running.
     │   ├── throughput-emergency.md
     │   ├── plan-fact-check.md
     │   ├── plan-retry.md
-    │   └── remediate-stuck.md
+    │   ├── remediate-stuck.md
+    │   └── handle-unreachable-feeds.md
     ├── executor/
     │   ├── business-logic.md     # Mermaid diagram + skill reference
     │   ├── claim-plan.md
@@ -64,6 +67,7 @@ files before an agent starts running.
         ├── generate-alerts.md
         ├── recommend-actions.md
         ├── review-fact-check.md
+        ├── check-disk-space.md
         ├── write-monitor-report.md
         ├── write-metrics-history.md
         └── send-email.md
@@ -100,8 +104,20 @@ PLAN_FAMILY_SKILLS: dict[str, list[str]] = {
 
 SKILL_REGISTRY: dict[str, SkillDef] = {
     # -------------------------------------------------------------------------
-    # Shared skills (all agents always load these)
+    # Shared skills (loaded by multiple agents)
     # -------------------------------------------------------------------------
+    "cli-reference-evidence": SkillDef(
+        id="cli-reference-evidence",
+        file="shared/cli-reference-evidence.md",
+        agents=("planner", "executor", "monitor"),
+        always=True,
+    ),
+    "handle-orchestrator-restart": SkillDef(
+        id="handle-orchestrator-restart",
+        file="shared/handle-orchestrator-restart.md",
+        agents=("planner", "executor", "parser", "monitor"),
+        always=True,
+    ),
     "system-overview": SkillDef(
         id="system-overview",
         file="shared/system-overview.md",
@@ -216,6 +232,13 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
         agents=("planner",),
         always=False,
         condition_key="stale_plans",
+    ),
+    "handle-unreachable-feeds": SkillDef(
+        id="handle-unreachable-feeds",
+        file="planner/handle-unreachable-feeds.md",
+        agents=("planner",),
+        always=False,
+        condition_key="unreachable_feeds",
     ),
     "business-logic-planner": SkillDef(
         id="business-logic-planner",
@@ -450,6 +473,12 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
         always=False,
         condition_key="status:WARNING|CRITICAL",
     ),
+    "check-disk-space": SkillDef(
+        id="check-disk-space",
+        file="monitor/check-disk-space.md",
+        agents=("monitor",),
+        always=True,
+    ),
     "business-logic-monitor": SkillDef(
         id="business-logic-monitor",
         file="monitor/business-logic.md",
@@ -510,6 +539,7 @@ def _get_skills_for_agent(agent_name: str, task_context: dict) -> list[str]:
             "plan-fact-check",
             "plan-retry",
             "remediate-stuck",
+            "handle-unreachable-feeds",
         },
         "parser": {"adapt-to-type", "report-failure"},
         "monitor": {"generate-alerts", "recommend-actions"},

@@ -14,6 +14,13 @@ Always active for monitor and planner agents — single source of truth for all 
 | Articles older than 48h | present | 100+ |
 | Empty article backlog | 50 | 200 |
 | Downloaded backlog | 50 | 200 |
+| Fact-check completions (24h) | < 1 with backlog | 0 with backlog |
+| Fact-check oldest eligible item | > 12h | > 24h |
+
+## Rate Denominator Semantics
+All failure rates in this table are computed as **lifetime rates** (since system initialization), not per-cycle or per-24h rates. The denominator includes all articles processed since the system started.
+
+If a denominator is zero, the rate is **undefined** (not 0%). Undefined rates must not trigger threshold breaches — record them as `null` with an "insufficient sample" note.
 
 ## Classification
 Compute strictly in this order:

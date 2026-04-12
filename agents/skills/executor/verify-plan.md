@@ -7,16 +7,24 @@ Always active — executor must verify outcomes against success conditions.
 1. The final step verifies completion against the plan's `success_conditions`.
 2. Validate each condition before evaluating it.
 3. Run evidence CLI commands and evaluate every valid condition.
-3. Record results in this format:
+4. Record results in this format:
    ```
    PASS: <condition> -- evidence: <CLI output>
    FAIL: <condition> -- evidence: <CLI output>
    INVALID: <condition> -- reason: <policy/schema/evidence problem>
    ```
-4. Mark plan `completed` only when ALL valid conditions pass and no invalid conditions exist.
-5. Mark plan `failed` when verification is complete and valid conditions are not met.
-6. If any condition is invalid, fail the plan as a plan-quality defect rather than claiming execution alone failed.
-7. Before failing a batched execution plan, verify whether more command calls are still required by the plan rather than treating one partial batch as final evidence.
+5. Mark plan `completed` only when ALL valid conditions pass and no invalid conditions exist.
+6. Mark plan `failed` when verification is complete and valid conditions are not met.
+7. If any condition is invalid, fail the plan as a plan-quality defect rather than claiming execution alone failed. Persist the INVALID condition details to `.plans/feedback/<plan_id>.json` so the planner can read and fix them in the next cycle:
+   ```bash
+   mkdir -p .plans/feedback && python3 -c "
+import json
+feedback = {'plan_id': '<plan_id>', 'invalid_conditions': [<list of {condition, reason}>], 'timestamp': '<ISO 8601>'}
+with open('.plans/feedback/<plan_id>.json', 'w') as f:
+    json.dump(feedback, f, indent=2)
+"
+   ```
+8. Before failing a batched execution plan, verify whether more command calls are still required by the plan rather than treating one partial batch as final evidence.
 
 ## Evidence Commands by Condition Type
 | Condition type | Evidence command |

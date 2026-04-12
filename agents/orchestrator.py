@@ -165,6 +165,26 @@ class Orchestrator:
         except Exception as exc:
             logger.warning("Plan recovery startup hook failed: %s", exc)
 
+    def _recover_stale_articles(self) -> None:
+        """Reset articles stuck in processing_status after a crash.
+
+        Articles that were claimed for download or parsing but never
+        completed (e.g. due to an orchestrator crash) will have their
+        processing_status cleared so they can be re-claimed.
+        """
+        try:
+            from config import Database
+            from database.articles import release_stale_article_claims
+
+            result = release_stale_article_claims(Database.path)
+            if result.get("released"):
+                logger.info(
+                    "Article recovery pass: released %s stale claim(s)",
+                    result["released"],
+                )
+        except Exception as exc:
+            logger.warning("Article recovery startup hook failed: %s", exc)
+
     def _archive_old_plans(self) -> None:
         """Archive terminal plans older than 24 hours on startup.
 
@@ -687,6 +707,7 @@ class Orchestrator:
         logger.info("Orchestrator starting (tick every %ds)", tick_seconds)
         self.load_state()
         self._recover_stale_plans()
+        self._recover_stale_articles()
         self._archive_old_plans()
 
         try:

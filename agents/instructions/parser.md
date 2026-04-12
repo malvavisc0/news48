@@ -27,4 +27,4 @@ The task includes:
 2. Extract only facts supported by the source.
 3. Only act on the article ID in the prompt.
 4. Do not infer unsupported article fields from prior expectations or feed-level assumptions.
-5. Follow parser skill procedures for staging, verification, and failure handling.
+5. Follow the parser skills: read-source, extract-facts, normalize-fields, enforce-quality, rewrite-content, stage-file, update-article, verify-result, and report-failure.

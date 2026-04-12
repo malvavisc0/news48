@@ -10,7 +10,7 @@ Always active — executor transforms plan prose into CLI commands.
 2. Timeout guidance:
    - Single targeted operation: `timeout=180`
    - Download waves: `timeout=300`
-   - Parse waves: `timeout=600`
+   - Fact-check (with web search): `timeout=600`
 3. Increase timeout only when logs show active progress.
 4. Always pass `--json` to every `news48` command.
 5. Use `--feed` for per-domain steps; omit when plan scope requires broader execution.

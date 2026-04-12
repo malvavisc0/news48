@@ -7,7 +7,7 @@ Always active — parser must block low-quality or invented output.
 Ensure all are true before writing content:
 - Title non-empty, factual, 8-140 chars
 - Summary 1-3 sentences, 40-420 chars, not equal to title
-- Content at least 600 chars (unless source genuinely brief)
+- Content at least 600 chars (sources genuinely brief may have 200+ chars — below 200 chars is unacceptable regardless of source)
 - Sentiment: `positive|negative|neutral`
 - Countries: ISO-2 lowercase only
 - Categories: from controlled set, 1-3
@@ -24,11 +24,8 @@ If any quality gate or fidelity check fails:
 news48 articles fail ARTICLEID --error "Failed parser quality gate: <reason>" --json
 ```
 
-Failure reason codes:
-- `quality_gate.summary_duplicate_title`
-- `quality_gate.summary_out_of_bounds`
-- `quality_gate.title_out_of_bounds`
-- `normalization.invalid_country_code`
-- `normalization.invalid_category`
-- `fidelity.invented_fact`
-- `fidelity.missing_core_facts`
+Failure reason codes (must use codes from the canonical error taxonomy in `shared/error-taxonomy.md`):
+- `parse.duplicate_title` — summary duplicates the title
+- `parse.out_of_bounds` — title, summary, or content length outside limits
+- `parse.invalid_field` — country code, category, or sentiment normalization failed
+- `parse.fidelity` — invented facts or missing core facts

@@ -420,7 +420,7 @@ def test_monitor_business_logic_uses_corrected_rate_and_evidence_model():
     )
     assert "fact-unchecked + fact-checked" in content
     assert "download_failures+parse_backlog+parsed" in content
-    assert "no invented helper metrics" in content
+    assert "proved stats fields" in content
 
 
 def test_planner_business_logic_includes_remediation_branch():

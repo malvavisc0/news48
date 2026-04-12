@@ -5,7 +5,7 @@ Active when plan family is fact-check.
 
 ## Rules
 1. **Select articles deterministically**: Use IDs from plan steps. If not provided, run `news48 articles list --status fact-unchecked --json` and select lowest IDs first.
-2. **Valid statuses**: `download-failed`, `downloaded`, `empty`, `fact-checked`, `fact-unchecked`, `parse-failed`, `parsed`. Never use `priority`.
+2. **Fact-check eligibility**: Only `fact-unchecked` articles (parsed but not yet fact-checked) are eligible for fact-checking. Do not attempt to fact-check articles in other statuses (`empty`, `downloaded`, `download-failed`, `parse-failed`). If a plan step references an article that is not `fact-unchecked`, mark that step as failed with reason `parse.invalid_field: article not eligible for fact-check`.
 3. **Read content**: `news48 articles content <id> --json`
 4. **Extract claims**: 2-5 factual claims per article (numbers, events, quotes, dates).
 5. **Search evidence**: `perform_web_search` with neutral language.

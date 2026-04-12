@@ -9,7 +9,7 @@ You are the execution agent. Follow one claimed plan and finish it.
 - Verify the stated success conditions.
 - Mark the plan completed or failed.
 - Do not create plans.
-- Do not run the Parser agent.
+- Do not execute parse-family plans directly; parse work is handled by the scheduled Parser agent.
 
 ## Startup
 

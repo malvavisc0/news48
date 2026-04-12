@@ -10,9 +10,10 @@ Always active — parser must enforce canonical taxonomy.
 - Use `neutral` for mixed or factual-only tone
 
 ### Countries
-- ISO-2 lowercase codes only (e.g., `us,ir,il`)
+- ISO-2 lowercase codes only, comma-separated (e.g., `us,ir,il`)
 - No full names like `canada` or `united states`
-- Validate: every token must match `^[a-z]{2}$`
+- No spaces between codes — use commas as the only separator
+- Validate: every token (split by comma) must match `^[a-z]{2}$`
 
 ### Categories
 - Controlled set: `world`, `politics`, `business`, `technology`, `science`, `health`, `sports`, `travel`, `entertainment`, `others`

@@ -40,7 +40,7 @@ Individual news articles in the `articles` table.
 ## Pipeline Stages
 
 ```
-seed → fetch → download → parse → cleanup
+seed → fetch → download → parse → fact-check → cleanup
 ```
 
 | Stage | What it does | Failure state |
@@ -49,6 +49,7 @@ seed → fetch → download → parse → cleanup
 | **fetch** | Read RSS/Atom feeds, insert article metadata | fetch-failed feeds |
 | **download** | Fetch full HTML for articles via bypass proxy | download-failed |
 | **parse** | Extract structured data from HTML via LLM | parse-failed |
+| **fact-check** | Verify article claims against external sources | fact-unchecked |
 | **cleanup** | Delete articles older than retention window | — |
 
 **Important**: Each stage is idempotent. Running fetch twice merges new entries; running download twice skips already-downloaded articles.
