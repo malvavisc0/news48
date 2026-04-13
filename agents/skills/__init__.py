@@ -16,25 +16,12 @@ files before an agent starts running.
     │   ├── fail-safely.md
     │   ├── thresholds.md
     │   ├── cli-reference-evidence.md  # Shared evidence cmds
-    │   ├── cli-reference-planner.md
     │   ├── cli-reference-executor.md
     │   ├── cli-reference-parser.md
-    │   ├── cli-reference-monitor.md
     │   └── handle-orchestrator-restart.md
-    ├── planner/
+    ├── sentinel/
     │   ├── business-logic.md     # Mermaid diagram + skill reference
-    │   ├── begin-planning-cycle.md
-    │   ├── read-monitor-report.md
-    │   ├── prioritize-goals.md
-    │   ├── deduplicate-plans.md
-    │   ├── read-db-state.md
-    │   ├── write-conditions.md
-    │   ├── build-plan.md
-    │   ├── throughput-emergency.md
-    │   ├── plan-fact-check.md
-    │   ├── plan-retry.md
-    │   ├── remediate-stuck.md
-    │   └── handle-unreachable-feeds.md
+    │   └── feed-curation.md
     ├── executor/
     │   ├── business-logic.md     # Mermaid diagram + skill reference
     │   ├── claim-plan.md
@@ -59,18 +46,11 @@ files before an agent starts running.
     │   ├── verify-result.md
     │   ├── adapt-to-type.md
     │   └── report-failure.md
-    └── monitor/
+    └── fact_checker/
         ├── business-logic.md     # Mermaid diagram + skill reference
-        ├── begin-monitoring-cycle.md
-        ├── evaluate-thresholds.md
-        ├── compute-rates.md
-        ├── generate-alerts.md
-        ├── recommend-actions.md
-        ├── review-fact-check.md
-        ├── check-disk-space.md
-        ├── write-monitor-report.md
-        ├── write-metrics-history.md
-        └── send-email.md
+        ├── extract-claims.md
+        ├── search-evidence.md
+        └── record-verdict.md
 """
 
 from dataclasses import dataclass
@@ -109,147 +89,61 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
     "cli-reference-evidence": SkillDef(
         id="cli-reference-evidence",
         file="shared/cli-reference-evidence.md",
-        agents=("planner", "executor", "monitor"),
+        agents=("executor", "fact_checker", "sentinel"),
         always=True,
     ),
     "handle-orchestrator-restart": SkillDef(
         id="handle-orchestrator-restart",
         file="shared/handle-orchestrator-restart.md",
-        agents=("planner", "executor", "parser", "monitor"),
+        agents=("executor", "parser", "fact_checker", "sentinel"),
         always=True,
     ),
     "system-overview": SkillDef(
         id="system-overview",
         file="shared/system-overview.md",
-        agents=("planner", "executor", "parser", "monitor"),
+        agents=("executor", "parser", "fact_checker", "sentinel"),
         always=True,
     ),
     "use-json-output": SkillDef(
         id="use-json-output",
         file="shared/use-json-output.md",
-        agents=("planner", "executor", "parser", "monitor"),
-        always=True,
-    ),
-    "cli-reference-planner": SkillDef(
-        id="cli-reference-planner",
-        file="shared/cli-reference-planner.md",
-        agents=("planner",),
+        agents=("executor", "parser", "fact_checker", "sentinel"),
         always=True,
     ),
     "gather-evidence": SkillDef(
         id="gather-evidence",
         file="shared/gather-evidence.md",
-        agents=("planner", "executor", "parser", "monitor"),
+        agents=("executor", "parser", "fact_checker", "sentinel"),
         always=True,
     ),
     "verify-outcomes": SkillDef(
         id="verify-outcomes",
         file="shared/verify-outcomes.md",
-        agents=("planner", "executor", "parser", "monitor"),
+        agents=("executor", "parser", "fact_checker", "sentinel"),
         always=True,
     ),
     "fail-safely": SkillDef(
         id="fail-safely",
         file="shared/fail-safely.md",
-        agents=("planner", "executor", "parser", "monitor"),
+        agents=("executor", "parser", "fact_checker", "sentinel"),
         always=True,
     ),
     "thresholds": SkillDef(
         id="thresholds",
         file="shared/thresholds.md",
-        agents=("planner", "monitor"),
+        agents=("fact_checker", "sentinel"),
         always=True,
     ),
     "error-taxonomy": SkillDef(
         id="error-taxonomy",
         file="shared/error-taxonomy.md",
-        agents=("planner", "executor", "parser", "monitor"),
+        agents=("executor", "parser", "fact_checker", "sentinel"),
         always=True,
     ),
     "lessons-learned": SkillDef(
         id="lessons-learned",
         file="shared/lessons-learned.md",
-        agents=("planner", "executor", "parser", "monitor"),
-        always=True,
-    ),
-    # -------------------------------------------------------------------------
-    # Planner skills
-    # -------------------------------------------------------------------------
-    "begin-planning-cycle": SkillDef(
-        id="begin-planning-cycle",
-        file="planner/begin-planning-cycle.md",
-        agents=("planner",),
-        always=True,
-    ),
-    "read-monitor-report": SkillDef(
-        id="read-monitor-report",
-        file="planner/read-monitor-report.md",
-        agents=("planner",),
-        always=True,
-    ),
-    "prioritize-goals": SkillDef(
-        id="prioritize-goals",
-        file="planner/prioritize-goals.md",
-        agents=("planner",),
-        always=True,
-    ),
-    "write-conditions": SkillDef(
-        id="write-conditions",
-        file="planner/write-conditions.md",
-        agents=("planner",),
-        always=True,
-    ),
-    "build-plan": SkillDef(
-        id="build-plan",
-        file="planner/build-plan.md",
-        agents=("planner",),
-        always=True,
-    ),
-    "deduplicate-plans": SkillDef(
-        id="deduplicate-plans",
-        file="planner/deduplicate-plans.md",
-        agents=("planner",),
-        always=True,
-    ),
-    "throughput-emergency": SkillDef(
-        id="throughput-emergency",
-        file="planner/throughput-emergency.md",
-        agents=("planner",),
-        always=False,
-        condition_key="backlog_high",
-    ),
-    "plan-fact-check": SkillDef(
-        id="plan-fact-check",
-        file="planner/plan-fact-check.md",
-        agents=("planner",),
-        always=False,
-        condition_key="fact_check_backlog",
-    ),
-    "plan-retry": SkillDef(
-        id="plan-retry",
-        file="planner/plan-retry.md",
-        agents=("planner",),
-        always=False,
-        condition_key="failed_backlog",
-    ),
-    "remediate-stuck": SkillDef(
-        id="remediate-stuck",
-        file="planner/remediate-stuck.md",
-        agents=("planner",),
-        always=False,
-        condition_key="stale_plans",
-    ),
-    "handle-unreachable-feeds": SkillDef(
-        id="handle-unreachable-feeds",
-        file="planner/handle-unreachable-feeds.md",
-        agents=("planner",),
-        always=False,
-        condition_key="unreachable_feeds",
-    ),
-    "business-logic-planner": SkillDef(
-        id="business-logic-planner",
-        file="planner/business-logic.md",
-        agents=("planner",),
+        agents=("executor", "parser", "fact_checker", "sentinel"),
         always=True,
     ),
     # -------------------------------------------------------------------------
@@ -414,81 +308,45 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
         always=True,
     ),
     # -------------------------------------------------------------------------
-    # Monitor skills
+    # Fact-Checker skills
     # -------------------------------------------------------------------------
-    "cli-reference-monitor": SkillDef(
-        id="cli-reference-monitor",
-        file="shared/cli-reference-monitor.md",
-        agents=("monitor",),
+    "fc-business-logic": SkillDef(
+        id="fc-business-logic",
+        file="fact_checker/business-logic.md",
+        agents=("fact_checker",),
         always=True,
     ),
-    "begin-monitoring-cycle": SkillDef(
-        id="begin-monitoring-cycle",
-        file="monitor/begin-monitoring-cycle.md",
-        agents=("monitor",),
+    "fc-extract-claims": SkillDef(
+        id="fc-extract-claims",
+        file="fact_checker/extract-claims.md",
+        agents=("fact_checker",),
         always=True,
     ),
-    "compute-rates": SkillDef(
-        id="compute-rates",
-        file="monitor/compute-rates.md",
-        agents=("monitor",),
+    "fc-search-evidence": SkillDef(
+        id="fc-search-evidence",
+        file="fact_checker/search-evidence.md",
+        agents=("fact_checker",),
         always=True,
     ),
-    "evaluate-thresholds": SkillDef(
-        id="evaluate-thresholds",
-        file="monitor/evaluate-thresholds.md",
-        agents=("monitor",),
+    "fc-record-verdict": SkillDef(
+        id="fc-record-verdict",
+        file="fact_checker/record-verdict.md",
+        agents=("fact_checker",),
         always=True,
     ),
-    "review-fact-check": SkillDef(
-        id="review-fact-check",
-        file="monitor/review-fact-check.md",
-        agents=("monitor",),
+    # -------------------------------------------------------------------------
+    # Sentinel skills
+    # -------------------------------------------------------------------------
+    "sentinel-business-logic": SkillDef(
+        id="sentinel-business-logic",
+        file="sentinel/business-logic.md",
+        agents=("sentinel",),
         always=True,
     ),
-    "write-monitor-report": SkillDef(
-        id="write-monitor-report",
-        file="monitor/write-monitor-report.md",
-        agents=("monitor",),
-        always=True,
-    ),
-    "write-metrics-history": SkillDef(
-        id="write-metrics-history",
-        file="monitor/write-metrics-history.md",
-        agents=("monitor",),
-        always=True,
-    ),
-    "generate-alerts": SkillDef(
-        id="generate-alerts",
-        file="monitor/generate-alerts.md",
-        agents=("monitor",),
-        always=False,
-        condition_key="threshold_breached",
-    ),
-    "recommend-actions": SkillDef(
-        id="recommend-actions",
-        file="monitor/recommend-actions.md",
-        agents=("monitor",),
-        always=False,
-        condition_key="alerts_exist",
-    ),
-    "send-email": SkillDef(
-        id="send-email",
-        file="monitor/send-email.md",
-        agents=("monitor",),
-        always=False,
-        condition_key="status:WARNING|CRITICAL",
-    ),
-    "check-disk-space": SkillDef(
-        id="check-disk-space",
-        file="monitor/check-disk-space.md",
-        agents=("monitor",),
-        always=True,
-    ),
-    "business-logic-monitor": SkillDef(
-        id="business-logic-monitor",
-        file="monitor/business-logic.md",
-        agents=("monitor",),
+    "sentinel-feed-curation": SkillDef(
+        id="sentinel-feed-curation",
+        file="sentinel/feed-curation.md",
+        agents=("sentinel",),
         always=True,
     ),
 }
@@ -535,20 +393,12 @@ def _get_skills_for_agent(agent_name: str, task_context: dict) -> list[str]:
     the authoritative mapping — individual condition_key values on
     SkillDefs are a fallback for non-family conditions.
 
-    Planner, parser, and monitor agents also preload intra-cycle branch
-    skills whose trigger is discovered only after the run starts (for
-    example, after gathering evidence or reading the source article).
+    Parser agents also preload intra-cycle branch skills whose trigger
+    is discovered only after the run starts (for example, after reading
+    the source article or evaluating quality gates).
     """
     runtime_branch_skills: dict[str, set[str]] = {
-        "planner": {
-            "throughput-emergency",
-            "plan-fact-check",
-            "plan-retry",
-            "remediate-stuck",
-            "handle-unreachable-feeds",
-        },
         "parser": {"adapt-to-type", "report-failure"},
-        "monitor": {"generate-alerts", "recommend-actions"},
     }
 
     # Resolve family-based conditional skills via PLAN_FAMILY_SKILLS
@@ -565,12 +415,6 @@ def _get_skills_for_agent(agent_name: str, task_context: dict) -> list[str]:
             skill_ids.append(skill_id)
         elif skill_id in family_skills:
             skill_ids.append(skill_id)
-        elif skill_id == "send-email":
-            if task_context.get("email_configured") and (
-                "status" not in task_context
-                or _skill_matches_condition(skill, task_context)
-            ):
-                skill_ids.append(skill_id)
         elif skill_id in runtime_branch_skills.get(agent_name, set()):
             skill_ids.append(skill_id)
         elif _skill_matches_condition(skill, task_context):
@@ -579,7 +423,7 @@ def _get_skills_for_agent(agent_name: str, task_context: dict) -> list[str]:
 
 
 def _email_is_configured() -> bool:
-    """Return True when monitor email delivery is fully configured."""
+    """Return True when email delivery is fully configured."""
     return bool(
         getenv("SMTP_HOST", "")
         and getenv("SMTP_USER", "")
@@ -595,15 +439,15 @@ def compose_agent_instructions(
     """Compose a tailored system prompt from base prompt + skill files.
 
     Args:
-        agent_name: One of planner, executor, parser, monitor.
+        agent_name: One of sentinel, executor, parser, fact_checker.
         task_context: Dict with keys like plan_family, backlog_high,
-            alerts_exist, etc. Used to conditionally include skills.
+            email_configured, etc. Used to conditionally include skills.
 
     Returns:
         A single string containing the composed system prompt.
     """
     ctx = dict(task_context)
-    if agent_name == "monitor":
+    if agent_name == "sentinel":
         ctx.setdefault("email_configured", _email_is_configured())
 
     # 1. Read base prompt
@@ -613,7 +457,7 @@ def compose_agent_instructions(
     else:
         base_prompt = f"# {agent_name.capitalize()} Agent\n\n(No base prompt found.)"
 
-    if agent_name == "monitor":
+    if agent_name == "sentinel":
         if ctx.get("email_configured"):
             base_prompt = (
                 base_prompt.rstrip()

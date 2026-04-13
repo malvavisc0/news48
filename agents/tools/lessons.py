@@ -27,7 +27,7 @@ def save_lesson(
     ## Parameters
     - `reason` (str): Why this lesson is being saved
     - `agent_name` (str): Which agent learned this
-      (executor, parser, planner, monitor)
+      (executor, parser, sentinel, fact_checker)
     - `category` (str): Category for grouping
       (e.g., "Command Syntax", "Process Insights")
     - `lesson` (str): The lesson text — be specific and actionable

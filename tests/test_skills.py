@@ -22,7 +22,7 @@ def test_skill_registry_all_have_id():
 
 def test_skill_registry_all_have_valid_agents():
     """Every skill has valid agent list."""
-    valid_agents = {"planner", "executor", "parser", "monitor"}
+    valid_agents = {"executor", "parser", "fact_checker", "sentinel"}
     for skill_id, skill in SKILL_REGISTRY.items():
         for agent in skill.agents:
             assert agent in valid_agents, f"Skill {skill_id} has invalid agent: {agent}"
@@ -82,7 +82,7 @@ def test_shared_skills_available_to_all_agents():
         "verify-outcomes",
         "fail-safely",
     }
-    all_agents = {"planner", "executor", "parser", "monitor"}
+    all_agents = {"executor", "parser", "fact_checker", "sentinel"}
     for skill_id in shared_skills:
         skill = SKILL_REGISTRY[skill_id]
         assert (
@@ -203,18 +203,6 @@ def test_get_skills_for_agent_uses_plan_family_skills_for_cleanup():
     )
 
 
-def test_get_skills_for_agent_planner_preloads_runtime_branches():
-    """Planner preloads evidence-gated skills discovered during the cycle."""
-    skills = set(_get_skills_for_agent("planner", {}))
-    for skill_id in {
-        "throughput-emergency",
-        "plan-fact-check",
-        "plan-retry",
-        "remediate-stuck",
-    }:
-        assert skill_id in skills
-
-
 def test_get_skills_for_agent_parser_preloads_runtime_branches():
     """Parser preloads type/failure branches resolved after source read."""
     skills = set(_get_skills_for_agent("parser", {}))
@@ -222,31 +210,27 @@ def test_get_skills_for_agent_parser_preloads_runtime_branches():
     assert "report-failure" in skills
 
 
-def test_get_skills_for_agent_monitor_includes_all_core_analysis_skills():
-    """Monitor includes the always-on analysis skills from business logic."""
-    skills = set(_get_skills_for_agent("monitor", {}))
+def test_get_skills_for_agent_sentinel_includes_core_skills():
+    """Sentinel includes the always-on sentinel skills."""
+    skills = set(_get_skills_for_agent("sentinel", {}))
     for skill_id in {
-        "begin-monitoring-cycle",
-        "compute-rates",
-        "evaluate-thresholds",
+        "sentinel-business-logic",
+        "sentinel-feed-curation",
         "thresholds",
-        "review-fact-check",
     }:
         assert skill_id in skills
 
 
-def test_get_skills_for_agent_monitor_preloads_alerting_branches():
-    """Monitor preloads alert/recommendation branches before status exists."""
-    skills = set(_get_skills_for_agent("monitor", {}))
-    assert "generate-alerts" in skills
-    assert "recommend-actions" in skills
-    assert "send-email" not in skills
-
-
-def test_get_skills_for_agent_monitor_preloads_send_email_when_configured():
-    """Monitor preloads send-email when delivery is configured."""
-    skills = set(_get_skills_for_agent("monitor", {"email_configured": True}))
-    assert "send-email" in skills
+def test_get_skills_for_agent_fact_checker_includes_core_skills():
+    """Fact-checker includes the always-on fact-checker skills."""
+    skills = set(_get_skills_for_agent("fact_checker", {}))
+    for skill_id in {
+        "fc-business-logic",
+        "fc-extract-claims",
+        "fc-search-evidence",
+        "fc-record-verdict",
+    }:
+        assert skill_id in skills
 
 
 def test_compose_returns_string():
@@ -307,52 +291,27 @@ def test_compose_executor_with_fetch_excludes_run_fact_check():
     assert "# Skill: Execute fact-check plans" not in result
 
 
-def test_compose_monitor_with_critical_includes_send_email():
-    """Monitor with CRITICAL status includes send-email skill."""
-    result = compose_agent_instructions(
-        "monitor", {"email_configured": True, "status": "CRITICAL"}
-    )
-    assert "# Skill: Send monitoring email" in result
+def test_compose_sentinel_loads_sentinel_skills():
+    """Sentinel loads its always-on skills with empty context."""
+    result = compose_agent_instructions("sentinel", {})
+    assert "Sentinel Business Logic" in result
+    assert "Feed Curation Rules" in result
 
 
-def test_compose_monitor_with_warning_includes_send_email():
-    """Monitor with WARNING status includes send-email skill."""
-    result = compose_agent_instructions(
-        "monitor", {"email_configured": True, "status": "WARNING"}
-    )
-    assert "# Skill: Send monitoring email" in result
+def test_compose_fact_checker_loads_fact_checker_skills():
+    """Fact-checker loads its always-on skills with empty context."""
+    result = compose_agent_instructions("fact_checker", {})
+    assert "Fact-Check Business Logic" in result
+    assert "Extract Claims" in result
 
 
-def test_compose_monitor_with_healthy_excludes_send_email():
-    """Monitor with HEALTHY status does NOT include send-email skill."""
-    result = compose_agent_instructions(
-        "monitor", {"email_configured": True, "status": "HEALTHY"}
-    )
-    assert "# Skill: Send monitoring email" not in result
+def test_compose_sentinel_appends_email_status():
+    """Sentinel gets email availability appended to base prompt."""
+    result = compose_agent_instructions("sentinel", {"email_configured": True})
+    assert "Email delivery is available" in result
 
-
-def test_compose_monitor_without_email_config_excludes_send_email():
-    """Monitor omits send-email when email is not configured."""
-    result = compose_agent_instructions("monitor", {"email_configured": False})
-    assert "# Skill: Send monitoring email" not in result
-
-
-def test_compose_monitor_with_email_config_and_warning_includes_send_email():
-    """Monitor includes send-email when email is configured and needed."""
-    result = compose_agent_instructions(
-        "monitor",
-        {"email_configured": True, "status": "WARNING"},
-    )
-    assert "# Skill: Send monitoring email" in result
-
-
-def test_compose_planner_empty_context_loads_core():
-    """Planner with empty context loads core skills."""
-    result = compose_agent_instructions("planner", {})
-    # Core planner skills should be present — check by heading
-    assert "# Skill: Start planning with evidence" in result
-    assert "# Skill: Respond to throughput emergencies" in result
-    assert "Retention compliance is mandatory whenever" in result
+    result = compose_agent_instructions("sentinel", {"email_configured": False})
+    assert "Email delivery is not configured" in result
 
 
 def test_compose_parser_loads_all_parser_skills():
@@ -360,14 +319,6 @@ def test_compose_parser_loads_all_parser_skills():
     result = compose_agent_instructions("parser", {})
     assert "# Skill: Read the source before parsing" in result
     assert "# Skill: Adapt parsing to article type" in result
-
-
-def test_compose_monitor_loads_all_monitor_skills():
-    """Monitor loads all its always-on skills with empty context."""
-    result = compose_agent_instructions("monitor", {})
-    assert "# Skill: Start monitoring with evidence" in result
-    assert "# Skill: Compute monitoring rates" in result
-    assert "# Skill: Generate monitoring alerts" in result
 
 
 def test_executor_business_logic_matches_runtime_loading_notes():
@@ -389,31 +340,12 @@ def test_parser_business_logic_matches_caller_verification_model():
     assert "Do not run extra verification commands" in verify_skill
 
 
-def test_monitor_business_logic_uses_corrected_rate_and_evidence_model():
-    """Monitor business logic reflects corrected rate formulas and evidence."""
-    content = Path("agents/skills/monitor/business-logic.md").read_text(
-        encoding="utf-8"
-    )
-    assert "fact-unchecked + fact-checked" in content
-    assert "download_failures+parse_backlog+parsed" in content
-    assert "proved stats fields" in content
-
-
-def test_planner_business_logic_includes_remediation_branch():
-    """Planner business logic keeps the explicit remediation decision path."""
-    content = Path("agents/skills/planner/business-logic.md").read_text(
-        encoding="utf-8"
-    )
-    assert "CheckRemediation -->|Yes| CheckRemediate" in content
-    assert "queue-repair action" in content
-
-
 def test_base_prompt_sizes_are_reasonable(tmp_path, monkeypatch):
     """Base prompts should be under 2000 chars after rewriting."""
     # This test verifies the base prompts are slim
     from agents.skills import _SKILLS_DIR
 
-    for agent in ["executor", "planner", "parser", "monitor"]:
+    for agent in ["executor", "parser", "fact_checker", "sentinel"]:
         base_path = _SKILLS_DIR.parent / "instructions" / f"{agent}.md"
         if base_path.exists():
             content = base_path.read_text(encoding="utf-8")

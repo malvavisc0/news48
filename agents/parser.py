@@ -1,5 +1,6 @@
 """Parser agent for autonomous article parsing."""
 
+import asyncio
 import logging
 import os
 import tempfile
@@ -104,31 +105,34 @@ async def run_cycle(limit: int = 1, feed_domain: str | None = None) -> dict:
         return {"parsed": 0, "failed": 0, "claimed": 0, "results": []}
 
     owner = f"parser:{os.getpid()}"
-    parsed = 0
-    failed = 0
-    claimed = 0
+
+    # Claim up to `limit` articles — slice BEFORE claiming to avoid
+    # leaking claims for articles we won't process
+    candidate_ids = [int(a["id"]) for a in candidates][:limit]
+    claimed_ids = claim_articles_for_processing(db_path, candidate_ids, "parse", owner)
+    claimed_articles = [a for a in candidates if int(a["id"]) in claimed_ids]
+
+    if not claimed_articles:
+        return {"parsed": 0, "failed": 0, "claimed": 0, "results": []}
+
+    # Process concurrently with semaphore
+    sem = asyncio.Semaphore(5)
     results: list[dict] = []
 
-    for article in candidates:
-        article_id = int(article["id"])
-        got = claim_articles_for_processing(db_path, [article_id], "parse", owner)
-        if article_id not in got:
-            continue
+    async def _parse_one(article: dict) -> dict:
+        async with sem:
+            result = await _parse_claimed_article(article, owner)
+            return result
 
-        claimed += 1
-        result = await _parse_claimed_article(article, owner)
-        results.append(result)
-        if result.get("success"):
-            parsed += 1
-        else:
-            failed += 1
-        if claimed >= limit:
-            break
+    results = await asyncio.gather(*(_parse_one(a) for a in claimed_articles))
+
+    parsed = sum(1 for r in results if r.get("success"))
+    failed = sum(1 for r in results if not r.get("success"))
 
     return {
         "parsed": parsed,
         "failed": failed,
-        "claimed": claimed,
+        "claimed": len(claimed_articles),
         "results": results,
     }
 
@@ -188,4 +192,4 @@ async def run(task: str, task_context: dict | None = None):
 
 async def run_autonomous(task: str = ""):
     """Run the autonomous parser schedule entry."""
-    return await run_cycle(limit=3)
+    return await run_cycle(limit=20)

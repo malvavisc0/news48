@@ -4,6 +4,7 @@ from .files import read_file
 from .lessons import save_lesson
 from .planner import claim_plan, create_plan, list_plans, update_plan
 from .searxng import perform_web_search
+from .sentinel import write_sentinel_report
 from .shell import run_shell_command
 from .system import get_system_info
 
@@ -19,4 +20,5 @@ __all__ = [
     "fetch_webpage_content",
     "send_email",
     "save_lesson",
+    "write_sentinel_report",
 ]

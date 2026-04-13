@@ -107,6 +107,15 @@ def load_urls(filepath: str) -> List[str]:
         return [line.strip() for line in f if line.strip()]
 
 
+async def _fetch_with_semaphore(
+    url: str,
+    sem: asyncio.Semaphore,
+) -> FeedResult:
+    """Fetch a single feed under a semaphore."""
+    async with sem:
+        return await _fetch_feed(url)
+
+
 async def get_fetch_summary(
     urls: List[str],
     delay: float,
@@ -117,7 +126,8 @@ async def get_fetch_summary(
 
     Args:
         urls: List of feed URLs to fetch.
-        delay: Delay between requests in seconds.
+        delay: Delay between requests in seconds
+            (deprecated, kept for API compat).
         db_path: Optional path to SQLite database for tracking.
         on_feed_done: Optional callback invoked after each feed is
             fetched, receiving the FeedResult.
@@ -132,15 +142,18 @@ async def get_fetch_summary(
         fetch_id = create_fetch(db_path)
 
     try:
-        for i, url in enumerate(urls):
-            if i > 0:
-                await asyncio.sleep(delay)
-            result = await _fetch_feed(url)
+        # Fetch all feeds concurrently with a semaphore limiting parallelism
+        sem = asyncio.Semaphore(10)
+        tasks = [_fetch_with_semaphore(url, sem) for url in urls]
+        results = await asyncio.gather(*tasks)
+
+        for result in results:
             summary.add_result(result)
             if on_feed_done:
                 on_feed_done(result)
 
             if db_path and fetch_id and result.success:
+                url = result.url
                 feed = get_feed_by_url(db_path, url)
                 if feed:
                     update_feed_metadata(

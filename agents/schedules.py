@@ -43,12 +43,12 @@ class RunningAgent:
 
 # Default schedules
 DEFAULT_SCHEDULES: Dict[str, AgentSchedule] = {
-    "planner": AgentSchedule(
-        agent_name="planner",
+    "sentinel": AgentSchedule(
+        agent_name="sentinel",
         task_prompt=(
-            "Run one planning cycle. Gather evidence, inspect plans, detect "
-            "missing work, and create or update only the plans the Executor "
-            "needs. Do not execute operational work."
+            "Run one sentinel cycle. Gather system health metrics, "
+            "evaluate thresholds, create fix plans for detected issues, "
+            "and delete feeds that are consistently problematic."
         ),
         interval_minutes=5,
     ),
@@ -72,14 +72,14 @@ DEFAULT_SCHEDULES: Dict[str, AgentSchedule] = {
         interval_minutes=1,
         max_concurrent=5,
     ),
-    "monitor": AgentSchedule(
-        agent_name="monitor",
+    "fact_checker": AgentSchedule(
+        agent_name="fact_checker",
         task_prompt=(
-            "Run one monitoring cycle. Gather health metrics, classify "
-            "system status, report concrete findings, and send email only if "
-            "email is configured and required."
+            "Run one fact-check cycle. Claim eligible fact-unchecked "
+            "articles, search for evidence, and record verdicts."
         ),
-        interval_minutes=120,  # 2 hours
+        interval_minutes=5,
+        max_concurrent=3,
     ),
 }
 

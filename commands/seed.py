@@ -75,13 +75,26 @@ def _seed(seed_file: str) -> dict:
 
 
 def _ensure_lessons_file() -> None:
-    """Create .lessons.md if it does not exist.
+    """Create .lessons.md with pre-populated agent sections.
 
     Ensures the lessons file is present from the start so agents
     and CLI commands that read it don't encounter a missing file.
+    Provides the expected structure so ``save_lesson`` can insert
+    lessons into the correct agent/category sections.
     """
     if not _LESSONS_FILE.exists():
-        _LESSONS_FILE.write_text("# Lessons Learned\n", encoding="utf-8")
+        _LESSONS_FILE.write_text(
+            "# Lessons Learned\n"
+            "\n"
+            "## sentinel\n"
+            "\n"
+            "## executor\n"
+            "\n"
+            "## parser\n"
+            "\n"
+            "## fact_checker\n",
+            encoding="utf-8",
+        )
 
 
 def seed(

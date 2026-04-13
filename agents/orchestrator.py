@@ -6,6 +6,7 @@ Supports two modes:
   as an independent subprocess and tracking its outcome.
 """
 
+import asyncio
 import importlib
 import json
 import logging
@@ -15,7 +16,7 @@ import subprocess
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, cast
+from typing import Any, Dict, List, Optional
 
 from agents.schedules import (
     _LOGS_DIR,
@@ -36,10 +37,10 @@ logger = logging.getLogger(__name__)
 _DEFAULT_CMD_PREFIX = ["uv", "run", "news48"]
 
 _AGENT_MODULES = {
-    "planner": "agents.planner",
+    "sentinel": "agents.sentinel",
     "executor": "agents.executor",
     "parser": "agents.parser",
-    "monitor": "agents.monitor",
+    "fact_checker": "agents.fact_checker",
 }
 
 
@@ -88,8 +89,8 @@ class Orchestrator:
         each schedule, and any previously running agent entries (their
         processes will be checked on the next tick).
 
-        Handles both legacy (single-dict) and current (list) formats
-        for the ``running`` section.
+        Only schedules present in the current ``DEFAULT_SCHEDULES`` are
+        restored; stale entries from removed agents are silently ignored.
         """
         if not _STATE_FILE.exists():
             return
@@ -100,27 +101,27 @@ class Orchestrator:
             logger.warning("Could not load state: %s", exc)
             return
 
-        # Restore schedule state
+        # Restore schedule state (only for known agents)
         for name, sched_data in data.get("schedules", {}).items():
             if name in self.schedules:
                 self.schedules[name].last_run = sched_data.get("last_run")
                 self.schedules[name].last_result = sched_data.get("last_result")
                 self.schedules[name].last_error = sched_data.get("last_error")
 
-        # Restore running agent records (processes are gone after restart,
-        # but we mark them as failed-unknown so we know they didn't finish)
-        for name, run_data in data.get("running", {}).items():
-            # Support both legacy (dict) and current (list) formats
-            entries = run_data if isinstance(run_data, list) else [run_data]
+        # Restore running agent records — list format only.
+        # Processes are gone after restart so we mark them as
+        # failed-unknown to indicate they didn't finish cleanly.
+        for name, entries in data.get("running", {}).items():
+            if not isinstance(entries, list):
+                continue  # skip malformed entries
             for entry in entries:
                 pid = entry.get("pid", 0)
                 if not _is_process_alive(pid):
-                    # Process is gone -- mark as completed with unknown
                     if name in self.schedules:
                         self.schedules[name].last_run = entry.get("started_at")
                         self.schedules[name].last_result = "unknown"
                         self.schedules[name].last_error = (
-                            "Process disappeared " "(orchestrator restarted?)"
+                            "Process disappeared (orchestrator restarted?)"
                         )
                 else:
                     # Process is still running from a previous session
@@ -429,48 +430,7 @@ class Orchestrator:
             except Exception as exc:
                 logger.warning("Failed to peek next plan family: %s", exc)
 
-        elif name == "planner":
-            try:
-                from commands._common import require_db
-                from database import get_article_stats, get_articles_paginated
-
-                db_path = require_db()
-                article_stats = get_article_stats(db_path)
-                _, fact_unchecked_total = get_articles_paginated(
-                    db_path,
-                    limit=1,
-                    status="fact-unchecked",
-                )
-
-                task_context["backlog_high"] = bool(
-                    max(
-                        int(article_stats.get("download_backlog") or 0),
-                        int(article_stats.get("parse_backlog") or 0),
-                    )
-                    > 200
-                )
-                task_context["fact_check_backlog"] = fact_unchecked_total > 0
-                task_context["failed_backlog"] = bool(
-                    int(article_stats.get("download_failed") or 0)
-                    + int(article_stats.get("parse_failed") or 0)
-                )
-
-                plans_dir = Path(".plans")
-                stale_plans = False
-                if plans_dir.exists():
-                    for plan_file in plans_dir.glob("*.json"):
-                        try:
-                            plan = json.loads(plan_file.read_text(encoding="utf-8"))
-                        except (OSError, ValueError):
-                            continue
-                        if plan.get("status") == "executing":
-                            stale_plans = True
-                            break
-                task_context["stale_plans"] = stale_plans
-            except Exception as exc:
-                logger.warning("Failed to build planner task context: %s", exc)
-
-        elif name == "monitor":
+        elif name == "sentinel":
             try:
                 email_ready = bool(
                     os.getenv("SMTP_HOST", "")
@@ -479,14 +439,32 @@ class Orchestrator:
                     and os.getenv("MONITOR_EMAIL_TO", "")
                 )
                 task_context["email_configured"] = email_ready
+
+                # Add backlog context for conditional skills
+                from commands._common import require_db
+                from database import get_article_stats
+
+                db_path = require_db()
+                article_stats = get_article_stats(db_path)
+                task_context["backlog_high"] = bool(
+                    max(
+                        int(article_stats.get("download_backlog") or 0),
+                        int(article_stats.get("parse_backlog") or 0),
+                    )
+                    > 200
+                )
             except Exception as exc:
-                logger.warning("Failed to build monitor task context: %s", exc)
+                logger.warning("Failed to build sentinel task context: %s", exc)
+
+        elif name == "fact_checker":
+            # Fact-checker uses default skills; no special context needed.
+            pass
 
         return task_context
 
     async def run_agent(
         self,
-        name: Literal["planner", "executor", "parser", "monitor"],
+        name: str,
         task: str,
     ) -> Dict[str, Any]:
         """Run a specific agent inline (one-shot mode)."""
@@ -528,13 +506,7 @@ class Orchestrator:
         for name, schedule in self.schedules.items():
             if not self._should_run(schedule):
                 continue
-            result = await self.run_agent(
-                cast(
-                    Literal["planner", "executor", "parser", "monitor"],
-                    name,
-                ),
-                schedule.task_prompt,
-            )
+            result = await self.run_agent(name, schedule.task_prompt)
             results[name] = result
             agents_run.append(name)
 
@@ -821,6 +793,66 @@ class Orchestrator:
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
+    # ------------------------------------------------------------------
+    # Pipeline loops (async background tasks)
+    # ------------------------------------------------------------------
+
+    async def _feed_fetch_loop(self, interval: int = 60) -> None:
+        """Continuously fetch feeds in a background loop."""
+        from config import Database
+        from database.feeds import get_all_feeds
+        from helpers.feed import get_fetch_summary
+
+        while True:
+            try:
+                feeds = get_all_feeds(Database.path)
+                urls = [f["url"] for f in feeds]
+                if not urls:
+                    logger.warning("No feeds in database, skipping fetch cycle")
+                    await asyncio.sleep(interval)
+                    continue
+
+                summary = await get_fetch_summary(
+                    urls, delay=0.0, db_path=Database.path
+                )
+                logger.info(
+                    "Feed fetch: %d successful, %d failed, %d articles",
+                    len(summary.successful),
+                    len(summary.failed),
+                    sum(r.valid_articles_count for r in summary.successful),
+                )
+            except Exception as exc:
+                logger.error("Feed fetch loop error: %s", exc)
+
+            await asyncio.sleep(interval)
+
+    async def _download_loop(self, interval: int = 30) -> None:
+        """Continuously download articles in a background loop."""
+        from commands.download import _download
+
+        while True:
+            try:
+                result = await _download(limit=100, delay=0.0)
+                if result.get("total", 0) > 0:
+                    logger.info(
+                        "Download loop: %d downloaded, %d failed",
+                        result["downloaded"],
+                        result["failed"],
+                    )
+                    # Trigger immediate parse after successful download
+                    await self._trigger_parser_cycle()
+            except Exception as exc:
+                logger.error("Download loop error: %s", exc)
+
+            await asyncio.sleep(interval)
+
+    async def _trigger_parser_cycle(self) -> None:
+        """Trigger an immediate parser cycle."""
+        from agents.parser import run_autonomous
+
+        result = await run_autonomous()
+        logger.info("Immediate parse trigger: %s", result)
+
     def start(self, tick_seconds: int = 60) -> None:
         """Run the orchestrator in a continuous loop.
 
@@ -836,38 +868,52 @@ class Orchestrator:
         self._recover_stale_articles()
         self._archive_old_plans()
 
-        try:
-            while True:
-                result = self.tick()
-                n_c = len(result["completed"])
-                n_f = len(result["forked"])
-                n_r = result["running_total"]
+        async def _main_loop():
+            # Launch pipeline loops as background tasks
+            fetch_task = asyncio.create_task(self._feed_fetch_loop())
+            download_task = asyncio.create_task(self._download_loop())
 
-                if n_c or n_f:
-                    logger.info(
-                        "Tick: %d forked, %d completed, %d running",
-                        n_f,
-                        n_c,
-                        n_r,
-                    )
-                    for comp_key, info in result["completed"].items():
+            try:
+                while True:
+                    # IMPORTANT: tick() is synchronous (uses subprocess.Popen).
+                    # Run in executor to avoid blocking the async event loop.
+                    loop = asyncio.get_event_loop()
+                    result = await loop.run_in_executor(None, self.tick)
+                    n_c = len(result["completed"])
+                    n_f = len(result["forked"])
+                    n_r = result["running_total"]
+
+                    if n_c or n_f:
                         logger.info(
-                            "  %s: %s (exit=%s, duration=%s)",
-                            comp_key,
-                            info["result"],
-                            info.get("exit_code"),
-                            info.get("duration", "?"),
+                            "Tick: %d forked, %d completed, %d running",
+                            n_f,
+                            n_c,
+                            n_r,
                         )
-                    for name in result["forked"]:
-                        instances = self.running.get(name, [])
-                        if instances:
+                        for comp_key, info in result["completed"].items():
                             logger.info(
-                                "  %s: forked → PID %d",
-                                name,
-                                instances[-1].pid,
+                                "  %s: %s (exit=%s, duration=%s)",
+                                comp_key,
+                                info["result"],
+                                info.get("exit_code"),
+                                info.get("duration", "?"),
                             )
+                        for name in result["forked"]:
+                            instances = self.running.get(name, [])
+                            if instances:
+                                logger.info(
+                                    "  %s: forked → PID %d",
+                                    name,
+                                    instances[-1].pid,
+                                )
 
-                time.sleep(tick_seconds)
+                    await asyncio.sleep(tick_seconds)
+            finally:
+                fetch_task.cancel()
+                download_task.cancel()
+
+        try:
+            asyncio.run(_main_loop())
         except KeyboardInterrupt:
             logger.info("Orchestrator stopped by user")
             self.save_state()

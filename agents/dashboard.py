@@ -15,9 +15,9 @@ from rich.text import Text
 from agents.streaming import _SENTENCE_BOUNDARY_RE, format_log_line
 
 _AGENT_COLORS = {
-    "planner": "blue",
+    "sentinel": "blue",
     "executor": "green",
-    "monitor": "yellow",
+    "fact_checker": "yellow",
 }
 
 _MIN_WIDTH = 80
@@ -344,7 +344,7 @@ class Dashboard:
         self.buffers: dict[str, EventBuffer] = {}
         self.agent_status: dict[str, str] = {}
         self.tick_seconds = tick_seconds
-        self.agents = ["planner", "executor", "monitor"]
+        self.agents = ["sentinel", "executor", "fact_checker"]
         self.stats_data = _get_article_stats()
 
     def _buffer_keys_for_agent(self, name: str) -> list[str]:
@@ -602,13 +602,13 @@ class Dashboard:
             layout.split_column(
                 Layout(name="header", size=header_rows),
                 Layout(name="stats"),
-                Layout(name="planner"),
+                Layout(name="sentinel"),
                 Layout(name="executor"),
                 Layout(name="alerts"),
             )
 
             layout["stats"].update(self._build_stats_panel(lines_per_panel))
-            layout["planner"].update(self._build_ops_panel("planner"))
+            layout["sentinel"].update(self._build_ops_panel("sentinel"))
             layout["executor"].update(self._build_executor_ops_panel(lines_per_panel))
             layout["alerts"].update(self._build_alerts_panel(lines_per_panel))
         else:
@@ -629,15 +629,15 @@ class Dashboard:
                 Layout(name="executor", ratio=1),
             )
 
-            # Bottom row: planner ops (33%) | alerts (67%)
+            # Bottom row: sentinel ops (33%) | alerts (67%)
             layout["bottom_row"].split_row(
-                Layout(name="planner", ratio=1),
+                Layout(name="sentinel", ratio=1),
                 Layout(name="alerts", ratio=2),
             )
 
             # Build panels
             layout["stats"].update(self._build_stats_panel(lines_per_panel))
-            layout["planner"].update(self._build_ops_panel("planner"))
+            layout["sentinel"].update(self._build_ops_panel("sentinel"))
             layout["executor"].update(self._build_executor_ops_panel(lines_per_panel))
             layout["alerts"].update(self._build_alerts_panel(lines_per_panel))
 

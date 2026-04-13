@@ -1,7 +1,6 @@
 """Agents command - manage autonomous agents."""
 
 import asyncio
-from typing import Literal
 
 import typer
 
@@ -12,7 +11,7 @@ from ._common import emit_error, emit_json
 
 agents_app = typer.Typer(help="Manage autonomous agents.")
 
-VALID_AGENTS = ["planner", "executor", "parser", "monitor"]
+VALID_AGENTS = ["sentinel", "executor", "parser", "fact_checker"]
 
 DEFAULT_TASKS = {
     name: schedule.task_prompt for name, schedule in DEFAULT_SCHEDULES.items()
@@ -66,13 +65,11 @@ def agents_status(
 
 @agents_app.command(name="run")
 def agents_run(
-    agent: Literal["planner", "executor", "parser", "monitor"] = (
-        typer.Option(
-            None,
-            "--agent",
-            "-a",
-            help="Specific agent to run (planner|executor|parser|monitor)",
-        )
+    agent: str = typer.Option(
+        None,
+        "--agent",
+        "-a",
+        help="Specific agent to run (sentinel|executor|parser|fact_checker)",
     ),
     task: str = typer.Option(
         None,
@@ -100,10 +97,7 @@ def agents_run(
         asyncio.run(orchestrator.run_due_agents())
 
 
-async def _run_single_agent(
-    agent_name: Literal["planner", "executor", "parser", "monitor"],
-    task: str,
-):
+async def _run_single_agent(agent_name: str, task: str):
     """Run a single agent."""
     await Orchestrator().run_agent(agent_name, task)
 

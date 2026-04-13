@@ -1,10 +1,51 @@
 """Bypass solution and content fetching utilities."""
 
+import json
 import re
+import time
+from pathlib import Path
 
 import httpx
 
 from models import ByparrSolution
+
+# Solution file cache
+_CACHE_DIR = Path(".cache") / "byparr"
+_CACHE_TTL = 3600  # 1 hour
+
+
+def _get_cache_path(domain: str) -> Path:
+    """Get the cache file path for a domain."""
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    return _CACHE_DIR / f"{domain}.json"
+
+
+def _load_cached_solution(domain: str) -> ByparrSolution | None:
+    """Load a cached solution if it exists and is not stale."""
+    cache_path = _get_cache_path(domain)
+    if not cache_path.exists():
+        return None
+    try:
+        data = json.loads(cache_path.read_text(encoding="utf-8"))
+        if time.time() - data.get("timestamp", 0) < _CACHE_TTL:
+            return ByparrSolution(
+                cookies=data["cookies"],
+                headers=data["headers"],
+            )
+    except (json.JSONDecodeError, OSError, KeyError):
+        pass
+    return None
+
+
+def _cache_solution(domain: str, solution: ByparrSolution) -> None:
+    """Cache a bypass solution for a domain."""
+    cache_path = _get_cache_path(domain)
+    data = {
+        "cookies": solution.cookies,
+        "headers": solution.headers,
+        "timestamp": time.time(),
+    }
+    cache_path.write_text(json.dumps(data), encoding="utf-8")
 
 
 async def get_byparr_solution(target_url: str, bypass_api_url: str) -> ByparrSolution:
@@ -24,6 +65,15 @@ async def get_byparr_solution(target_url: str, bypass_api_url: str) -> ByparrSol
         httpx.HTTPError: If the request fails.
         ValueError: If the API response is invalid or indicates failure.
     """
+    from helpers.url import get_base_url
+
+    domain = get_base_url(target_url)
+
+    # Check cache first
+    cached = _load_cached_solution(domain)
+    if cached is not None:
+        return cached
+
     timeout = httpx.Timeout(120.0, connect=30.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(
@@ -89,10 +139,14 @@ async def get_byparr_solution(target_url: str, bypass_api_url: str) -> ByparrSol
                 "Gecko/20100101 Firefox/125.0"
             )
 
-        return ByparrSolution(
+        solution = ByparrSolution(
             cookies=cookies,
             headers=headers,
         )
+
+        # Cache the result
+        _cache_solution(domain, solution)
+        return solution
 
 
 async def fetch_url_content(url: str, solution: ByparrSolution) -> str:

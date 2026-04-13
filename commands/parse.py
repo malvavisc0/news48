@@ -281,42 +281,58 @@ def parse(
             return
         status_msg(f"Found {len(candidates)} unparsed articles")
 
-    parsed = 0
-    failed = 0
-    results = []
+    # Use a single event loop with concurrent processing
+    async def _parse_batch(
+        candidates: list[dict],
+        force: bool,
+        delay: float,
+        feed_filter: str | None,
+        is_retry: bool,
+    ) -> dict:
+        """Parse multiple articles concurrently."""
+        sem = asyncio.Semaphore(5)
 
-    for candidate in candidates:
-        try:
-            result = asyncio.run(_parse(candidate["id"], force=force or retry))
-        except SystemExit:
-            raise
-        except Exception as e:
-            result = {
-                "id": candidate["id"],
-                "title": candidate["title"],
-                "url": candidate["url"],
-                "success": False,
-                "error": str(e),
-            }
+        async def _parse_one(candidate: dict) -> dict:
+            async with sem:
+                result = await _parse(candidate["id"], force=force)
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                return result
 
-        if result.get("success"):
-            parsed += 1
-        else:
-            failed += 1
-        results.append(result)
+        results = await asyncio.gather(*(_parse_one(c) for c in candidates))
 
-        asyncio.run(asyncio.sleep(delay))
+        parsed = sum(1 for r in results if r.get("success"))
+        failed = sum(1 for r in results if not r.get("success"))
 
-    data = {
-        "feed_filter": feed,
-        "parsed": parsed,
-        "failed": failed,
-        "total": len(candidates),
-        "retry": retry,
-        "results": results,
-    }
+        return {
+            "feed_filter": feed_filter,
+            "parsed": parsed,
+            "failed": failed,
+            "total": len(candidates),
+            "retry": is_retry,
+            "results": list(results),
+        }
+
+    try:
+        data = asyncio.run(
+            _parse_batch(
+                candidates,
+                force=force or retry,
+                delay=delay,
+                feed_filter=feed,
+                is_retry=retry,
+            )
+        )
+    except SystemExit:
+        raise
+    except Exception as e:
+        emit_error(str(e), as_json=output_json)
+        return
 
     if output_json:
         emit_json(data)
     else:
-        print(f"Parsed {parsed} of {len(candidates)} " f"articles, {failed} failed")
+        print(
+            f"Parsed {data['parsed']} of {data['total']} "
+            f"articles, {data['failed']} failed"
+        )

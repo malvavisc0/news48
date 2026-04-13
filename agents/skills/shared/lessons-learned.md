@@ -25,7 +25,7 @@ Save a lesson IMMEDIATELY when any of these happen:
 
 Use `save_lesson` with:
 - `reason`: Brief explanation of why you're saving this
-- `agent_name`: Your agent name (`executor`, `parser`, `planner`, `monitor`)
+- `agent_name`: Your agent name (`executor`, `parser`, `sentinel`, `fact_checker`)
 - `category`: One of the standard categories below (or create a new one if none fit)
 - `lesson`: The actual lesson — be **specific and actionable**, include exact commands, values, or steps
 

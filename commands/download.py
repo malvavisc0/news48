@@ -26,7 +26,7 @@ from ._common import emit_error, emit_json, require_db, status_msg
 
 logger = logging.getLogger(__name__)
 
-MAX_CONCURRENT = 5
+MAX_CONCURRENT = 15
 """Default maximum number of concurrent download tasks."""
 
 MAX_RETRIES = 3
@@ -36,26 +36,26 @@ RETRY_DELAY_BASE = 2.0
 """Base delay in seconds for exponential backoff."""
 
 
-async def _get_domain_lock(
+async def _get_domain_semaphore(
     domain: str,
-    domain_locks: dict[str, asyncio.Lock],
+    domain_sems: dict[str, asyncio.Semaphore],
     meta_lock: asyncio.Lock,
-) -> asyncio.Lock:
-    """Return the per-domain lock, creating it if needed."""
+) -> asyncio.Semaphore:
+    """Return the per-domain semaphore, creating it if needed."""
     async with meta_lock:
-        if domain not in domain_locks:
-            domain_locks[domain] = asyncio.Lock()
-        return domain_locks[domain]
+        if domain not in domain_sems:
+            domain_sems[domain] = asyncio.Semaphore(4)
+        return domain_sems[domain]
 
 
 async def _ensure_solution(
     domain: str,
     solutions: dict[str, ByparrSolution],
-    domain_lock: asyncio.Lock,
+    domain_sem: asyncio.Semaphore,
     stale: ByparrSolution | None = None,
 ) -> ByparrSolution:
     """Get or refresh the bypass solution for *domain*."""
-    async with domain_lock:
+    async with domain_sem:
         cached = solutions.get(domain)
         need_refresh = cached is None or (stale is not None and cached is stale)
         if need_refresh:
@@ -69,7 +69,7 @@ async def _ensure_solution(
 async def _download_article(
     article: dict,
     solutions: dict[str, ByparrSolution],
-    domain_locks: dict[str, asyncio.Lock],
+    domain_sems: dict[str, asyncio.Semaphore],
     meta_lock: asyncio.Lock,
     semaphore: asyncio.Semaphore,
     db_path: Path,
@@ -79,9 +79,9 @@ async def _download_article(
     async with semaphore:
         url = article["url"]
         domain = get_base_url(url=url)
-        domain_lock = await _get_domain_lock(
+        domain_sem = await _get_domain_semaphore(
             domain,
-            domain_locks,
+            domain_sems,
             meta_lock,
         )
 
@@ -90,7 +90,7 @@ async def _download_article(
                 solution = await _ensure_solution(
                     domain,
                     solutions,
-                    domain_lock,
+                    domain_sem,
                 )
             except Exception as e:
                 logger.exception("Failed to get solution for %s", domain)
@@ -264,24 +264,22 @@ async def _download(
         status_msg(f"Found {len(articles)} articles to download")
 
     solutions: dict[str, ByparrSolution] = {}
-    domain_locks: dict[str, asyncio.Lock] = {}
+    domain_sems: dict[str, asyncio.Semaphore] = {}
     meta_lock = asyncio.Lock()
     semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
-    async def _throttled(idx: int, article: dict) -> bool:
-        if idx > 0:
-            await asyncio.sleep(delay * idx)
+    async def _throttled(article: dict) -> bool:
         return await _download_article(
             article=article,
             solutions=solutions,
-            domain_locks=domain_locks,
+            domain_sems=domain_sems,
             meta_lock=meta_lock,
             semaphore=semaphore,
             db_path=db_path,
             claim_owner=claim_owner,
         )
 
-    results = await asyncio.gather(*(_throttled(i, a) for i, a in enumerate(articles)))
+    results = await asyncio.gather(*(_throttled(a) for a in articles))
 
     downloaded = sum(1 for r in results if r)
     failed = sum(1 for r in results if not r)

@@ -31,6 +31,7 @@ def get_connection(db_path: Path):
     try:
         db.execute("PRAGMA foreign_keys = ON")
         db.execute("PRAGMA journal_mode = WAL")
+        db.execute("PRAGMA busy_timeout = 5000")
         yield db
     finally:
         db.close()
@@ -119,6 +120,18 @@ CREATE_INDEXES = [
     (
         "CREATE INDEX IF NOT EXISTS idx_articles_processing "
         "ON articles(processing_status, processing_started_at)"
+    ),
+    # Partial index for unparsed articles ready for parsing
+    (
+        "CREATE INDEX IF NOT EXISTS idx_articles_unparsed "
+        "ON articles(created_at ASC) "
+        "WHERE content IS NOT NULL AND parsed_at IS NULL AND parse_failed = 0"
+    ),
+    # Partial index for empty articles needing download
+    (
+        "CREATE INDEX IF NOT EXISTS idx_articles_empty "
+        "ON articles(created_at ASC) "
+        "WHERE content IS NULL AND download_failed = 0"
     ),
     # Composite index for the most common website query
     (

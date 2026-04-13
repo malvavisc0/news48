@@ -43,17 +43,17 @@ class TestOrchestrator:
 
     def test_default_schedules(self):
         orchestrator = Orchestrator()
-        assert "planner" in orchestrator.schedules
+        assert "sentinel" in orchestrator.schedules
         assert "executor" in orchestrator.schedules
         assert "parser" in orchestrator.schedules
-        assert "monitor" in orchestrator.schedules
+        assert "fact_checker" in orchestrator.schedules
 
     def test_default_schedule_intervals(self):
         orchestrator = Orchestrator()
-        assert orchestrator.schedules["planner"].interval_minutes == 5
+        assert orchestrator.schedules["sentinel"].interval_minutes == 5
         assert orchestrator.schedules["executor"].interval_minutes == 1
         assert orchestrator.schedules["parser"].interval_minutes == 1
-        assert orchestrator.schedules["monitor"].interval_minutes == 120
+        assert orchestrator.schedules["fact_checker"].interval_minutes == 5
 
     def test_should_run_when_never_run(self):
         schedule = AgentSchedule(
@@ -102,7 +102,7 @@ class TestOrchestrator:
         orchestrator = Orchestrator()
         status = orchestrator.get_status()
 
-        for name in ["planner", "executor", "parser", "monitor"]:
+        for name in ["sentinel", "executor", "parser", "fact_checker"]:
             assert name in status
             assert "enabled" in status[name]
             assert "interval_minutes" in status[name]
@@ -112,8 +112,8 @@ class TestOrchestrator:
 
     def test_get_status_disabled_agent(self):
         schedules = {
-            "planner": AgentSchedule(
-                agent_name="planner",
+            "sentinel": AgentSchedule(
+                agent_name="sentinel",
                 task_prompt="Check",
                 interval_minutes=15,
                 enabled=False,
@@ -121,20 +121,20 @@ class TestOrchestrator:
         }
         orchestrator = Orchestrator(schedules=schedules)
         status = orchestrator.get_status()
-        assert status["planner"]["next_run"] == "disabled"
+        assert status["sentinel"]["next_run"] == "disabled"
 
     def test_get_status_never_run(self):
         schedules = {
-            "planner": AgentSchedule(
-                agent_name="planner",
+            "sentinel": AgentSchedule(
+                agent_name="sentinel",
                 task_prompt="Check",
                 interval_minutes=15,
             ),
         }
         orchestrator = Orchestrator(schedules=schedules)
         status = orchestrator.get_status()
-        assert status["planner"]["last_run"] is None
-        assert status["planner"]["next_run"] == "immediate"
+        assert status["sentinel"]["last_run"] is None
+        assert status["sentinel"]["next_run"] == "immediate"
 
     def test_run_agent_unknown(self):
         import asyncio
@@ -155,8 +155,8 @@ class TestOrchestrator:
         from datetime import datetime, timedelta, timezone
 
         schedules = {
-            "planner": AgentSchedule(
-                agent_name="planner",
+            "sentinel": AgentSchedule(
+                agent_name="sentinel",
                 task_prompt="Check",
                 interval_minutes=15,
                 last_run=(
@@ -206,11 +206,13 @@ class TestOrchestrator:
                 {
                     "schedules": {},
                     "running": {
-                        "planner": {
-                            "pid": 123456,
-                            "started_at": "2026-01-01T00:00:00+00:00",
-                            "log_file": ".logs/planner.log",
-                        }
+                        "sentinel": [
+                            {
+                                "pid": 123456,
+                                "started_at": "2026-01-01T00:00:00+00:00",
+                                "log_file": ".logs/sentinel.log",
+                            }
+                        ]
                     },
                 }
             ),
@@ -242,7 +244,7 @@ class TestOrchestrator:
         orchestrator._recover_stale_plans()
 
         assert called["value"] is True
-        schedule = orchestrator.schedules["planner"]
+        schedule = orchestrator.schedules["sentinel"]
         assert schedule.last_result == "unknown"
         assert "disappeared" in (schedule.last_error or "").lower()
 

@@ -32,12 +32,14 @@ from commands import (
     sitemap_app,
     stats,
 )
+from commands.fact_check import fact_check
 
 app = typer.Typer()
 app.command()(fetch)
 app.command()(parse)
 app.command()(seed)
 app.command()(download)
+app.command(name="fact-check")(fact_check)
 app.command()(stats)
 app.add_typer(feeds_app, name="feeds")
 app.add_typer(fetches_app, name="fetches")

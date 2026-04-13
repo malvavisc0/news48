@@ -29,3 +29,4 @@ seed.txt
 
 # Lessons learned
 .lessons.md
+.cache/

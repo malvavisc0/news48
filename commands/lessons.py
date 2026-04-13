@@ -13,7 +13,7 @@ lessons_app = typer.Typer(help="View and manage agent lessons.")
 
 _LESSONS_FILE = Path(".lessons.md")
 
-AGENT_NAMES = ["executor", "parser", "planner", "monitor"]
+AGENT_NAMES = ["executor", "parser", "sentinel", "fact_checker"]
 
 
 def _parse_lessons(

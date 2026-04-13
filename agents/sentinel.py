@@ -1,4 +1,4 @@
-"""Monitor agent for system health observation and reporting."""
+"""Sentinel agent — merged monitor + planner + feed curation."""
 
 from os import getenv
 
@@ -10,12 +10,7 @@ from agents.skills import compose_agent_instructions
 
 
 def get_agent(task_context: dict | None = None) -> FunctionAgent:
-    """Create and return the Monitor Agent.
-
-    Args:
-        task_context: Dict with keys for conditional skill loading.
-            If None, uses empty context (all core skills loaded).
-    """
+    """Create and return the Sentinel Agent."""
     api_base = getenv("API_BASE", "")
     api_key = getenv("API_KEY", "")
     model = getenv("MODEL", "")
@@ -23,21 +18,25 @@ def get_agent(task_context: dict | None = None) -> FunctionAgent:
         raise ValueError("Missing API_BASE env.")
 
     from agents.tools import (
+        create_plan,
         get_system_info,
+        list_plans,
         read_file,
         run_shell_command,
         save_lesson,
         send_email,
+        update_plan,
+        write_sentinel_report,
     )
 
     ctx = task_context or {}
 
     return FunctionAgent(
-        name="Monitor",
+        name="Sentinel",
         description=(
-            "System health observer that gathers metrics, reasons about "
-            "patterns and anomalies, classifies alerts by severity, and "
-            "delivers reports via email."
+            "System health guardian that observes metrics, detects issues, "
+            "creates fix plans, and curates feeds by removing unhealthy "
+            "sources."
         ),
         llm=OpenAILike(
             model=model,
@@ -50,21 +49,19 @@ def get_agent(task_context: dict | None = None) -> FunctionAgent:
             run_shell_command,
             read_file,
             get_system_info,
+            create_plan,
+            update_plan,
+            list_plans,
             send_email,
             save_lesson,
+            write_sentinel_report,
         ],
-        system_prompt=compose_agent_instructions("monitor", ctx),
+        system_prompt=compose_agent_instructions("sentinel", ctx),
         verbose=False,
         streaming=True,
     )
 
 
 async def run(task: str, task_context: dict | None = None):
-    """Run the Monitor Agent with a task prompt.
-
-    Args:
-        task: What to do, e.g., "Run a monitoring cycle and send report"
-              or "Check database health and alert if critical".
-        task_context: Optional dict for conditional skill loading.
-    """
+    """Run the Sentinel Agent with a task prompt."""
     return await run_agent(lambda: get_agent(task_context), task)

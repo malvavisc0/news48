@@ -17,7 +17,7 @@ logs_app = typer.Typer(help="Inspect and search agent log files.")
 
 LOG_DIR = Path(".logs")
 
-AGENT_CHOICES = ["executor", "planner", "monitor"]
+AGENT_CHOICES = ["executor", "sentinel", "fact_checker", "parser"]
 
 
 # Extract date/time from log filenames: executor-20260406-025724.log
