@@ -175,8 +175,24 @@ def _derive_plan_status_from_steps(plan: dict) -> str | None:
     return None
 
 
+def _is_valid_uuid(value: str) -> bool:
+    """Check whether a string looks like a UUID (8-4-4-4-12 hex format)."""
+    if not value:
+        return False
+    try:
+        uuid.UUID(value)
+        return True
+    except (ValueError, AttributeError):
+        return False
+
+
 def _normalize_plan_for_consistency(plan: dict) -> bool:
     """Normalize plan/step status mismatches.
+
+    Also detects and repairs campaign-parent deadlocks: if a non-terminal
+    plan's ``parent_id`` points to a campaign, the blocking dependency is
+    converted to a non-blocking ``campaign_id`` grouping field.  Orphaned
+    non-UUID ``parent_id`` references are also cleared.
 
     Returns:
         True when any field changed, else False.
@@ -227,6 +243,27 @@ def _normalize_plan_for_consistency(plan: dict) -> bool:
     if derived and status in _TERMINAL_PLAN_STATUSES and status != derived:
         plan["status"] = derived
         changed = True
+
+    # If parent_id points to a campaign, convert to campaign_id.
+    # Campaigns are never completed by executors, so children with
+    # parent_id pointing at a campaign would be permanently blocked.
+    parent_id = plan.get("parent_id")
+    if parent_id and status not in _TERMINAL_PLAN_STATUSES:
+        parent_file = _PLANS_DIR / f"{parent_id}.json"
+        if parent_file.exists():
+            try:
+                parent = json.loads(parent_file.read_text(encoding="utf-8"))
+                if parent.get("plan_kind") == "campaign":
+                    plan["parent_id"] = None
+                    if not plan.get("campaign_id"):
+                        plan["campaign_id"] = parent_id
+                    changed = True
+            except (json.JSONDecodeError, OSError):
+                pass
+        elif not _is_valid_uuid(parent_id):
+            # Orphaned non-UUID parent_id
+            plan["parent_id"] = None
+            changed = True
 
     if changed:
         plan["updated_at"] = timestamp
@@ -487,6 +524,23 @@ def create_plan(
         normalized_campaign_id = (campaign_id or "").strip() or None
 
         resolved_parent_id = _infer_parent_plan_id(task, parent_id or None)
+
+        # If parent_id points to a campaign, convert to campaign_id
+        # instead to prevent a blocking dependency that can never be
+        # resolved (campaigns are never completed by executors).
+        if resolved_parent_id:
+            parent_plan_file = _PLANS_DIR / f"{resolved_parent_id}.json"
+            if parent_plan_file.exists():
+                try:
+                    parent_data = json.loads(
+                        parent_plan_file.read_text(encoding="utf-8")
+                    )
+                    if parent_data.get("plan_kind") == "campaign":
+                        if not normalized_campaign_id:
+                            normalized_campaign_id = resolved_parent_id
+                        resolved_parent_id = None
+                except (json.JSONDecodeError, OSError):
+                    pass
 
         duplicate = _find_active_duplicate_plan(
             task,
@@ -1032,7 +1086,8 @@ def claim_plan(reason: str) -> str:
     A plan is eligible when:
     - Its status is ``pending``
     - Its ``plan_kind`` is not ``campaign``
-    - It has no ``parent_id``, OR the parent plan's status is ``completed``
+    - It has no ``parent_id``, OR the parent is a campaign (non-blocking),
+      OR the parent plan's status is ``completed``
 
     Stale executing plans (no update for 60 minutes) are automatically
     requeued to pending before claiming.
@@ -1091,8 +1146,14 @@ def claim_plan(reason: str) -> str:
             parent_id = plan.get("parent_id")
             if parent_id:
                 parent = all_plans.get(parent_id)
-                if not parent or parent.get("status") != "completed":
-                    continue
+                if not parent:
+                    continue  # Orphaned parent — skip
+                if (
+                    parent.get("plan_kind") != "campaign"
+                    and parent.get("status") != "completed"
+                ):
+                    continue  # Non-campaign parent must be completed
+                # Campaign parents: always allow children to be claimed
 
             plan["status"] = "executing"
             plan["updated_at"] = _now()
@@ -1193,7 +1254,59 @@ def peek_next_plan() -> str | None:
         parent_id = plan.get("parent_id")
         if parent_id:
             parent = all_plans.get(parent_id)
-            if not parent or parent.get("status") != "completed":
-                continue
+            if not parent:
+                continue  # Orphaned parent — skip
+            if (
+                parent.get("plan_kind") != "campaign"
+                and parent.get("status") != "completed"
+            ):
+                continue  # Non-campaign parent must be completed
+            # Campaign parents: always allow children
         return _task_family(plan.get("task", ""))
     return None
+
+
+def _auto_complete_campaigns(plans_dir: Path | None = None) -> int:
+    """Mark campaigns as completed when all children are terminal.
+
+    Checks both ``campaign_id`` and ``parent_id`` links to find children.
+    A campaign whose every child is ``completed`` gets status
+    ``completed``; if any child is ``failed`` the campaign is marked
+    ``failed``.  Campaigns with no children at all are left unchanged
+    (handled by remediation's orphaned-campaign check).
+
+    Returns the number of campaigns auto-completed.
+    """
+    plans_dir = plans_dir or _ensure_plans_dir()
+    all_plans: dict[str, dict] = {}
+    for plan_file in plans_dir.glob("*.json"):
+        try:
+            plan = json.loads(plan_file.read_text(encoding="utf-8"))
+            all_plans[plan["id"]] = plan
+        except (json.JSONDecodeError, OSError):
+            continue
+
+    completed = 0
+    for plan_id, plan in all_plans.items():
+        if plan.get("plan_kind") != "campaign":
+            continue
+        if plan.get("status") != "pending":
+            continue
+
+        children = [
+            p
+            for p in all_plans.values()
+            if p.get("id") != plan_id
+            and (p.get("campaign_id") == plan_id or p.get("parent_id") == plan_id)
+        ]
+        if not children:
+            continue
+
+        if all(c.get("status") in _TERMINAL_PLAN_STATUSES for c in children):
+            all_completed = all(c.get("status") == "completed" for c in children)
+            plan["status"] = "completed" if all_completed else "failed"
+            plan["updated_at"] = _now()
+            _write_plan(plan)
+            completed += 1
+
+    return completed

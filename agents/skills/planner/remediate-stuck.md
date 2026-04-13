@@ -13,5 +13,7 @@ Conditional — active when stale or requeued plans detected.
    - Review error patterns: `news48 logs list --agent executor --json`
    - Identify root cause (network, feed changes, resource limits)
    - Recommend corrective action
+5. **Deadlock detection**: If `news48 plans list --status pending --json` returns plans AND the executor consistently reports "no eligible plans" (check executor logs), this indicates a parent-chain deadlock. Run `news48 plans remediate --apply --json` to clear blocked parent references.
+6. If remediation does not resolve the deadlock, cancel the deadlocked plans and create fresh execution plans WITHOUT `parent_id` links to campaigns.
 
 Do not create a remediation plan when the stale condition clears during the current planning cycle.

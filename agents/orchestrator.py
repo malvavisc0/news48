@@ -202,7 +202,135 @@ class Orchestrator:
         except Exception as exc:
             logger.warning("Plan archival startup hook failed: %s", exc)
 
+    def _heal_plan_deadlocks(self) -> int:
+        """Detect and repair campaign-parent deadlocks in pending plans.
+
+        Runs every tick before forking agents.  Uses
+        ``_normalize_plan_for_consistency`` to convert blocking
+        ``parent_id`` references to campaigns into non-blocking
+        ``campaign_id`` fields, and ``_auto_complete_campaigns`` to
+        mark campaigns whose children are all terminal.
+
+        Returns:
+            Number of plans healed.
+        """
+        try:
+            from agents.tools.planner import (
+                _auto_complete_campaigns,
+                _ensure_plans_dir,
+                _normalize_plan_for_consistency,
+                _write_plan,
+            )
+
+            plans_dir = _ensure_plans_dir()
+            healed = 0
+            for plan_file in plans_dir.glob("*.json"):
+                try:
+                    plan = json.loads(plan_file.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    continue
+                if _normalize_plan_for_consistency(plan):
+                    _write_plan(plan)
+                    healed += 1
+
+            auto_completed = _auto_complete_campaigns(plans_dir)
+            healed += auto_completed
+
+            if healed:
+                logger.info(
+                    "Plan deadlock heal: %d plan(s) repaired, "
+                    "%d campaign(s) auto-completed",
+                    healed - auto_completed,
+                    auto_completed,
+                )
+            return healed
+        except Exception as exc:
+            logger.warning("Plan deadlock heal failed: %s", exc)
+            return 0
+
     _HEARTBEAT_FILE = Path(".orchestrator.heartbeat")
+    _PID_FILE = Path(".orchestrator.pid")
+
+    def _write_pid_file(self) -> None:
+        """Write the orchestrator daemon's PID to ``.orchestrator.pid``."""
+        try:
+            self._PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
+        except OSError as exc:
+            logger.warning("Failed to write PID file: %s", exc)
+
+    def _remove_pid_file(self) -> None:
+        """Remove the PID file on clean shutdown."""
+        try:
+            self._PID_FILE.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    @classmethod
+    def read_daemon_pid(cls) -> int | None:
+        """Read the daemon PID from ``.orchestrator.pid``.
+
+        Returns the PID if the file exists and the process is alive,
+        otherwise cleans up the stale file and returns ``None``.
+        """
+        if not cls._PID_FILE.exists():
+            return None
+        try:
+            pid = int(cls._PID_FILE.read_text(encoding="utf-8").strip())
+        except (ValueError, OSError):
+            return None
+        if _is_process_alive(pid):
+            return pid
+        # Stale PID file — process is dead
+        try:
+            cls._PID_FILE.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return None
+
+    @classmethod
+    def stop_daemon(cls) -> dict[str, Any]:
+        """Stop the orchestrator daemon process.
+
+        Reads the PID from ``.orchestrator.pid``, sends SIGTERM, waits
+        up to 10 seconds, then SIGKILL if still alive.
+
+        Returns:
+            Dict with ``daemon_pid``, ``stopped`` bool, ``signal`` used.
+        """
+        pid = cls.read_daemon_pid()
+        if pid is None:
+            return {"daemon_pid": None, "stopped": False, "signal": None}
+
+        # Send SIGTERM
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            return {"daemon_pid": pid, "stopped": False, "signal": None}
+
+        # Wait up to 10 seconds
+        for _ in range(100):
+            time.sleep(0.1)
+            if not _is_process_alive(pid):
+                try:
+                    cls._PID_FILE.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                return {
+                    "daemon_pid": pid,
+                    "stopped": True,
+                    "signal": "SIGTERM",
+                }
+
+        # Force kill
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+        try:
+            cls._PID_FILE.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return {"daemon_pid": pid, "stopped": True, "signal": "SIGKILL"}
 
     def _write_heartbeat(self) -> None:
         """Write a heartbeat file with the current timestamp.
@@ -655,8 +783,9 @@ class Orchestrator:
         """Run one orchestrator cycle.
 
         1. Check running processes for completion / timeout.
-        2. Fork due agents (at most one new instance per agent per tick).
-        3. Save state.
+        2. Heal plan deadlocks (campaign-parent blocking).
+        3. Fork due agents (at most one new instance per agent per tick).
+        4. Save state.
 
         Returns:
             Dict summarizing what happened this tick.
@@ -664,17 +793,20 @@ class Orchestrator:
         # 1. Check completed agents
         completed = self.check_running()
 
-        # 2. Fork due agents (one-per-agent per tick to avoid burst-forking)
+        # 2. Heal plan deadlocks before forking agents
+        healed = self._heal_plan_deadlocks()
+
+        # 3. Fork due agents (one-per-agent per tick to avoid burst-forking)
         forked: list[str] = []
         for name, schedule in self.schedules.items():
             if self._should_run(schedule):
                 if self.fork_agent(name):
                     forked.append(name)
 
-        # 3. Save state
+        # 4. Save state
         self.save_state()
 
-        # 4. Write heartbeat
+        # 5. Write heartbeat
         self._write_heartbeat()
 
         # Count total running instances
@@ -682,6 +814,7 @@ class Orchestrator:
 
         return {
             "completed": completed,
+            "healed": healed,
             "forked": forked,
             "running": list(self.running.keys()),
             "running_total": total_running,
@@ -689,8 +822,15 @@ class Orchestrator:
         }
 
     def start(self, tick_seconds: int = 60) -> None:
-        """Run the orchestrator in a continuous loop."""
+        """Run the orchestrator in a continuous loop.
+
+        Writes the daemon PID to ``.orchestrator.pid`` on startup and
+        removes it on clean shutdown. External callers can use
+        :meth:`read_daemon_pid` / :meth:`stop_daemon` to find and stop
+        the daemon process.
+        """
         logger.info("Orchestrator starting (tick every %ds)", tick_seconds)
+        self._write_pid_file()
         self.load_state()
         self._recover_stale_plans()
         self._recover_stale_articles()
@@ -731,6 +871,8 @@ class Orchestrator:
         except KeyboardInterrupt:
             logger.info("Orchestrator stopped by user")
             self.save_state()
+        finally:
+            self._remove_pid_file()
 
     # ------------------------------------------------------------------
     # Agent control
@@ -818,13 +960,23 @@ class Orchestrator:
         }
 
     def stop_all(self) -> Dict[str, Any]:
-        """Stop all running agents."""
+        """Stop the daemon and all running agents.
+
+        First stops the orchestrator daemon (if running) so it cannot
+        re-fork agents, then stops all tracked agent subprocesses.
+        """
+        daemon_result = self.stop_daemon()
+
         stopped, already = [], []
         for name in list(self.running.keys()):
             result = self.stop_agent(name)
             stopped.extend(result["stopped"])
             already.extend(result["already_stopped"])
-        return {"stopped": stopped, "already_stopped": already}
+        return {
+            "stopped": stopped,
+            "already_stopped": already,
+            "daemon": daemon_result,
+        }
 
     def get_status(self) -> Dict[str, Any]:
         """Get status of all agent schedules.

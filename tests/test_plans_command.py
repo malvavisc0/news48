@@ -120,3 +120,91 @@ def test_plans_remediate_preview_and_apply(tmp_path, monkeypatch):
     assert applied.exit_code == 0
     applied_data = json.loads(applied.stdout)
     assert applied_data["apply"] is True
+
+
+def test_plans_remediate_clears_campaign_parent_deadlock(tmp_path, monkeypatch):
+    """plans remediate --apply clears parent_id when parent is a pending
+    campaign, preventing permanent deadlock (Fix 2)."""
+    from agents.tools import planner as planner_tools
+
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    campaign = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Coordinate download backlog",
+            steps=["Track coverage"],
+            success_conditions=["Children exist"],
+            plan_kind="campaign",
+        )
+    )["result"]
+
+    child = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download articles for example.com",
+            steps=["Download", "Verify"],
+            success_conditions=["Backlog reduced"],
+            campaign_id=campaign["plan_id"],
+        )
+    )["result"]
+
+    # Simulate the deadlock: set parent_id to the campaign
+    child_plan = planner_tools._read_plan(child["plan_id"])
+    child_plan["parent_id"] = campaign["plan_id"]
+    planner_tools._write_plan(child_plan)
+
+    result = runner.invoke(app, ["plans", "remediate", "--apply", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert data["apply"] is True
+
+    # The normalization layer (_normalize_plan_for_consistency) runs first
+    # inside _remediate_plan and catches the campaign-parent deadlock before
+    # the explicit remediation rule.  Either action name is acceptable.
+    child_changes = [c for c in data["changes"] if c["plan_id"] == child["plan_id"]]
+    assert len(child_changes) >= 1
+    actions = child_changes[0]["actions"]
+    assert (
+        "cleared_campaign_parent_deadlock" in actions
+        or "normalized_status_mismatch" in actions
+    ), f"Expected campaign deadlock fix action, got {actions}"
+
+    # Verify on disk: parent_id cleared, campaign_id preserved
+    fixed = planner_tools._read_plan(child["plan_id"])
+    assert fixed["parent_id"] is None
+    assert fixed["campaign_id"] == campaign["plan_id"]
+
+
+def test_has_active_children_finds_parent_id_linked_children(tmp_path, monkeypatch):
+    """_has_active_children detects children linked via parent_id, not just
+    campaign_id (Fix 4)."""
+    from commands.plans import _has_active_children
+
+    campaign_id = "test-campaign-id"
+    all_plans = [
+        {"id": campaign_id, "plan_kind": "campaign", "status": "pending"},
+        {
+            "id": "child-1",
+            "parent_id": campaign_id,
+            "status": "pending",
+        },
+    ]
+    assert _has_active_children(campaign_id, all_plans) is True
+
+    # Also test campaign_id-linked children
+    all_plans_cid = [
+        {"id": campaign_id, "plan_kind": "campaign", "status": "pending"},
+        {
+            "id": "child-2",
+            "campaign_id": campaign_id,
+            "status": "executing",
+        },
+    ]
+    assert _has_active_children(campaign_id, all_plans_cid) is True
+
+    # No children at all
+    all_plans_empty = [
+        {"id": campaign_id, "plan_kind": "campaign", "status": "pending"},
+    ]
+    assert _has_active_children(campaign_id, all_plans_empty) is False

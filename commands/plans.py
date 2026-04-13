@@ -36,9 +36,17 @@ def _iter_plans(status: str = "") -> list[dict]:
 
 
 def _has_active_children(campaign_id: str, all_plans: list[dict[str, Any]]) -> bool:
-    """Check whether a campaign has any active child plans."""
+    """Check whether a campaign has any active child plans.
+
+    Checks both ``campaign_id`` and ``parent_id`` fields to find
+    children linked through either the non-blocking grouping field
+    or the blocking dependency field.
+    """
     for p in all_plans:
-        if p.get("campaign_id") == campaign_id and p.get("status") in {
+        is_child = (
+            p.get("campaign_id") == campaign_id or p.get("parent_id") == campaign_id
+        )
+        if is_child and p.get("status") in {
             "pending",
             "executing",
             "completed",
@@ -76,6 +84,20 @@ def _remediate_plan(
     if parent_id and parent_statuses.get(parent_id) == "failed":
         plan["parent_id"] = None
         actions.append("cleared_failed_parent")
+
+    # Clear parent_id if parent is a pending campaign — campaigns
+    # are never directly completed by the executor, so children
+    # would be blocked forever.
+    if parent_id and all_plans is not None:
+        parent = next((p for p in all_plans if p.get("id") == parent_id), None)
+        if (
+            parent
+            and parent.get("plan_kind") == "campaign"
+            and parent.get("status") == "pending"
+        ):
+            plan["parent_id"] = None
+            plan["campaign_id"] = plan.get("campaign_id") or parent_id
+            actions.append("cleared_campaign_parent_deadlock")
 
     # Fail orphaned campaigns — campaigns with no active child plans
     if (

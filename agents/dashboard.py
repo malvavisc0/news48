@@ -244,6 +244,8 @@ def _get_article_stats() -> dict:
                 "plans_executing": 0,
                 "plans_completed": 0,
                 "plans_failed": 0,
+                "plans_campaigns": 0,
+                "plans_claimable": 0,
             }
 
             if _PLANS_DIR.exists():
@@ -253,14 +255,34 @@ def _get_article_stats() -> dict:
                     "completed": 0,
                     "failed": 0,
                 }
+                all_plans: list[dict] = []
                 for plan_file in _PLANS_DIR.glob("*.json"):
                     try:
                         plan = json.loads(plan_file.read_text(encoding="utf-8"))
                     except (json.JSONDecodeError, OSError):
                         continue
+                    all_plans.append(plan)
                     status = str(plan.get("status", "")).lower()
                     if status in plan_counts:
                         plan_counts[status] += 1
+
+                # Count campaigns and claimable plans
+                campaigns = 0
+                claimable = 0
+                completed_ids = {
+                    p["id"] for p in all_plans if p.get("status") == "completed"
+                }
+                for plan in all_plans:
+                    if plan.get("plan_kind") == "campaign":
+                        campaigns += 1
+                    if plan.get("status") != "pending":
+                        continue
+                    if plan.get("plan_kind") == "campaign":
+                        continue
+                    parent_id = plan.get("parent_id")
+                    if parent_id and parent_id not in completed_ids:
+                        continue
+                    claimable += 1
 
                 _stats_cache.update(
                     {
@@ -269,6 +291,8 @@ def _get_article_stats() -> dict:
                         "plans_executing": plan_counts["executing"],
                         "plans_completed": plan_counts["completed"],
                         "plans_failed": plan_counts["failed"],
+                        "plans_campaigns": campaigns,
+                        "plans_claimable": claimable,
                     }
                 )
 
@@ -298,6 +322,8 @@ def _get_article_stats() -> dict:
             "plans_executing": 0,
             "plans_completed": 0,
             "plans_failed": 0,
+            "plans_campaigns": 0,
+            "plans_claimable": 0,
         }
 
 
@@ -480,7 +506,7 @@ class Dashboard:
         )
 
     def _build_stats_panel(self, height: int) -> Panel:
-        """Build the stats panel with pipeline and freshness snapshot."""
+        """Build the stats panel with pipeline and plans snapshot."""
         from rich.console import Group
 
         stats = _get_article_stats()
@@ -505,25 +531,22 @@ class Dashboard:
             Text(f"  Download failed:  {stats['download_failed']}", style="red")
         )
 
-        # Freshness section
-        lines.append(Text())  # blank line
-        lines.append(Text("Freshness", style="bold white"))
-        lines.append(Text(f"  New 1h:           {stats['new_1h']}", style="white"))
-        lines.append(Text(f"  New 6h:           {stats['new_6h']}", style="white"))
-        lines.append(Text(f"  New 24h:          {stats['new_24h']}", style="white"))
-        lines.append(
-            Text(
-                f"  Oldest unparsed:  {stats['oldest_unparsed_age']}",
-                style="dim",
-            )
-        )
-
         # Plans section
         lines.append(Text())  # blank line
         lines.append(Text("Plans", style="bold white"))
         lines.append(Text(f"  Total:     {stats['plans_total']}", style="white"))
         lines.append(Text(f"  Running:   {stats['plans_executing']}", style="green"))
         lines.append(Text(f"  Pending:   {stats['plans_pending']}", style="yellow"))
+        claimable = stats.get("plans_claimable", 0)
+        claimable_style = "green bold" if claimable > 0 else "dim"
+        lines.append(Text(f"  Claimable: {claimable}", style=claimable_style))
+        campaigns = stats.get("plans_campaigns", 0)
+        lines.append(
+            Text(
+                f"  Campaigns: {campaigns}",
+                style="magenta" if campaigns > 0 else "dim",
+            )
+        )
         lines.append(Text(f"  Completed: {stats['plans_completed']}", style="cyan"))
         lines.append(Text(f"  Failed:    {stats['plans_failed']}", style="red"))
 

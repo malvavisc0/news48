@@ -134,6 +134,18 @@ def agents_start(
     )
 
     console = Console()
+
+    # Refuse to start a second daemon
+    existing_pid = Orchestrator.read_daemon_pid()
+    if existing_pid is not None:
+        console.print(
+            f"\n  [red]Orchestrator daemon already running "
+            f"(PID {existing_pid}).[/red]\n"
+            f"  Run [cyan]news48 agents stop[/cyan] first, "
+            f"or Ctrl+C the existing process.\n"
+        )
+        raise typer.Exit(1)
+
     orchestrator = Orchestrator()
     orchestrator.load_state()
     status = orchestrator.get_status()
@@ -263,12 +275,14 @@ def agents_dashboard(
                     tailers[tailer_key] = (thread, stop_event)
                     dashboard.agent_status[name] = "running"
 
-        # Mark completed agents
+        # Mark completed agents and clean up stale buffers
         for tailer_key in list(tailers.keys()):
             if tailer_key not in active_tailer_keys:
                 thread, stop_event = tailers.pop(tailer_key)
                 stop_event.set()
                 thread.join(timeout=2)
+                # Remove stale buffer so instance count stays accurate
+                dashboard.buffers.pop(tailer_key, None)
                 # Extract agent name from tailer_key
                 agent_name = tailer_key.split(":")[0]
                 # Only mark completed if no other instances running
@@ -310,7 +324,11 @@ def agents_stop(
     agent: str = typer.Option(None, "--agent", "-a", help="Specific agent to stop"),
     output_json: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Stop running agent(s)."""
+    """Stop running agent(s) and the orchestrator daemon.
+
+    Without ``--agent``, stops the daemon first (so it cannot re-fork
+    agents), then stops all tracked agent subprocesses.
+    """
     from rich.console import Console
 
     console = Console()
@@ -328,9 +346,22 @@ def agents_stop(
     if output_json:
         emit_json(result)
     else:
+        daemon = result.get("daemon")
+        if daemon and daemon.get("stopped"):
+            console.print(
+                f"  Daemon stopped (PID {daemon['daemon_pid']}, "
+                f"{daemon['signal']})",
+                style="green",
+            )
+        elif daemon and daemon.get("daemon_pid") is None:
+            console.print("  Daemon not running", style="dim")
+
         stopped = result.get("stopped", [])
         already = result.get("already_stopped", [])
         if stopped:
             console.print(f"  Stopped: {', '.join(stopped)}", style="green")
         if already:
             console.print(f"  Not running: {', '.join(already)}", style="dim")
+
+        if not stopped and not (daemon and daemon.get("stopped")):
+            console.print("  Nothing to stop", style="dim")

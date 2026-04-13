@@ -995,3 +995,230 @@ def test_release_plans_for_pid_ignores_other_pids(tmp_path, monkeypatch):
 
     updated = json.loads(plan_path.read_text())
     assert updated["status"] == "executing"
+
+
+# ------------------------------------------------------------------
+# Campaign-parent deadlock fix tests
+# ------------------------------------------------------------------
+
+
+def test_claim_plan_allows_child_of_campaign_parent(tmp_path, monkeypatch):
+    """claim_plan claims a child whose parent_id points to a pending campaign.
+
+    This is the core deadlock fix: campaign parents are non-blocking.
+    """
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    campaign = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Coordinate download backlog for stale feeds",
+            steps=["Track feed download coverage"],
+            success_conditions=["Feed download child plans exist"],
+            plan_kind="campaign",
+            scope_type="campaign",
+            scope_value="download-backlog",
+        )
+    )["result"]
+
+    # Create child using campaign_id (correct usage)
+    child = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download empty articles for example.com",
+            steps=["Download articles", "Verify backlog reduced"],
+            success_conditions=["Backlog for example.com is reduced"],
+            scope_type="feed",
+            scope_value="example.com",
+            campaign_id=campaign["plan_id"],
+        )
+    )["result"]
+
+    # Now manually set parent_id to the campaign (simulating the deadlock)
+    child_plan = planner_tools._read_plan(child["plan_id"])
+    child_plan["parent_id"] = campaign["plan_id"]
+    planner_tools._write_plan(child_plan)
+
+    # claim_plan should still claim the child because campaign parents
+    # are non-blocking
+    claimed = json.loads(planner_tools.claim_plan("deadlock test"))["result"]
+    assert claimed["plan_id"] == child["plan_id"]
+    assert claimed["status"] == "executing"
+
+
+def test_create_plan_converts_campaign_parent_id_to_campaign_id(tmp_path, monkeypatch):
+    """create_plan converts parent_id pointing at a campaign to campaign_id.
+
+    This prevents deadlocks at creation time (Fix 5).
+    """
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    campaign = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Coordinate download backlog",
+            steps=["Track coverage"],
+            success_conditions=["Children exist"],
+            plan_kind="campaign",
+        )
+    )["result"]
+
+    # Create child incorrectly using parent_id pointing at campaign
+    child = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download empty articles for example.com",
+            steps=["Download", "Verify"],
+            success_conditions=["Backlog reduced"],
+            parent_id=campaign["plan_id"],
+        )
+    )["result"]
+
+    # parent_id should have been converted to campaign_id
+    child_plan = planner_tools._read_plan(child["plan_id"])
+    assert (
+        child_plan["parent_id"] is None
+    ), "parent_id should be cleared when parent is a campaign"
+    assert (
+        child_plan["campaign_id"] == campaign["plan_id"]
+    ), "campaign_id should be set to the campaign's plan_id"
+
+
+def test_normalize_converts_campaign_parent_to_campaign_id(tmp_path, monkeypatch):
+    """_normalize_plan_for_consistency converts parent_id pointing at a
+    campaign to a non-blocking campaign_id (Fix 6)."""
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    # Create campaign
+    campaign = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Coordinate download backlog",
+            steps=["Track coverage"],
+            success_conditions=["Children exist"],
+            plan_kind="campaign",
+        )
+    )["result"]
+
+    # Create child plan then manually set parent_id to campaign
+    child = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download articles for example.com",
+            steps=["Download", "Verify"],
+            success_conditions=["Backlog reduced"],
+        )
+    )["result"]
+
+    child_plan = planner_tools._read_plan(child["plan_id"])
+    child_plan["parent_id"] = campaign["plan_id"]
+    child_plan["campaign_id"] = None
+    planner_tools._write_plan(child_plan)
+
+    changed = planner_tools._normalize_plan_for_consistency(child_plan)
+
+    assert changed is True
+    assert child_plan["parent_id"] is None
+    assert child_plan["campaign_id"] == campaign["plan_id"]
+
+
+def test_normalize_clears_orphaned_non_uuid_parent_id(tmp_path, monkeypatch):
+    """_normalize_plan_for_consistency clears orphaned non-UUID parent_id
+    references like 'parsing-campaign-20260413-new' (Fix 6)."""
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    created = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Parse articles batch",
+            steps=["Parse", "Verify"],
+            success_conditions=["All parsed"],
+        )
+    )["result"]
+
+    plan = planner_tools._read_plan(created["plan_id"])
+    plan["parent_id"] = "parsing-campaign-20260413-new"  # Not a UUID
+    planner_tools._write_plan(plan)
+
+    changed = planner_tools._normalize_plan_for_consistency(plan)
+
+    assert changed is True
+    assert plan["parent_id"] is None
+
+
+def test_auto_complete_campaigns_marks_completed(tmp_path, monkeypatch):
+    """_auto_complete_campaigns marks a campaign as completed when all
+    children are completed (Fix 3)."""
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    campaign = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Coordinate download backlog",
+            steps=["Track coverage"],
+            success_conditions=["Children exist"],
+            plan_kind="campaign",
+        )
+    )["result"]
+
+    child = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download articles for example.com",
+            steps=["Download", "Verify"],
+            success_conditions=["Backlog reduced"],
+            campaign_id=campaign["plan_id"],
+        )
+    )["result"]
+
+    # Mark child as completed
+    child_plan = planner_tools._read_plan(child["plan_id"])
+    child_plan["status"] = "completed"
+    for step in child_plan["steps"]:
+        step["status"] = "completed"
+    planner_tools._write_plan(child_plan)
+
+    completed = planner_tools._auto_complete_campaigns()
+
+    assert completed == 1
+    campaign_plan = planner_tools._read_plan(campaign["plan_id"])
+    assert campaign_plan["status"] == "completed"
+
+
+def test_auto_complete_campaigns_marks_failed_when_child_failed(tmp_path, monkeypatch):
+    """_auto_complete_campaigns marks a campaign as failed when any child
+    is failed and all children are terminal."""
+    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+
+    campaign = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Coordinate download backlog",
+            steps=["Track coverage"],
+            success_conditions=["Children exist"],
+            plan_kind="campaign",
+        )
+    )["result"]
+
+    child = json.loads(
+        planner_tools.create_plan(
+            reason="test",
+            task="Download articles for example.com",
+            steps=["Download", "Verify"],
+            success_conditions=["Backlog reduced"],
+            campaign_id=campaign["plan_id"],
+        )
+    )["result"]
+
+    # Mark child as failed
+    child_plan = planner_tools._read_plan(child["plan_id"])
+    child_plan["status"] = "failed"
+    for step in child_plan["steps"]:
+        step["status"] = "failed"
+    planner_tools._write_plan(child_plan)
+
+    completed = planner_tools._auto_complete_campaigns()
+
+    assert completed == 1
+    campaign_plan = planner_tools._read_plan(campaign["plan_id"])
+    assert campaign_plan["status"] == "failed"

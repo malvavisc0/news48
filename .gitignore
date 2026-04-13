@@ -17,6 +17,7 @@ wheels/
 .metrics/
 .orchestrator.json
 .orchestrator.heartbeat
+.orchestrator.pid
 
 # SQLite database
 *.db
