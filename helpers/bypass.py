@@ -7,17 +7,17 @@ from pathlib import Path
 
 import httpx
 
+import config
 from models import ByparrSolution
 
 # Solution file cache
-_CACHE_DIR = Path(".cache") / "byparr"
 _CACHE_TTL = 3600  # 1 hour
 
 
 def _get_cache_path(domain: str) -> Path:
     """Get the cache file path for a domain."""
-    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    return _CACHE_DIR / f"{domain}.json"
+    (config.CACHE_DIR / "byparr").mkdir(parents=True, exist_ok=True)
+    return config.CACHE_DIR / "byparr" / f"{domain}.json"
 
 
 def _load_cached_solution(domain: str) -> ByparrSolution | None:

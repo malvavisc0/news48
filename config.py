@@ -14,8 +14,33 @@ def _get_required_env(key: str, cast: type = str) -> Any:
     return cast(value)
 
 
+class DataDir:
+    """Root directory for all runtime data files."""
+
+    root: Path = Path(getenv("DATA_DIR", "data"))
+
+    @classmethod
+    def path(cls) -> Path:
+        p = cls.root
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+
+# Path constants derived from DataDir.root
+FILES_DIR = DataDir.root / "files"
+LOGS_DIR = DataDir.root / "logs"
+PLANS_DIR = DataDir.root / "plans"
+MONITOR_DIR = DataDir.root / "monitor"
+METRICS_DIR = DataDir.root / "metrics"
+CACHE_DIR = DataDir.root / "cache"
+STATE_FILE = DataDir.root / "orchestrator.json"
+HEARTBEAT_FILE = DataDir.root / "orchestrator.heartbeat"
+PID_FILE = DataDir.root / "orchestrator.pid"
+LESSONS_FILE = DataDir.root / "lessons.json"
+
+
 class Database:
-    path: Path = Path(_get_required_env("DATABASE_PATH", Path))
+    path: Path = Path(getenv("DATABASE_PATH", str(DataDir.root / "news48.db")))
 
 
 class Services:

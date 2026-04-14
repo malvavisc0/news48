@@ -18,7 +18,7 @@ The orchestrator may restart while an agent is running. When this happens:
 5. **Article claims survive restarts.** A claimed article remains claimed by its owner. The orchestrator's `_recover_stale_articles` only releases claims older than the timeout threshold from dead processes.
 
 ## What the Orchestrator Does on Restart
-1. Loads state from `.orchestrator.json`
+1. Loads persisted orchestrator state
 2. Runs `_recover_stale_plans()` — resets plans stuck in `executing` by dead processes
 3. Runs `_recover_stale_articles()` — releases article claims from dead processes
 4. Archives old completed/failed plans

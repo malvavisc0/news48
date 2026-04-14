@@ -236,6 +236,7 @@ def init_database(db_path: Path) -> None:
     Args:
         db_path: Path to the SQLite database file.
     """
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     with get_connection(db_path) as db:
         db.execute(CREATE_FEEDS_TABLE)
         db.execute(CREATE_FETCHES_TABLE)

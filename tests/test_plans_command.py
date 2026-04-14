@@ -2,6 +2,7 @@ import json
 
 from typer.testing import CliRunner
 
+import config
 from main import app
 
 runner = CliRunner()
@@ -10,7 +11,7 @@ runner = CliRunner()
 def test_plans_list_show_cancel(tmp_path, monkeypatch):
     from agents.tools import planner as planner_tools
 
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -38,7 +39,7 @@ def test_plans_list_show_cancel(tmp_path, monkeypatch):
 def test_plans_show_displays_success_conditions(tmp_path, monkeypatch):
     from agents.tools import planner as planner_tools
 
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -60,7 +61,7 @@ def test_plans_show_displays_success_conditions(tmp_path, monkeypatch):
 def test_plans_show_json_includes_success_conditions(tmp_path, monkeypatch):
     from agents.tools import planner as planner_tools
 
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -85,7 +86,7 @@ def test_plans_show_json_includes_success_conditions(tmp_path, monkeypatch):
 def test_plans_remediate_preview_and_apply(tmp_path, monkeypatch):
     from agents.tools import planner as planner_tools
 
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     json.loads(
         planner_tools.create_plan(
@@ -127,7 +128,7 @@ def test_plans_remediate_clears_campaign_parent_deadlock(tmp_path, monkeypatch):
     campaign, preventing permanent deadlock (Fix 2)."""
     from agents.tools import planner as planner_tools
 
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     campaign = json.loads(
         planner_tools.create_plan(

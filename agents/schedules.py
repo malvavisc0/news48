@@ -8,11 +8,7 @@ import os
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Dict, Optional
-
-_STATE_FILE = Path(".orchestrator.json")
-_LOGS_DIR = Path(".logs")
 
 
 @dataclass

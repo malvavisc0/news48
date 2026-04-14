@@ -1,11 +1,11 @@
 """Lessons learned system — save and load agent lessons."""
 
+import json
 import re
-from pathlib import Path
+
+import config
 
 from ._helpers import _safe_json
-
-_LESSONS_FILE = Path(__file__).parents[2] / ".lessons.md"
 
 # Minimum number of leading words to match for near-duplicate detection.
 _DEDUP_PREFIX_WORDS = 8
@@ -19,8 +19,8 @@ def _normalize_words(text: str) -> list[str]:
     return re.sub(r"[^a-z0-9 ]", "", text.lower()).split()
 
 
-def _is_near_duplicate(lesson: str, existing_bullets: list[str]) -> bool:
-    """Return True if *lesson* shares its first N words with any existing entry.
+def _is_near_duplicate(lesson: str, existing_lessons: list[str]) -> bool:
+    """Return True if *lesson* shares its first N words with any entry.
 
     This catches lessons that differ only in specific numbers/IDs/timestamps
     but repeat the same structural insight.
@@ -30,7 +30,7 @@ def _is_near_duplicate(lesson: str, existing_bullets: list[str]) -> bool:
     if len(prefix) < _DEDUP_PREFIX_WORDS:
         # Very short lessons — fall back to exact match only.
         return False
-    for existing in existing_bullets:
+    for existing in existing_lessons:
         existing_words = _normalize_words(existing)
         if tuple(existing_words[:_DEDUP_PREFIX_WORDS]) == prefix:
             return True
@@ -52,7 +52,7 @@ def _is_status_noise(lesson: str) -> bool:
         r"^system is empty",
         r"^database is empty",
         r"^no active plans",
-        r"^no (fetches|articles|cleanup|agent|log|feed)\s+(issues|entries)",
+        r"^no (fetches|articles|cleanup|agent|log|feed)" r"\s+(issues|entries)",
         r"^no\s+\w+\s+issues detected",
     ]
     for pat in noise_patterns:
@@ -61,13 +61,41 @@ def _is_status_noise(lesson: str) -> bool:
     return False
 
 
+def _read_lessons() -> list[dict]:
+    """Read lessons from the JSON file.
+
+    Returns an empty list if the file doesn't exist or is empty.
+    """
+    if not config.LESSONS_FILE.exists():
+        return []
+    try:
+        content = config.LESSONS_FILE.read_text(encoding="utf-8")
+        if not content.strip():
+            return []
+        data = json.loads(content)
+        if isinstance(data, list):
+            return data
+        return []
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def _write_lessons(lessons: list[dict]) -> None:
+    """Write lessons list to the JSON file."""
+    config.LESSONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    config.LESSONS_FILE.write_text(
+        json.dumps(lessons, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
 def save_lesson(
     reason: str,
     agent_name: str,
     category: str,
     lesson: str,
 ) -> str:
-    """Save a lesson learned to .lessons.md.
+    """Save a lesson learned to data/lessons.json.
 
     ## When to Use
     Use this tool when you discover something worth remembering:
@@ -103,8 +131,10 @@ def save_lesson(
                     "result": "",
                     "error": (
                         "Lesson too short to be actionable "
-                        f"({len(lesson.strip())} chars, min {_MIN_LESSON_LENGTH}). "
-                        "Lessons must be specific and reusable insights."
+                        f"({len(lesson.strip())} chars, "
+                        f"min {_MIN_LESSON_LENGTH}). "
+                        "Lessons must be specific and "
+                        "reusable insights."
                     ),
                 }
             )
@@ -114,37 +144,35 @@ def save_lesson(
                 {
                     "result": "",
                     "error": (
-                        "Rejected: this looks like a status report, not a "
-                        "reusable lesson. Lessons must be actionable insights "
-                        "that help future runs, not transient system state."
+                        "Rejected: this looks like a status report, "
+                        "not a reusable lesson. Lessons must be "
+                        "actionable insights that help future runs, "
+                        "not transient system state."
                     ),
                 }
             )
 
-        content = ""
-        if _LESSONS_FILE.exists():
-            content = _LESSONS_FILE.read_text(encoding="utf-8")
-        else:
-            content = "# Lessons Learned\n\n"
+        lessons = _read_lessons()
 
-        agent_section = f"## {agent_name}"
-        category_section = f"### {category}"
-        lesson_bullet = f"- {lesson}"
+        # Check idempotency: skip if exact lesson already exists
+        for entry in lessons:
+            if (
+                entry.get("agent") == agent_name
+                and entry.get("category") == category
+                and entry.get("lesson") == lesson
+            ):
+                return _safe_json(
+                    {
+                        "result": (
+                            f"Lesson already exists for " f"{agent_name}/{category}"
+                        ),
+                        "error": "",
+                    }
+                )
 
-        # Check idempotency: skip if exact lesson line already exists
-        if f"\n{lesson_bullet}\n" in f"\n{content}\n":
-            return _safe_json(
-                {
-                    "result": (
-                        f"Lesson already exists for " f"{agent_name}/{category}"
-                    ),
-                    "error": "",
-                }
-            )
-
-        # Check near-duplicate: skip if first N words match an existing bullet
-        existing_bullets = re.findall(r"^- (.+)$", content, re.MULTILINE)
-        if _is_near_duplicate(lesson, existing_bullets):
+        # Check near-duplicate
+        existing_texts = [e.get("lesson", "") for e in lessons]
+        if _is_near_duplicate(lesson, existing_texts):
             return _safe_json(
                 {
                     "result": (
@@ -155,64 +183,15 @@ def save_lesson(
                 }
             )
 
-        # Ensure agent section exists
-        if agent_section not in content:
-            content += f"\n{agent_section}\n\n"
-
-        # Helper: find the agent block boundaries in content
-        agent_pattern = rf"^{re.escape(agent_section)}\s*$"
-
-        def _agent_bounds() -> tuple[int, int]:
-            m = re.search(agent_pattern, content, re.MULTILINE)
-            if not m:
-                return 0, len(content)
-            start = m.end()
-            nxt = re.search(r"^##\s+\S+", content[start:], re.MULTILINE)
-            end = start + nxt.start() if nxt else len(content)
-            return start, end
-
-        # Ensure category section exists under agent
-        agent_start, agent_block_end = _agent_bounds()
-        agent_block = content[agent_start:agent_block_end]
-
-        if category_section not in agent_block:
-            # Insert category section at end of agent block
-            insert_pos = agent_block_end
-            content = (
-                content[:insert_pos].rstrip()
-                + f"\n\n{category_section}\n\n"
-                + content[insert_pos:]
-            )
-            # Recalculate bounds after insertion
-            agent_start, agent_block_end = _agent_bounds()
-
-        # Find category within the agent block and insert the lesson
-        cat_pattern = rf"^{re.escape(category_section)}\s*$"
-        cat_match = re.search(
-            cat_pattern,
-            content[agent_start:agent_block_end],
-            re.MULTILINE,
+        # Append and save
+        lessons.append(
+            {
+                "agent": agent_name,
+                "category": category,
+                "lesson": lesson,
+            }
         )
-        if cat_match:
-            cat_start = agent_start + cat_match.end()
-            # Find next section (### or ##) within agent block
-            next_cat = re.search(
-                r"^(?:###|##)\s+",
-                content[cat_start:agent_block_end],
-                re.MULTILINE,
-            )
-            insert_pos = cat_start + next_cat.start() if next_cat else agent_block_end
-            # Insert lesson before the next section
-            content = (
-                content[:insert_pos].rstrip()
-                + f"\n{lesson_bullet}\n"
-                + content[insert_pos:]
-            )
-        else:
-            # Fallback: append at end
-            content += f"\n{lesson_bullet}\n"
-
-        _LESSONS_FILE.write_text(content, encoding="utf-8")
+        _write_lessons(lessons)
 
         return _safe_json(
             {
@@ -234,16 +213,34 @@ def save_lesson(
 
 
 def _load_lessons() -> str:
-    """Load all lessons from .lessons.md.
+    """Load all lessons from data/lessons.json.
 
-    Returns the full file content wrapped in a lessons header,
-    or empty string if no file exists.
+    Returns the lessons formatted as markdown for agent instructions,
+    or empty string if no lessons exist.
     """
-    if not _LESSONS_FILE.exists():
+    lessons = _read_lessons()
+    if not lessons:
         return ""
 
-    content = _LESSONS_FILE.read_text(encoding="utf-8")
-    if not content.strip():
-        return ""
+    # Group by agent, then by category
+    grouped: dict[str, dict[str, list[str]]] = {}
+    for entry in lessons:
+        agent = entry.get("agent", "unknown")
+        cat = entry.get("category", "Uncategorized")
+        text = entry.get("lesson", "")
+        if not text:
+            continue
+        grouped.setdefault(agent, {}).setdefault(cat, []).append(text)
 
-    return f"<!-- LESSONS LEARNED -->\n\n{content}"
+    # Format as readable text for agent context
+    lines = ["<!-- LESSONS LEARNED -->", "", "# Lessons Learned", ""]
+    for agent, categories in sorted(grouped.items()):
+        lines.append(f"## {agent}")
+        lines.append("")
+        for cat, items in sorted(categories.items()):
+            lines.append(f"### {cat}")
+            for item in items:
+                lines.append(f"- {item}")
+            lines.append("")
+
+    return "\n".join(lines)

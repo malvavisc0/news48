@@ -10,14 +10,8 @@ wheels/
 .venv
 .env
 
-.files/
-.logs/
-.plans/
-.monitor/
-.metrics/
-.orchestrator.json
-.orchestrator.heartbeat
-.orchestrator.pid
+# Runtime data directory (single Docker volume mount point)
+data/
 
 # SQLite database
 *.db
@@ -26,7 +20,3 @@ wheels/
 *.db-shm
 
 seed.txt
-
-# Lessons learned
-.lessons.md
-.cache/

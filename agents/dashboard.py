@@ -4,7 +4,6 @@ import json
 import threading
 import time
 from collections import deque
-from pathlib import Path
 
 from rich.align import Align
 from rich.layout import Layout
@@ -12,6 +11,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+import config
 from agents.streaming import _SENTENCE_BOUNDARY_RE, format_log_line
 
 _AGENT_COLORS = {
@@ -23,7 +23,6 @@ _AGENT_COLORS = {
 _MIN_WIDTH = 80
 _MIN_HEIGHT = 24
 _STATS_CACHE_TTL = 10.0  # seconds
-_PLANS_DIR = Path(".plans")
 
 
 class EventBuffer:
@@ -249,7 +248,7 @@ def _get_article_stats() -> dict:
                 "plans_claimable": 0,
             }
 
-            if _PLANS_DIR.exists():
+            if config.PLANS_DIR.exists():
                 plan_counts = {
                     "pending": 0,
                     "executing": 0,
@@ -257,7 +256,7 @@ def _get_article_stats() -> dict:
                     "failed": 0,
                 }
                 all_plans: list[dict] = []
-                for plan_file in _PLANS_DIR.glob("*.json"):
+                for plan_file in config.PLANS_DIR.glob("*.json"):
                     try:
                         plan = json.loads(plan_file.read_text(encoding="utf-8"))
                     except (json.JSONDecodeError, OSError):

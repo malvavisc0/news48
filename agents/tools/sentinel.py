@@ -2,12 +2,10 @@
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
+
+import config
 
 from ._helpers import _safe_json
-
-_MONITOR_DIR = Path(".monitor")
-_REPORT_FILE = _MONITOR_DIR / "latest-report.json"
 
 
 def write_sentinel_report(
@@ -17,7 +15,7 @@ def write_sentinel_report(
     recommendations: str,
 ) -> str:
     """Write a structured sentinel health report
-    to .monitor/latest-report.json.
+    to data/monitor/latest-report.json.
 
     ## When to Use
     Call this tool at the end of every sentinel cycle to persist your
@@ -73,15 +71,16 @@ def write_sentinel_report(
             "recommendations": recs_list,
         }
 
-        _MONITOR_DIR.mkdir(parents=True, exist_ok=True)
-        _REPORT_FILE.write_text(
+        config.MONITOR_DIR.mkdir(parents=True, exist_ok=True)
+        report_path = config.MONITOR_DIR / "latest-report.json"
+        report_path.write_text(
             json.dumps(report, indent=2),
             encoding="utf-8",
         )
 
         return _safe_json(
             {
-                "result": f"Report written to {_REPORT_FILE} (status={status})",
+                "result": (f"Report written to {report_path}" f" (status={status})"),
                 "error": "",
             }
         )

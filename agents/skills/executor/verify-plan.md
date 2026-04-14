@@ -15,15 +15,7 @@ Always active — executor must verify outcomes against success conditions.
    ```
 5. Mark plan `completed` only when ALL valid conditions pass and no invalid conditions exist.
 6. Mark plan `failed` when verification is complete and valid conditions are not met.
-7. If any condition is invalid, fail the plan as a plan-quality defect rather than claiming execution alone failed. Persist the INVALID condition details to `.plans/feedback/<plan_id>.json` so the planner can read and fix them in the next cycle:
-   ```bash
-   mkdir -p .plans/feedback && python3 -c "
-import json
-feedback = {'plan_id': '<plan_id>', 'invalid_conditions': [<list of {condition, reason}>], 'timestamp': '<ISO 8601>'}
-with open('.plans/feedback/<plan_id>.json', 'w') as f:
-    json.dump(feedback, f, indent=2)
-"
-   ```
+7. If any condition is invalid, fail the plan as a plan-quality defect rather than claiming execution alone failed. Record the INVALID condition details in the `update_plan` result field when failing the plan so the planner can read them via `list_plans` in the next cycle.
 8. Before failing a batched execution plan, verify whether more command calls are still required by the plan rather than treating one partial batch as final evidence.
 
 ## Evidence Commands by Condition Type

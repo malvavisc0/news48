@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+import config
 from agents.skills import (
     PLAN_FAMILY_SKILLS,
     SKILL_REGISTRY,
@@ -359,7 +360,7 @@ def test_base_prompt_sizes_are_reasonable(tmp_path, monkeypatch):
 
 def test_peek_next_plan_returns_family_for_pending_plan(tmp_path, monkeypatch):
     """peek_next_plan returns task family for oldest pending plan."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     # Create a simple pending plan (no parent, no dedup issues)
     payload = json.loads(
@@ -378,7 +379,7 @@ def test_peek_next_plan_returns_family_for_pending_plan(tmp_path, monkeypatch):
 
 def test_peek_next_plan_skips_blocked_pending(tmp_path, monkeypatch):
     """peek_next_plan skips pending plans whose parent is not completed."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     # Create a pending plan with non-existent parent
     json.loads(
@@ -397,7 +398,7 @@ def test_peek_next_plan_skips_blocked_pending(tmp_path, monkeypatch):
 
 def test_peek_next_plan_returns_none_when_no_pending(tmp_path, monkeypatch):
     """peek_next_plan returns None when no eligible pending plans exist."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     # Create a plan with a non-existent parent (blocked)
     json.loads(
@@ -417,7 +418,7 @@ def test_peek_next_plan_returns_none_when_no_pending(tmp_path, monkeypatch):
 
 def test_peek_next_plan_orders_by_created_at(tmp_path, monkeypatch):
     """peek_next_plan returns oldest pending plan's family."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     # Create older pending plan first
     planner_tools.create_plan(

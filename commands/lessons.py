@@ -1,60 +1,37 @@
 """Lessons command group — view and manage agent lessons."""
 
 import json
-import re
 import sys
-from pathlib import Path
 
 import typer
+
+import config
 
 from ._common import emit_error, emit_json
 
 lessons_app = typer.Typer(help="View and manage agent lessons.")
 
-_LESSONS_FILE = Path(".lessons.md")
 
 AGENT_NAMES = ["executor", "parser", "sentinel", "fact_checker"]
 
 
-def _parse_lessons(
-    content: str,
-) -> list[dict]:
-    """Parse .lessons.md into structured lesson entries.
+def _read_lessons() -> list[dict]:
+    """Read lessons from the JSON file.
 
-    Returns a list of dicts with keys: agent, category, lesson.
+    Returns an empty list if the file doesn't exist or is empty.
     """
-    lessons: list[dict] = []
-    current_agent = ""
-    current_category = ""
-
-    for line in content.splitlines():
-        line_stripped = line.strip()
-
-        # Agent section: ## executor
-        m = re.match(r"^##\s+(\S+.*)$", line_stripped)
-        if m and not line_stripped.startswith("###"):
-            current_agent = m.group(1).strip()
-            current_category = ""
-            continue
-
-        # Category section: ### Command Syntax
-        m = re.match(r"^###\s+(.+)$", line_stripped)
-        if m:
-            current_category = m.group(1).strip()
-            continue
-
-        # Lesson bullet: - lesson text
-        m = re.match(r"^-\s+(.+)$", line_stripped)
-        if m and current_agent:
-            lessons.append(
-                {
-                    "agent": current_agent,
-                    "category": current_category or "Uncategorized",
-                    "lesson": m.group(1).strip(),
-                }
-            )
-
-    return lessons
+    if not config.LESSONS_FILE.exists():
+        return []
+    try:
+        content = config.LESSONS_FILE.read_text(encoding="utf-8")
+        if not content.strip():
+            return []
+        data = json.loads(content)
+        if isinstance(data, list):
+            return data
+        return []
+    except (json.JSONDecodeError, OSError):
+        return []
 
 
 @lessons_app.command(name="list")
@@ -74,31 +51,23 @@ def lessons_list(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON."),
 ) -> None:
     """List all lessons learned by agents."""
-    if not _LESSONS_FILE.exists():
+    lessons = _read_lessons()
+
+    if not lessons:
         if output_json:
             emit_json({"lessons": [], "total": 0})
         else:
-            print("No lessons found (.lessons.md does not exist).")
+            print("No lessons found.")
         return
-
-    content = _LESSONS_FILE.read_text(encoding="utf-8")
-    if not content.strip():
-        if output_json:
-            emit_json({"lessons": [], "total": 0})
-        else:
-            print("No lessons found (.lessons.md is empty).")
-        return
-
-    lessons = _parse_lessons(content)
 
     # Apply filters
     if agent:
         agent_lower = agent.lower()
-        lessons = [le for le in lessons if le["agent"].lower() == agent_lower]
+        lessons = [le for le in lessons if le.get("agent", "").lower() == agent_lower]
 
     if category:
         cat_lower = category.lower()
-        lessons = [le for le in lessons if cat_lower in le["category"].lower()]
+        lessons = [le for le in lessons if cat_lower in le.get("category", "").lower()]
 
     if output_json:
         emit_json({"lessons": lessons, "total": len(lessons)})
@@ -110,15 +79,15 @@ def lessons_list(
         current_agent = ""
         current_cat = ""
         for le in lessons:
-            if le["agent"] != current_agent:
-                current_agent = le["agent"]
+            if le.get("agent", "") != current_agent:
+                current_agent = le.get("agent", "")
                 current_cat = ""
                 print(f"\n  {current_agent}")
                 print(f"  {'─' * len(current_agent)}")
-            if le["category"] != current_cat:
-                current_cat = le["category"]
+            if le.get("category", "") != current_cat:
+                current_cat = le.get("category", "")
                 print(f"    [{current_cat}]")
-            print(f"      • {le['lesson']}")
+            print(f"      • {le.get('lesson', '')}")
 
         print(
             f"\n  {len(lessons)} lesson(s) total.",
@@ -132,7 +101,7 @@ def lessons_add(
         ...,
         "--agent",
         "-a",
-        help="Agent name (executor, parser, planner, monitor).",
+        help="Agent name (executor, parser, sentinel, fact_checker).",
     ),
     category: str = typer.Option(
         ...,

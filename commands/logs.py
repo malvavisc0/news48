@@ -9,13 +9,13 @@ from pathlib import Path
 
 import typer
 
+import config
 from agents.streaming import _LOG_LINE_RE, format_log_line
 
 from ._common import emit_error
 
 logs_app = typer.Typer(help="Inspect and search agent log files.")
 
-LOG_DIR = Path(".logs")
 
 AGENT_CHOICES = ["executor", "sentinel", "fact_checker", "parser"]
 
@@ -115,14 +115,14 @@ def get_log_files(
     date_filter: date | None = None,
 ) -> list[Path]:
     """Find log files matching criteria."""
-    if not LOG_DIR.exists():
+    if not config.LOGS_DIR.exists():
         return []
 
     pattern = "*.log"
     if agent:
         pattern = f"{agent}-*.log"
 
-    files = sorted(LOG_DIR.glob(pattern), reverse=True)
+    files = sorted(config.LOGS_DIR.glob(pattern), reverse=True)
 
     if date_filter:
         date_str = date_filter.strftime("%Y%m%d")
@@ -317,8 +317,11 @@ def logs_files(
             as_json=output_json,
         )
 
-    if not LOG_DIR.exists():
-        emit_error("Log directory .logs/ does not exist.", as_json=output_json)
+    if not config.LOGS_DIR.exists():
+        emit_error(
+            f"Log directory {config.LOGS_DIR}/ does not exist.",
+            as_json=output_json,
+        )
 
     files = get_log_files(agent=agent_filter, date_filter=date_filter)
     if not files:
@@ -357,9 +360,9 @@ def logs_show(
 ) -> None:
     """Display an entire log file."""
     # Resolve filename: accept stem or full name
-    path = LOG_DIR / filename
+    path = config.LOGS_DIR / filename
     if not path.exists() and not filename.endswith(".log"):
-        path = LOG_DIR / f"{filename}.log"
+        path = config.LOGS_DIR / f"{filename}.log"
 
     if not path.exists():
         emit_error(f"Log file not found: {filename}", as_json=output_json)

@@ -4,6 +4,7 @@ import asyncio
 
 import typer
 
+import config
 from agents.orchestrator import Orchestrator
 from agents.schedules import DEFAULT_SCHEDULES
 
@@ -203,13 +204,12 @@ def agents_dashboard(
     """Live dashboard showing agent output (read-only).
 
     Fixed 4-panel layout: planner, executor, monitor, stats.
-    Connects to a running orchestrator by reading .orchestrator.json
+    Connects to a running orchestrator by reading data/orchestrator.json
     and tailing agent log files. Press Ctrl+C to exit.
     """
     import json
     import threading
     import time
-    from pathlib import Path
 
     from rich.live import Live
 
@@ -220,17 +220,15 @@ def agents_dashboard(
         tail_file_stream,
     )
 
-    STATE_FILE = Path(".orchestrator.json")
-
     dashboard = Dashboard(tick_seconds=tick)
     tailers: dict[str, tuple[threading.Thread, threading.Event]] = {}
 
     def sync_state() -> None:
-        """Read .orchestrator.json and start/stop tailers as needed."""
-        if not STATE_FILE.exists():
+        """Read data/orchestrator.json and start/stop tailers as needed."""
+        if not config.STATE_FILE.exists():
             return
         try:
-            data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+            data = json.loads(config.STATE_FILE.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             return
 

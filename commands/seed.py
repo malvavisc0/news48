@@ -2,27 +2,24 @@
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 
 import typer
 
+import config
 from database import init_database, seed_feeds
 from helpers import load_urls
 
 from ._common import emit_error, emit_json, require_db, status_msg
 
-_MONITOR_DIR = Path(".monitor")
-_LESSONS_FILE = Path(".lessons.md")
-
 
 def _write_initial_monitor_report(seed_result: dict) -> None:
     """Create an initial monitor report after seeding.
 
-    This ensures ``.monitor/latest-report.json`` exists when agents
+    This ensures ``data/monitor/latest-report.json`` exists when agents
     start their first cycle, preventing errors from agents that
     expect the file to be present.
     """
-    _MONITOR_DIR.mkdir(parents=True, exist_ok=True)
+    config.MONITOR_DIR.mkdir(parents=True, exist_ok=True)
     report = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "status": "HEALTHY",
@@ -39,7 +36,7 @@ def _write_initial_monitor_report(seed_result: dict) -> None:
             "System freshly seeded. " "Run initial fetch cycle to populate articles."
         ],
     }
-    report_path = _MONITOR_DIR / "latest-report.json"
+    report_path = config.MONITOR_DIR / "latest-report.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
 
@@ -75,26 +72,14 @@ def _seed(seed_file: str) -> dict:
 
 
 def _ensure_lessons_file() -> None:
-    """Create .lessons.md with pre-populated agent sections.
+    """Create data/lessons.json with an empty lessons array.
 
     Ensures the lessons file is present from the start so agents
     and CLI commands that read it don't encounter a missing file.
-    Provides the expected structure so ``save_lesson`` can insert
-    lessons into the correct agent/category sections.
     """
-    if not _LESSONS_FILE.exists():
-        _LESSONS_FILE.write_text(
-            "# Lessons Learned\n"
-            "\n"
-            "## sentinel\n"
-            "\n"
-            "## executor\n"
-            "\n"
-            "## parser\n"
-            "\n"
-            "## fact_checker\n",
-            encoding="utf-8",
-        )
+    if not config.LESSONS_FILE.exists():
+        config.LESSONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        config.LESSONS_FILE.write_text("[]\n", encoding="utf-8")
 
 
 def seed(

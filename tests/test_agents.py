@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, cast
 
+import config
 from agents import orchestrator as orchestrator_module
 from agents._run import _is_empty_claim_result, _is_substantive_result
 from agents.orchestrator import Orchestrator
@@ -170,8 +171,8 @@ class TestOrchestrator:
         assert result["results"] == {}
 
     def test_load_state_runs_recovery_without_state_file(self, tmp_path, monkeypatch):
-        state_file = tmp_path / ".orchestrator.json"
-        monkeypatch.setattr(orchestrator_module, "_STATE_FILE", state_file)
+        state_file = tmp_path / "orchestrator.json"
+        monkeypatch.setattr(config, "STATE_FILE", state_file)
 
         calls = []
 
@@ -200,7 +201,7 @@ class TestOrchestrator:
     def test_load_state_marks_disappeared_process_and_runs_recovery(
         self, tmp_path, monkeypatch
     ):
-        state_file = tmp_path / ".orchestrator.json"
+        state_file = tmp_path / "orchestrator.json"
         state_file.write_text(
             json.dumps(
                 {
@@ -210,7 +211,7 @@ class TestOrchestrator:
                             {
                                 "pid": 123456,
                                 "started_at": "2026-01-01T00:00:00+00:00",
-                                "log_file": ".logs/sentinel.log",
+                                "log_file": "data/logs/sentinel.log",
                             }
                         ]
                     },
@@ -219,7 +220,7 @@ class TestOrchestrator:
             encoding="utf-8",
         )
 
-        monkeypatch.setattr(orchestrator_module, "_STATE_FILE", state_file)
+        monkeypatch.setattr(config, "STATE_FILE", state_file)
         monkeypatch.setattr(orchestrator_module, "_is_process_alive", lambda _p: False)
 
         called = {"value": False}
@@ -279,9 +280,7 @@ class TestOrchestrator:
         import asyncio
         import importlib
 
-        monkeypatch.setattr(
-            orchestrator_module, "_STATE_FILE", tmp_path / ".orchestrator.json"
-        )
+        monkeypatch.setattr(config, "STATE_FILE", tmp_path / "orchestrator.json")
 
         orchestrator = Orchestrator()
         orchestrator.running["executor"] = [
@@ -289,19 +288,19 @@ class TestOrchestrator:
                 pid=111,
                 agent_name="executor",
                 started_at=datetime.now(timezone.utc).isoformat(),
-                log_file=".logs/executor-a.log",
+                log_file="data/logs/executor-a.log",
             ),
             RunningAgent(
                 pid=222,
                 agent_name="executor",
                 started_at=datetime.now(timezone.utc).isoformat(),
-                log_file=".logs/executor-b.log",
+                log_file="data/logs/executor-b.log",
             ),
             RunningAgent(
                 pid=333,
                 agent_name="executor",
                 started_at=datetime.now(timezone.utc).isoformat(),
-                log_file=".logs/executor-c.log",
+                log_file="data/logs/executor-c.log",
             ),
         ]
 
@@ -319,9 +318,7 @@ class TestOrchestrator:
     def test_stop_agent_returns_instance_details_and_release_counts(
         self, tmp_path, monkeypatch
     ):
-        monkeypatch.setattr(
-            orchestrator_module, "_STATE_FILE", tmp_path / ".orchestrator.json"
-        )
+        monkeypatch.setattr(config, "STATE_FILE", tmp_path / "orchestrator.json")
 
         orchestrator = Orchestrator(
             schedules={
@@ -339,13 +336,13 @@ class TestOrchestrator:
                 pid=101,
                 agent_name="executor",
                 started_at="2026-01-01T00:00:00+00:00",
-                log_file=".logs/executor-101.log",
+                log_file="data/logs/executor-101.log",
             ),
             RunningAgent(
                 pid=202,
                 agent_name="executor",
                 started_at="2026-01-01T00:00:01+00:00",
-                log_file=".logs/executor-202.log",
+                log_file="data/logs/executor-202.log",
             ),
         ]
 

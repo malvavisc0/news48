@@ -9,7 +9,7 @@ Record the fact-check verdict in the database.
    - `negative` — most claims are refuted
    - `mixed` — evidence is inconclusive
 2. Use `news48 articles update <id> --fact-check-status <status>` to record the verdict.
-3. Log the fact-check result in `.lessons.md` for future reference.
+3. Log the fact-check result using the `save_lesson` tool for future reference.
 
 ## Verdict Criteria
 

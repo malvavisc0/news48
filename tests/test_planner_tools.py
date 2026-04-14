@@ -1,10 +1,11 @@
 import json
 
+import config
 from agents.tools import planner as planner_tools
 
 
 def test_create_plan_defaults_to_pending_and_parent_id(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     payload = json.loads(
         planner_tools.create_plan(
@@ -26,7 +27,7 @@ def test_create_plan_defaults_to_pending_and_parent_id(tmp_path, monkeypatch):
 
 
 def test_create_plan_stores_success_conditions(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     payload = json.loads(
         planner_tools.create_plan(
@@ -48,7 +49,7 @@ def test_create_plan_stores_success_conditions(tmp_path, monkeypatch):
 
 
 def test_create_plan_rejects_empty_task(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     payload = json.loads(
         planner_tools.create_plan(
@@ -64,7 +65,7 @@ def test_create_plan_rejects_empty_task(tmp_path, monkeypatch):
 
 
 def test_create_plan_rejects_whitespace_only_task(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     payload = json.loads(
         planner_tools.create_plan(
@@ -80,7 +81,7 @@ def test_create_plan_rejects_whitespace_only_task(tmp_path, monkeypatch):
 
 
 def test_create_plan_rejects_empty_success_conditions(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     payload = json.loads(
         planner_tools.create_plan(
@@ -96,7 +97,7 @@ def test_create_plan_rejects_empty_success_conditions(tmp_path, monkeypatch):
 
 
 def test_create_plan_rejects_blank_success_condition_entry(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     payload = json.loads(
         planner_tools.create_plan(
@@ -112,7 +113,7 @@ def test_create_plan_rejects_blank_success_condition_entry(tmp_path, monkeypatch
 
 
 def test_create_plan_rejects_whitespace_success_condition_entry(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     payload = json.loads(
         planner_tools.create_plan(
@@ -128,7 +129,7 @@ def test_create_plan_rejects_whitespace_success_condition_entry(tmp_path, monkey
 
 
 def test_serialize_plan_includes_success_conditions(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     payload = json.loads(
         planner_tools.create_plan(
@@ -145,7 +146,7 @@ def test_serialize_plan_includes_success_conditions(tmp_path, monkeypatch):
 
 
 def test_update_plan_accepts_explicit_plan_status(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan("test", "Task", ["Step 1", "Verify"], ["Condition 1"])
@@ -165,7 +166,7 @@ def test_update_plan_accepts_explicit_plan_status(tmp_path, monkeypatch):
 
 
 def test_claim_plan_respects_parent_dependency(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     parent = json.loads(
         planner_tools.create_plan(
@@ -200,7 +201,7 @@ def test_claim_plan_respects_parent_dependency(tmp_path, monkeypatch):
 
 
 def test_list_plans_filters_by_status(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan("test", "Task", ["Step 1", "Verify"], ["Condition 1"])
@@ -221,7 +222,7 @@ def test_list_plans_filters_by_status(tmp_path, monkeypatch):
 
 
 def test_list_plans_filters_by_comma_separated_status(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     # Create two plans
     plan_a = json.loads(
@@ -253,7 +254,7 @@ def test_list_plans_filters_by_comma_separated_status(tmp_path, monkeypatch):
 
 
 def test_claim_plan_returns_no_eligible_plans_when_empty(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     payload = json.loads(planner_tools.claim_plan("test"))
     assert payload["error"] == ""
@@ -264,7 +265,7 @@ def test_claim_plan_returns_no_eligible_plans_when_empty(tmp_path, monkeypatch):
 
 
 def test_claim_plan_returns_empty_when_all_blocked(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     parent = json.loads(
         planner_tools.create_plan(
@@ -294,7 +295,7 @@ def test_claim_plan_returns_empty_when_all_blocked(tmp_path, monkeypatch):
 
 
 def test_update_plan_rejects_invalid_plan_status(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan("test", "Task", ["Step 1", "Verify"], ["Condition 1"])
@@ -315,7 +316,7 @@ def test_update_plan_rejects_invalid_plan_status(tmp_path, monkeypatch):
 
 
 def test_update_plan_rejects_step_regression(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan("test", "Task", ["Step 1", "Verify"], ["Condition 1"])
@@ -345,7 +346,7 @@ def test_update_plan_rejects_step_regression(tmp_path, monkeypatch):
 
 
 def test_update_plan_rejects_terminal_plan_mutation(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan("test", "Task", ["Step 1", "Verify"], ["Condition 1"])
@@ -375,7 +376,7 @@ def test_update_plan_rejects_terminal_plan_mutation(tmp_path, monkeypatch):
 
 
 def test_create_plan_dedupes_active_same_family(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     first = json.loads(
         planner_tools.create_plan(
@@ -401,7 +402,7 @@ def test_create_plan_dedupes_active_same_family(tmp_path, monkeypatch):
 def test_update_plan_rejects_terminal_plan_restatus_even_if_step_matches(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -439,7 +440,7 @@ def test_update_plan_rejects_terminal_plan_restatus_even_if_step_matches(
 def test_create_plan_allows_multiple_feed_scoped_download_children(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     campaign = json.loads(
         planner_tools.create_plan(
@@ -493,7 +494,7 @@ def test_create_plan_allows_multiple_feed_scoped_download_children(
 
 
 def test_create_plan_dedupes_same_feed_scoped_download_child(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     first = json.loads(
         planner_tools.create_plan(
@@ -531,7 +532,7 @@ def test_create_plan_dedupes_same_feed_scoped_download_child(tmp_path, monkeypat
 
 
 def test_claim_plan_skips_campaign_plans(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     campaign = json.loads(
         planner_tools.create_plan(
@@ -567,7 +568,7 @@ def test_claim_plan_skips_campaign_plans(tmp_path, monkeypatch):
 
 
 def test_peek_next_plan_skips_campaign_plans(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     campaign = json.loads(
         planner_tools.create_plan(
@@ -604,7 +605,7 @@ def test_peek_next_plan_skips_campaign_plans(tmp_path, monkeypatch):
 
 
 def test_create_plan_infers_download_parent_from_active_fetch(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     fetch = json.loads(
         planner_tools.create_plan(
@@ -628,7 +629,7 @@ def test_create_plan_infers_download_parent_from_active_fetch(tmp_path, monkeypa
 
 
 def test_create_plan_infers_parse_parent_from_active_download(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     download = json.loads(
         planner_tools.create_plan(
@@ -652,7 +653,7 @@ def test_create_plan_infers_parse_parent_from_active_download(tmp_path, monkeypa
 
 
 def test_update_plan_accepts_step_description_alias(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -681,7 +682,7 @@ def test_update_plan_accepts_step_description_alias(tmp_path, monkeypatch):
 
 
 def test_claim_plan_sets_claim_owner_metadata(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -701,7 +702,7 @@ def test_claim_plan_sets_claim_owner_metadata(tmp_path, monkeypatch):
 
 
 def test_stale_detects_dead_claimed_pid(tmp_path, monkeypatch):
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -735,7 +736,7 @@ def test_stale_detects_dead_claimed_pid(tmp_path, monkeypatch):
 def test_is_plan_stale_returns_true_when_claimed_by_is_none(tmp_path, monkeypatch):
     """An executing plan with no claimed_by is immediately stale because
     ownership cannot be verified."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -754,7 +755,7 @@ def test_is_plan_stale_returns_true_when_claimed_by_is_none(tmp_path, monkeypatc
 
 def test_is_plan_stale_returns_true_when_claimed_by_is_missing(tmp_path, monkeypatch):
     """An executing plan whose JSON has no claimed_by key at all is stale."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -773,7 +774,7 @@ def test_is_plan_stale_returns_true_when_claimed_by_is_missing(tmp_path, monkeyp
 
 def test_is_plan_stale_returns_false_when_pid_alive(tmp_path, monkeypatch):
     """An executing plan claimed by a live PID is NOT stale."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -793,7 +794,7 @@ def test_is_plan_stale_returns_false_when_pid_alive(tmp_path, monkeypatch):
 def test_normalize_resets_orphaned_executing_plan_to_pending(tmp_path, monkeypatch):
     """An executing plan with no claimed_by is reset to pending with
     executing steps reverted to pending."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -820,7 +821,7 @@ def test_normalize_resets_orphaned_executing_plan_to_pending(tmp_path, monkeypat
 
 def test_normalize_does_not_touch_executing_plan_with_claimed_by(tmp_path, monkeypatch):
     """An executing plan WITH a claimed_by PID is not reset by normalize."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -844,7 +845,7 @@ def test_normalize_does_not_touch_executing_plan_with_claimed_by(tmp_path, monke
 def test_read_plan_backfills_missing_schema_fields(tmp_path, monkeypatch):
     """Plans created before claimed_by/requeue_count schema additions
     get sane defaults on read."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -873,7 +874,7 @@ def test_read_plan_backfills_missing_schema_fields(tmp_path, monkeypatch):
 def test_claim_plan_recovers_orphaned_executing_plan(tmp_path, monkeypatch):
     """claim_plan requeues an executing plan with no claimed_by and then
     claims it in the same call."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -910,7 +911,7 @@ def test_recover_stale_plans_normalizes_orphaned_plan(tmp_path, monkeypatch):
     """recover_stale_plans normalizes an orphaned executing plan (no
     claimed_by) back to pending via _normalize_plan_for_consistency,
     which runs before the stale-requeue check."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -936,7 +937,7 @@ def test_recover_stale_plans_normalizes_orphaned_plan(tmp_path, monkeypatch):
 
 def test_release_plans_for_pid_resets_claimed_plan(tmp_path, monkeypatch):
     """Should reset executing plan claimed by target PID to pending."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
     pid = 99999
 
     # Create a plan, then manually set it to executing with claimed_by
@@ -972,7 +973,7 @@ def test_release_plans_for_pid_resets_claimed_plan(tmp_path, monkeypatch):
 
 def test_release_plans_for_pid_ignores_other_pids(tmp_path, monkeypatch):
     """Should not affect plans claimed by other PIDs."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     result = json.loads(
         planner_tools.create_plan(
@@ -1007,7 +1008,7 @@ def test_claim_plan_allows_child_of_campaign_parent(tmp_path, monkeypatch):
 
     This is the core deadlock fix: campaign parents are non-blocking.
     """
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     campaign = json.loads(
         planner_tools.create_plan(
@@ -1051,7 +1052,7 @@ def test_create_plan_converts_campaign_parent_id_to_campaign_id(tmp_path, monkey
 
     This prevents deadlocks at creation time (Fix 5).
     """
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     campaign = json.loads(
         planner_tools.create_plan(
@@ -1087,7 +1088,7 @@ def test_create_plan_converts_campaign_parent_id_to_campaign_id(tmp_path, monkey
 def test_normalize_converts_campaign_parent_to_campaign_id(tmp_path, monkeypatch):
     """_normalize_plan_for_consistency converts parent_id pointing at a
     campaign to a non-blocking campaign_id (Fix 6)."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     # Create campaign
     campaign = json.loads(
@@ -1125,7 +1126,7 @@ def test_normalize_converts_campaign_parent_to_campaign_id(tmp_path, monkeypatch
 def test_normalize_clears_orphaned_non_uuid_parent_id(tmp_path, monkeypatch):
     """_normalize_plan_for_consistency clears orphaned non-UUID parent_id
     references like 'parsing-campaign-20260413-new' (Fix 6)."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -1149,7 +1150,7 @@ def test_normalize_clears_orphaned_non_uuid_parent_id(tmp_path, monkeypatch):
 def test_auto_complete_campaigns_marks_completed(tmp_path, monkeypatch):
     """_auto_complete_campaigns marks a campaign as completed when all
     children are completed (Fix 3)."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     campaign = json.loads(
         planner_tools.create_plan(
@@ -1188,7 +1189,7 @@ def test_auto_complete_campaigns_marks_completed(tmp_path, monkeypatch):
 def test_auto_complete_campaigns_marks_failed_when_child_failed(tmp_path, monkeypatch):
     """_auto_complete_campaigns marks a campaign as failed when any child
     is failed and all children are terminal."""
-    monkeypatch.setattr(planner_tools, "_PLANS_DIR", tmp_path / ".plans")
+    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     campaign = json.loads(
         planner_tools.create_plan(

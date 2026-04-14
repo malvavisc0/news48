@@ -1,7 +1,7 @@
 """Persistent planner toolset for agent execution planning.
 
 Provides file-based execution plans with step management capabilities.
-Plans are stored as JSON files in the .plans/ directory and survive
+Plans are stored as JSON files in the data/plans/ directory and survive
 process restarts.
 """
 
@@ -14,10 +14,10 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import config
 from agents.schedules import _is_process_alive as _is_pid_alive
 from agents.tools._helpers import _safe_json
 
-_PLANS_DIR = Path(".plans")
 _STALE_PLAN_TIMEOUT_MINUTES = 60
 _MAX_REQUEUE_COUNT = 3
 
@@ -249,7 +249,7 @@ def _normalize_plan_for_consistency(plan: dict) -> bool:
     # parent_id pointing at a campaign would be permanently blocked.
     parent_id = plan.get("parent_id")
     if parent_id and status not in _TERMINAL_PLAN_STATUSES:
-        parent_file = _PLANS_DIR / f"{parent_id}.json"
+        parent_file = config.PLANS_DIR / f"{parent_id}.json"
         if parent_file.exists():
             try:
                 parent = json.loads(parent_file.read_text(encoding="utf-8"))
@@ -283,16 +283,15 @@ def _parse_claimed_pid(claimed_by: str | None) -> int | None:
 
 
 def _ensure_plans_dir() -> Path:
-    """Ensure the .plans directory exists.
+    """Ensure the data/plans directory exists.
 
     Returns:
-        Path to the .plans directory.
+        Path to the data/plans directory.
     """
-    _PLANS_DIR.mkdir(exist_ok=True)
-    return _PLANS_DIR
+    config.PLANS_DIR.mkdir(parents=True, exist_ok=True)
+    return config.PLANS_DIR
 
 
-_ARCHIVE_DIR = _PLANS_DIR / "archive"
 _ARCHIVE_AGE_HOURS = 24
 
 
@@ -306,7 +305,7 @@ def archive_terminal_plans() -> dict:
         Dict with ``archived`` count and ``errors`` count.
     """
     plans_dir = _ensure_plans_dir()
-    _ARCHIVE_DIR.mkdir(exist_ok=True)
+    (config.PLANS_DIR / "archive").mkdir(exist_ok=True)
 
     cutoff = (
         datetime.now(timezone.utc) - timedelta(hours=_ARCHIVE_AGE_HOURS)
@@ -329,7 +328,7 @@ def archive_terminal_plans() -> dict:
             continue
 
         # Move to archive
-        dest = _ARCHIVE_DIR / plan_file.name
+        dest = config.PLANS_DIR / "archive" / plan_file.name
         try:
             plan_file.replace(dest)
             archived += 1
@@ -444,7 +443,7 @@ def create_plan(
     scope_value: str = "",
     campaign_id: str = "",
 ) -> str:
-    """Create a new execution plan, persist to .plans/{id}.json.
+    """Create a new execution plan, persist to data/plans/{id}.json.
 
     ## When to Use
     Use this tool when you need to break down a complex task into ordered
@@ -529,7 +528,7 @@ def create_plan(
         # instead to prevent a blocking dependency that can never be
         # resolved (campaigns are never completed by executors).
         if resolved_parent_id:
-            parent_plan_file = _PLANS_DIR / f"{resolved_parent_id}.json"
+            parent_plan_file = config.PLANS_DIR / f"{resolved_parent_id}.json"
             if parent_plan_file.exists():
                 try:
                     parent_data = json.loads(

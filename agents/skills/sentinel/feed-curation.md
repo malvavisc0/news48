@@ -22,7 +22,7 @@ Delete a feed using `news48 feeds delete <id> --force` when:
 
 ## Before Deleting
 
-1. Log the reason in `.lessons.md`
+1. Log the reason using the `save_lesson` tool
 2. Send an email alert if email is configured
 3. Use `news48 feeds info <id> --json` to confirm feed details
 4. Use `news48 feeds delete <id> --force` to delete

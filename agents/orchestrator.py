@@ -15,12 +15,10 @@ import signal
 import subprocess
 import time
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import config
 from agents.schedules import (
-    _LOGS_DIR,
-    _STATE_FILE,
     DEFAULT_SCHEDULES,
     AgentSchedule,
     RunningAgent,
@@ -61,7 +59,7 @@ class Orchestrator:
 
     In daemon mode each agent is forked as a subprocess; the orchestrator
     tracks PIDs, polls for completion, and persists state to
-    ``.orchestrator.json``.
+    ``data/orchestrator.json``.
 
     Agents with ``max_concurrent > 1`` (e.g. executor) may have multiple
     instances running simultaneously, each claiming a different plan.
@@ -83,7 +81,7 @@ class Orchestrator:
     # ------------------------------------------------------------------
 
     def load_state(self) -> None:
-        """Load schedule state from ``.orchestrator.json``.
+        """Load schedule state from ``data/orchestrator.json``.
 
         Restores ``last_run``, ``last_result``, and ``last_error`` for
         each schedule, and any previously running agent entries (their
@@ -92,11 +90,11 @@ class Orchestrator:
         Only schedules present in the current ``DEFAULT_SCHEDULES`` are
         restored; stale entries from removed agents are silently ignored.
         """
-        if not _STATE_FILE.exists():
+        if not config.STATE_FILE.exists():
             return
 
         try:
-            data = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+            data = json.loads(config.STATE_FILE.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Could not load state: %s", exc)
             return
@@ -183,7 +181,7 @@ class Orchestrator:
     def _archive_old_plans(self) -> None:
         """Archive terminal plans older than 24 hours on startup.
 
-        Moves completed/failed plans to ``.plans/archive/`` so that
+        Moves completed/failed plans to ``data/plans/archive/`` so that
         ``claim_plan()`` and ``list_plans()`` scans remain fast.
         """
         try:
@@ -249,41 +247,38 @@ class Orchestrator:
             logger.warning("Plan deadlock heal failed: %s", exc)
             return 0
 
-    _HEARTBEAT_FILE = Path(".orchestrator.heartbeat")
-    _PID_FILE = Path(".orchestrator.pid")
-
     def _write_pid_file(self) -> None:
-        """Write the orchestrator daemon's PID to ``.orchestrator.pid``."""
+        """Write the orchestrator daemon's PID to ``data/orchestrator.pid``."""
         try:
-            self._PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
+            config.PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
         except OSError as exc:
             logger.warning("Failed to write PID file: %s", exc)
 
     def _remove_pid_file(self) -> None:
         """Remove the PID file on clean shutdown."""
         try:
-            self._PID_FILE.unlink(missing_ok=True)
+            config.PID_FILE.unlink(missing_ok=True)
         except OSError:
             pass
 
     @classmethod
     def read_daemon_pid(cls) -> int | None:
-        """Read the daemon PID from ``.orchestrator.pid``.
+        """Read the daemon PID from ``data/orchestrator.pid``.
 
         Returns the PID if the file exists and the process is alive,
         otherwise cleans up the stale file and returns ``None``.
         """
-        if not cls._PID_FILE.exists():
+        if not config.PID_FILE.exists():
             return None
         try:
-            pid = int(cls._PID_FILE.read_text(encoding="utf-8").strip())
+            pid = int(config.PID_FILE.read_text(encoding="utf-8").strip())
         except (ValueError, OSError):
             return None
         if _is_process_alive(pid):
             return pid
         # Stale PID file — process is dead
         try:
-            cls._PID_FILE.unlink(missing_ok=True)
+            config.PID_FILE.unlink(missing_ok=True)
         except OSError:
             pass
         return None
@@ -313,7 +308,7 @@ class Orchestrator:
             time.sleep(0.1)
             if not _is_process_alive(pid):
                 try:
-                    cls._PID_FILE.unlink(missing_ok=True)
+                    config.PID_FILE.unlink(missing_ok=True)
                 except OSError:
                     pass
                 return {
@@ -328,7 +323,7 @@ class Orchestrator:
         except OSError:
             pass
         try:
-            cls._PID_FILE.unlink(missing_ok=True)
+            config.PID_FILE.unlink(missing_ok=True)
         except OSError:
             pass
         return {"daemon_pid": pid, "stopped": True, "signal": "SIGKILL"}
@@ -342,14 +337,14 @@ class Orchestrator:
         the orchestrator is likely dead.
         """
         try:
-            self._HEARTBEAT_FILE.write_text(
+            config.HEARTBEAT_FILE.write_text(
                 datetime.now(timezone.utc).isoformat(), encoding="utf-8"
             )
         except OSError as exc:
             logger.debug("Failed to write heartbeat file: %s", exc)
 
     def save_state(self) -> None:
-        """Persist schedule state to ``.orchestrator.json``."""
+        """Persist schedule state to ``data/orchestrator.json``."""
         data: Dict[str, Any] = {
             "schedules": {},
             "running": {},
@@ -371,7 +366,7 @@ class Orchestrator:
                 for r in instances
             ]
         try:
-            _STATE_FILE.write_text(
+            config.STATE_FILE.write_text(
                 json.dumps(data, indent=2, default=str),
                 encoding="utf-8",
             )
@@ -546,15 +541,15 @@ class Orchestrator:
             )
             return False
 
-        _LOGS_DIR.mkdir(exist_ok=True)
+        config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
         now = datetime.now(timezone.utc)
         timestamp = now.strftime("%Y%m%d-%H%M%S")
         # Add instance index to log filename for concurrent agents
         instance_idx = len(instances)
         if max_concurrent > 1:
-            log_file = str(_LOGS_DIR / f"{name}-{timestamp}-{instance_idx}.log")
+            log_file = str(config.LOGS_DIR / f"{name}-{timestamp}-{instance_idx}.log")
         else:
-            log_file = str(_LOGS_DIR / f"{name}-{timestamp}.log")
+            log_file = str(config.LOGS_DIR / f"{name}-{timestamp}.log")
 
         cmd = _get_cmd_prefix() + ["agents", "run", "--agent", name, "--json"]
         if task:
