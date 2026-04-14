@@ -64,6 +64,18 @@ async def _parse_claimed_article(article: dict, owner: str) -> dict:
                 "success": True,
             }
 
+        # If the agent already reported a specific failure via
+        # `articles fail`, preserve that error instead of overwriting.
+        if updated and updated.get("parse_failed"):
+            return {
+                "id": int(article["id"]),
+                "title": article.get("title"),
+                "url": article.get("url"),
+                "success": False,
+                "error": updated.get("parse_error")
+                or "Agent reported failure (no detail)",
+            }
+
         error = "Agent did not update article"
         mark_article_parse_failed(db_path, int(article["id"]), error)
         return {

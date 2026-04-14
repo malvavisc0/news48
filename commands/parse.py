@@ -133,15 +133,35 @@ async def _parse(article_id: int, *, force: bool = False) -> dict:
                 "url": article["url"],
                 "success": True,
             }
-        else:
-            status_msg("  Agent did not update article")
+
+        # If the agent already reported a specific failure via
+        # `articles fail`, preserve that error instead of overwriting.
+        if updated_article and updated_article.get("parse_failed"):
+            agent_error = (
+                updated_article.get("parse_error")
+                or "Agent reported failure (no detail)"
+            )
+            status_msg(f"  Parse failed: {agent_error}")
             return {
                 "id": article_id,
                 "title": article["title"],
                 "url": article["url"],
                 "success": False,
-                "error": "Agent did not update article",
+                "error": agent_error,
             }
+
+        # Agent truly did nothing — no update, no explicit failure
+        status_msg("  Agent did not update article")
+        mark_article_parse_failed(
+            db_path, article["id"], "Agent did not update article"
+        )
+        return {
+            "id": article_id,
+            "title": article["title"],
+            "url": article["url"],
+            "success": False,
+            "error": "Agent did not update article",
+        }
 
     except Exception as e:
         status_msg(f"  Failed to parse {article['url']}: {e}")

@@ -7,15 +7,23 @@ Always active for monitor and planner agents — single source of truth for all 
 
 | Metric | Warning | Critical |
 |--------|---------|----------|
+| Total feeds | — | 0 (empty DB, needs seeding) |
 | Database size | 100 MB | 500 MB |
 | Feed stale | 7 days | 14 days |
 | Download failure rate | 10% | 25% |
 | Parse failure rate | 10% | 25% |
 | Articles older than 48h | present | 100+ |
-| Empty article backlog | 50 | 200 |
-| Downloaded backlog | 50 | 200 |
 | Fact-check completions (24h) | < 1 with backlog | 0 with backlog |
 | Fact-check oldest eligible item | > 12h | > 24h |
+
+## Self-Healing Metrics (Do NOT Create Plans)
+
+The following backlogs are handled by the orchestrator's automated background loops and **must not** trigger plan creation:
+
+- **Empty article backlog** (download backlog) — the `_download_loop` runs every 30s and processes up to 100 articles per cycle.
+- **Downloaded article backlog** (parse backlog) — the parser is triggered automatically after each download batch, and also runs on its own schedule.
+
+These metrics may still be reported in the sentinel report for visibility, but they should **never** result in fix plans.
 
 ## Rate Denominator Semantics
 All failure rates in this table are computed as **lifetime rates** (since system initialization), not per-cycle or per-24h rates. The denominator includes all articles processed since the system started.

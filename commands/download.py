@@ -22,7 +22,7 @@ from helpers import fetch_url_content, get_base_url, get_byparr_solution
 from helpers.url import extract_og_image
 from models import ByparrSolution
 
-from ._common import emit_error, emit_json, require_db, status_msg
+from ._common import emit_error, emit_json, require_db
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +94,6 @@ async def _download_article(
                 )
             except Exception as e:
                 logger.exception("Failed to get solution for %s", domain)
-                status_msg(f"Solution failed: {domain} - {e}")
                 mark_article_download_failed(db_path, article["id"], str(e))
                 return False
 
@@ -124,7 +123,7 @@ async def _download_article(
                     )
                     if attempt < MAX_RETRIES:
                         delay = RETRY_DELAY_BASE * (2**attempt)
-                        status_msg(
+                        logger.info(
                             f"Retry {attempt + 1}/{MAX_RETRIES} "
                             f"for {url} in {delay:.1f}s"
                         )
@@ -135,7 +134,7 @@ async def _download_article(
                 url,
                 MAX_RETRIES + 1,
             )
-            status_msg(f"Failed: {url} - {last_error}")
+            logger.info(f"Failed: {url} - {last_error}")
             mark_article_download_failed(db_path, article["id"], str(last_error))
             return False
         finally:
@@ -197,13 +196,13 @@ async def _download(
                 )
             }
         articles = [article]
-        status_msg(f"Downloading article {article_id}")
+        logger.info(f"Downloading article {article_id}")
     elif retry:
         candidates = get_download_failed_articles(
             db_path, limit, feed_domain=feed_domain
         )
         if not candidates:
-            status_msg("No failed downloads found to retry")
+            logger.info("No failed downloads found to retry")
             return {
                 "feed_filter": feed_domain,
                 "downloaded": 0,
@@ -222,7 +221,7 @@ async def _download(
         )
         articles = [article for article in candidates if article["id"] in claimed]
         if not articles:
-            status_msg("All failed downloads are already being processed")
+            logger.info("All failed downloads are already being processed")
             return {
                 "feed_filter": feed_domain,
                 "downloaded": 0,
@@ -230,11 +229,11 @@ async def _download(
                 "total": 0,
                 "retry": True,
             }
-        status_msg(f"Found {len(articles)} failed downloads to retry")
+        logger.info(f"Found {len(articles)} failed downloads to retry")
     else:
         candidates = get_empty_articles(db_path, limit, feed_domain=feed_domain)
         if not candidates:
-            status_msg("No articles need downloading")
+            logger.info("No articles need downloading")
             return {
                 "feed_filter": feed_domain,
                 "downloaded": 0,
@@ -253,7 +252,7 @@ async def _download(
         )
         articles = [article for article in candidates if article["id"] in claimed]
         if not articles:
-            status_msg("All candidate downloads are already being processed")
+            logger.info("All candidate downloads are already being processed")
             return {
                 "feed_filter": feed_domain,
                 "downloaded": 0,
@@ -261,7 +260,7 @@ async def _download(
                 "total": 0,
                 "retry": False,
             }
-        status_msg(f"Found {len(articles)} articles to download")
+        logger.info(f"Found {len(articles)} articles to download")
 
     solutions: dict[str, ByparrSolution] = {}
     domain_sems: dict[str, asyncio.Semaphore] = {}
