@@ -94,6 +94,7 @@ def _collect_stats(db_path: Path, stale_days: int) -> dict:
             "parse_failures": _safe_int(article["parse_failed"]),
             "download_backlog": _safe_int(article["download_backlog"]),
             "parse_backlog": _safe_int(article["parse_backlog"]),
+            "malformed": _safe_int(article.get("malformed")),
             "articles_today": _safe_int(article["articles_today"]),
             "articles_this_week": _safe_int(article["articles_this_week"]),
             "oldest_unparsed_at": article.get("oldest_unparsed_at"),
@@ -163,6 +164,9 @@ def _render_text(data: dict) -> None:
         f"  New today: {art['articles_today']:,}, "
         f"this week: {art['articles_this_week']:,}"
     )
+
+    if art.get("malformed"):
+        print(f"  Malformed (HTML in summary/title): {art['malformed']:,}")
 
     # Pipeline Health
     print(

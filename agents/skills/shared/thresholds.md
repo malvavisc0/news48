@@ -12,6 +12,7 @@ Always active for monitor and planner agents — single source of truth for all 
 | Feed stale | 7 days | 14 days |
 | Download failure rate | 10% | 25% |
 | Parse failure rate | 10% | 25% |
+| Malformed parsed articles | ≥ 1 | ≥ 10 |
 | Articles older than 48h | present | 100+ |
 | Fact-check completions (24h) | < 1 with backlog | 0 with backlog |
 | Fact-check oldest eligible item | > 12h | > 24h |

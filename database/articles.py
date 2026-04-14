@@ -733,7 +733,7 @@ def get_article_stats(db_path: Path) -> dict:
         A dict with keys: total, parsed, unparsed, no_content,
         download_failed, parse_failed, download_backlog, parse_backlog,
         sentiment_positive, sentiment_negative, sentiment_neutral,
-        oldest_unparsed_at, articles_today, articles_this_week.
+        malformed, oldest_unparsed_at, articles_today, articles_this_week.
     """
     with get_connection(db_path) as db:
         cursor = db.execute("""SELECT
@@ -760,7 +760,12 @@ def get_article_stats(db_path: Path) -> dict:
                 SUM(CASE WHEN sentiment = 'negative' THEN 1 ELSE 0 END)
                     AS sentiment_negative,
                 SUM(CASE WHEN sentiment = 'neutral' THEN 1 ELSE 0 END)
-                    AS sentiment_neutral
+                    AS sentiment_neutral,
+                SUM(CASE WHEN parsed_at IS NOT NULL
+                    AND (summary LIKE '%<%>%'
+                         OR title LIKE '%<%>%')
+                    THEN 1 ELSE 0 END)
+                    AS malformed
             FROM articles""")
         row = dict(cursor.fetchone())
 
@@ -784,6 +789,34 @@ def get_article_stats(db_path: Path) -> dict:
         row["articles_this_week"] = cursor.fetchone()["cnt"]
 
         return row
+
+
+def get_malformed_articles(db_path: Path, limit: int = 50) -> list[dict]:
+    """Get parsed articles with HTML tags in summary or title.
+
+    These articles passed the parser but contain residual HTML that
+    should have been stripped. Useful for the sentinel to create fix
+    plans.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        limit: Maximum number of articles to return.
+
+    Returns:
+        A list of dicts with id, title, summary, url for each
+        malformed article.
+    """
+    with get_connection(db_path) as db:
+        cursor = db.execute(
+            """SELECT id, title, summary, url
+               FROM articles
+               WHERE parsed_at IS NOT NULL
+                 AND (summary LIKE '%<%>%' OR title LIKE '%<%>%')
+               ORDER BY parsed_at DESC
+               LIMIT ?""",
+            (limit,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
 
 
 def get_feed_stats(db_path: Path, stale_days: int = 7) -> dict:

@@ -13,6 +13,7 @@ from .articles import (
     get_empty_articles,
     get_feed_stats,
     get_fetch_stats,
+    get_malformed_articles,
     get_parse_failed_articles,
     get_unparsed_articles,
     insert_articles,
