@@ -157,7 +157,7 @@ async def fetch_url_content(url: str, solution: ByparrSolution) -> str:
         solution: The bypass solution containing headers and cookies.
 
     Returns:
-        The HTML content of the page with noise stripped.
+        The raw HTML content of the page.
 
     Raises:
         httpx.HTTPError: If the request fails.
@@ -182,14 +182,14 @@ async def fetch_url_content(url: str, solution: ByparrSolution) -> str:
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         response = await client.get(url=url, cookies=solution.cookies, headers=headers)
         response.raise_for_status()
-        return _strip_html_noise(html_content=response.content.decode())
+        return response.content.decode()
 
 
-def _strip_html_noise(html_content: str) -> str:
+def strip_html_noise(html_content: str) -> str:
     """Remove unnecessary tags and attributes from HTML to reduce token count.
 
     Strips content that is irrelevant for article text extraction:
-    - Entire <head> section (preserving <title> text)
+    - Entire <head> section (title is stored as a separate DB field)
     - <script>, <style>, <noscript>, <iframe>, <svg> tags with content
     - <link>, <meta>, <img>, <input>, <button> self-closing/void tags
     - Custom elements (e.g. <ad-slot>)
@@ -197,6 +197,7 @@ def _strip_html_noise(html_content: str) -> str:
     - Presentational attributes: class, id, style, data-*, on*, target
     - Empty tags (multiple passes for nested empties)
     - Excessive blank lines
+    - Extracts only <body> content (discards <html>/<body> wrappers)
 
     Args:
         html_content: Raw HTML string to clean.
@@ -260,31 +261,8 @@ def _strip_html_noise(html_content: str) -> str:
 
     # --- Phase 1: Remove entire tag blocks with content ---
 
-    # Strip <head> but preserve <title> content
-    title_match = re.search(r"<title[^>]*>(.*?)</title>", html_content, flags=ID)
-    title_text = title_match.group(1).strip() if title_match else ""
+    # Strip <head> entirely (title is stored as a separate DB field)
     html_content = _sub(r"<head[^>]*>.*?</head>", "", html_content, flags=ID)
-    if title_text:
-        head_block = f"<head><title>{title_text}</title></head>\n"
-        # Insert <head> between <html ...> and <body>
-        if "<body" in html_content.lower():
-            html_content = _sub(
-                r"(<body)",
-                lambda _m, _h=head_block: _h + _m.group(0),
-                html_content,
-                count=1,
-                flags=I,
-            )
-        elif re.search(r"<html[^>]*>", html_content, flags=I):
-            html_content = _sub(
-                r"(<html[^>]*>)",
-                lambda _m, _h=head_block: (_m.group(0) + "\n" + _h),
-                html_content,
-                count=1,
-                flags=I,
-            )
-        else:
-            html_content = head_block + html_content
 
     # Tags with content to remove entirely
     for tag in (
@@ -386,5 +364,10 @@ def _strip_html_noise(html_content: str) -> str:
 
     # Final collapse of any remaining multiple blank lines
     html_content = _sub(r"\n{3,}", "\n\n", html_content)
+
+    # --- Final Phase: Extract body content only ---
+    body_match = re.search(r"<body[^>]*>(.*)</body>", html_content, flags=ID)
+    if body_match:
+        html_content = body_match.group(1)
 
     return html_content.strip()

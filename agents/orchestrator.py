@@ -394,6 +394,29 @@ class Orchestrator:
         except (ValueError, TypeError):
             return True
 
+    def _agent_precondition_met(self, name: str) -> bool:
+        """Check whether an agent's domain-specific precondition is met.
+
+        Currently only the executor has a precondition: at least one
+        claimable plan must exist.  All other agents pass unconditionally.
+
+        Fails open — if the check itself raises, we return ``True`` so a
+        transient planner bug doesn't permanently block the executor.
+        """
+        if name != "executor":
+            return True
+        try:
+            from agents.tools.planner import peek_next_plan
+
+            family = peek_next_plan()
+            if family is None:
+                logger.debug("Executor precondition not met: no claimable plans")
+                return False
+            return True
+        except Exception as exc:
+            logger.warning("Executor precondition check failed (allowing run): %s", exc)
+            return True
+
     def _update_schedule(
         self, name: str, result: str, error: Optional[str] = None
     ) -> None:
@@ -500,6 +523,8 @@ class Orchestrator:
 
         for name, schedule in self.schedules.items():
             if not self._should_run(schedule):
+                continue
+            if not self._agent_precondition_met(name):
                 continue
             result = await self.run_agent(name, schedule.task_prompt)
             results[name] = result
@@ -766,7 +791,7 @@ class Orchestrator:
         # 3. Fork due agents (one-per-agent per tick to avoid burst-forking)
         forked: list[str] = []
         for name, schedule in self.schedules.items():
-            if self._should_run(schedule):
+            if self._should_run(schedule) and self._agent_precondition_met(name):
                 if self.fork_agent(name):
                     forked.append(name)
 
@@ -834,19 +859,28 @@ class Orchestrator:
                         result["downloaded"],
                         result["failed"],
                     )
-                    # Trigger immediate parse after successful download
-                    await self._trigger_parser_cycle()
             except Exception as exc:
                 logger.error("Download loop error: %s", exc)
 
             await asyncio.sleep(interval)
 
-    async def _trigger_parser_cycle(self) -> None:
-        """Trigger an immediate parser cycle."""
+    async def _parse_loop(self, interval: int = 30) -> None:
+        """Continuously parse downloaded articles in a background loop."""
         from agents.parser import run_autonomous
 
-        result = await run_autonomous()
-        logger.info("Immediate parse trigger: %s", result)
+        while True:
+            try:
+                result = await run_autonomous()
+                if result.get("parsed", 0) > 0 or result.get("failed", 0) > 0:
+                    logger.info(
+                        "Parse loop: %d parsed, %d failed",
+                        result["parsed"],
+                        result["failed"],
+                    )
+            except Exception as exc:
+                logger.error("Parse loop error: %s", exc)
+
+            await asyncio.sleep(interval)
 
     def start(self, tick_seconds: int = 60) -> None:
         """Run the orchestrator in a continuous loop.
@@ -867,6 +901,7 @@ class Orchestrator:
             # Launch pipeline loops as background tasks
             fetch_task = asyncio.create_task(self._feed_fetch_loop())
             download_task = asyncio.create_task(self._download_loop())
+            parse_task = asyncio.create_task(self._parse_loop())
 
             try:
                 while True:
@@ -904,6 +939,7 @@ class Orchestrator:
             finally:
                 fetch_task.cancel()
                 download_task.cancel()
+                parse_task.cancel()
 
         try:
             asyncio.run(_main_loop())

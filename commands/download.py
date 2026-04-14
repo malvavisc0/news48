@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 import typer
+from html_to_markdown import convert as html_to_markdown
 
 from config import Services
 from database import (
@@ -18,7 +19,12 @@ from database import (
     reset_article_download,
     update_article,
 )
-from helpers import fetch_url_content, get_base_url, get_byparr_solution
+from helpers import (
+    fetch_url_content,
+    get_base_url,
+    get_byparr_solution,
+    strip_html_noise,
+)
 from helpers.url import extract_og_image
 from models import ByparrSolution
 
@@ -100,11 +106,13 @@ async def _download_article(
             last_error = None
             for attempt in range(MAX_RETRIES + 1):
                 try:
-                    content = await fetch_url_content(
+                    raw_html = await fetch_url_content(
                         url=url,
                         solution=solution,
                     )
-                    image_url = extract_og_image(content)
+                    image_url = extract_og_image(raw_html)
+                    cleaned_html = strip_html_noise(raw_html)
+                    content = html_to_markdown(cleaned_html)["content"] or ""
                     update_article(
                         db_path,
                         article["id"],

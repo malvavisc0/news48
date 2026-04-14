@@ -270,6 +270,8 @@ class TestOrchestrator:
 
         orchestrator.fork_agent = _fake_fork
         orchestrator.save_state = lambda: None
+        # Executor precondition must report claimable plans exist
+        orchestrator._agent_precondition_met = lambda name: True
 
         result = orchestrator.tick()
 
@@ -386,6 +388,106 @@ class TestOrchestrator:
         assert result["already_stopped"] == ["executor"]
         assert result["stopped_count"] == 0
         assert result["stopped_instances"] == []
+
+    def test_executor_precondition_skips_when_no_claimable_plans(self):
+        """Executor should not be forked when peek_next_plan returns None."""
+        schedules = {
+            "executor": AgentSchedule(
+                agent_name="executor",
+                task_prompt="Run executor",
+                interval_minutes=1,
+                max_concurrent=3,
+            )
+        }
+        orchestrator = Orchestrator(schedules=schedules)
+        orchestrator.check_running = lambda: {}
+        orchestrator.save_state = lambda: None
+
+        # No claimable plans
+        monkeypatch_value = {"peek": None}
+
+        def _fake_precondition(name):
+            if name == "executor":
+                return monkeypatch_value["peek"] is not None
+            return True
+
+        orchestrator._agent_precondition_met = _fake_precondition
+
+        calls = {"forks": 0}
+
+        def _fake_fork(name, task=None):
+            calls["forks"] += 1
+            return True
+
+        orchestrator.fork_agent = _fake_fork
+
+        result = orchestrator.tick()
+
+        assert calls["forks"] == 0
+        assert result["forked"] == []
+
+    def test_executor_precondition_allows_when_plans_exist(self):
+        """Executor should be forked when peek_next_plan returns a family."""
+        schedules = {
+            "executor": AgentSchedule(
+                agent_name="executor",
+                task_prompt="Run executor",
+                interval_minutes=1,
+                max_concurrent=3,
+            )
+        }
+        orchestrator = Orchestrator(schedules=schedules)
+        orchestrator.check_running = lambda: {}
+        orchestrator.save_state = lambda: None
+
+        def _fake_precondition(name):
+            if name == "executor":
+                return True  # claimable plans exist
+            return True
+
+        orchestrator._agent_precondition_met = _fake_precondition
+
+        calls = {"forks": 0}
+
+        def _fake_fork(name, task=None):
+            calls["forks"] += 1
+            return True
+
+        orchestrator.fork_agent = _fake_fork
+
+        result = orchestrator.tick()
+
+        assert calls["forks"] == 1
+        assert result["forked"] == ["executor"]
+
+    def test_non_executor_agents_always_pass_precondition(self):
+        """Non-executor agents should always pass the precondition check."""
+        orchestrator = Orchestrator()
+        assert orchestrator._agent_precondition_met("sentinel") is True
+        assert orchestrator._agent_precondition_met("parser") is True
+        assert orchestrator._agent_precondition_met("fact_checker") is True
+
+    def test_executor_precondition_with_peek_next_plan(self, monkeypatch):
+        """_agent_precondition_met calls peek_next_plan for executor."""
+        orchestrator = Orchestrator()
+
+        # When peek returns None, executor should be blocked
+        monkeypatch.setattr(planner_tools, "peek_next_plan", lambda: None)
+        assert orchestrator._agent_precondition_met("executor") is False
+
+        # When peek returns a family, executor should be allowed
+        monkeypatch.setattr(planner_tools, "peek_next_plan", lambda: "fetch")
+        assert orchestrator._agent_precondition_met("executor") is True
+
+    def test_executor_precondition_fails_open_on_error(self, monkeypatch):
+        """_agent_precondition_met returns True if peek_next_plan raises."""
+
+        def _boom():
+            raise RuntimeError("plans dir missing")
+
+        monkeypatch.setattr(planner_tools, "peek_next_plan", _boom)
+        orchestrator = Orchestrator()
+        assert orchestrator._agent_precondition_met("executor") is True
 
 
 class TestRunLoopHelpers:

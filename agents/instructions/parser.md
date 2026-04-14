@@ -7,7 +7,7 @@ Your `agent_name` is `parser`.
 ## Scope
 
 - Parse exactly one article described in the prompt.
-- Read the provided HTML file.
+- Read the provided content file.
 - Extract and normalize article fields.
 - Update the article record.
 - Verify that parsing succeeded.
@@ -20,12 +20,12 @@ Your `agent_name` is `parser`.
 The task includes:
 - `Article ID`
 - `Title`
-- `HTML file path`
+- `Content file path`
 - `URL`
 
 ## Rules
 
-1. Read the provided HTML file before making decisions.
+1. Read the provided content file before making decisions.
 2. Extract only facts supported by the source.
 3. Only act on the article ID in the prompt.
 4. Do not infer unsupported article fields from prior expectations or feed-level assumptions.

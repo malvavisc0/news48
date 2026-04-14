@@ -3,8 +3,8 @@
 ```mermaid
 flowchart TD
     Start([Parse Article]) --> Input[/Receive task:<br/>article_id, title,<br/>html_path, url/]
-    Input --> ReadHTML[Read HTML file<br/>from provided path]
-    ReadHTML --> TypeCheck{Non-standard type?}
+    Input --> ReadContent[Read content file<br/>from provided path]
+    ReadContent --> TypeCheck{Non-standard type?}
     TypeCheck -->|Yes| Adapt[Adapt structure<br/>to article type]
     TypeCheck -->|No| Extract
     Adapt --> Extract[Extract facts<br/>only from source]

@@ -1,5 +1,6 @@
 """Article CRUD, search, stats, and query operations."""
 
+import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -66,8 +67,8 @@ def insert_articles(
                         fetch_id,
                         feed_id,
                         entry["url"],
-                        entry.get("title"),
-                        entry.get("summary"),
+                        _strip_html_tags(entry.get("title")),
+                        _strip_html_tags(entry.get("summary")),
                         entry.get("author"),
                         entry.get("published_at"),
                         now,
@@ -86,6 +87,13 @@ def insert_articles(
             db.close()
 
     return count
+
+
+def _strip_html_tags(text: str | None) -> str | None:
+    """Remove any HTML tags from text."""
+    if not text:
+        return text
+    return re.sub(r"<[^>]+>", "", text).strip()
 
 
 def update_article(
@@ -122,6 +130,13 @@ def update_article(
         image_url: Optionally update the primary image URL.
         language: Optionally update the ISO 639-1 language code.
     """
+    # Defensively strip any HTML tags that may have leaked through
+    summary = _strip_html_tags(summary)
+    title = _strip_html_tags(title)
+    # content is a required str parameter; _strip_html_tags returns str | None
+    # but will always return str when given a non-None input
+    content = _strip_html_tags(content) or ""  # type: ignore[assignment]
+
     if sentiment:
         sentiment = sentiment.lower()
     if categories:
@@ -684,7 +699,7 @@ def mark_article_parse_failed(db_path: Path, article_id: int, error: str) -> Non
         db.execute(
             """UPDATE articles
                SET parse_failed = 1, parse_error = ?
-               WHERE id = ?""",
+               WHERE id = ? AND parse_failed = 0""",
             (error, article_id),
         )
         db.commit()

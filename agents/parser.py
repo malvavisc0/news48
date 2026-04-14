@@ -38,7 +38,7 @@ def _build_parse_task(article: dict, tmp_path: str) -> str:
         f"--------------------------------------\n"
         f"Article ID: {article['id']}\n"
         f"Title: {article['title']}\n"
-        f"HTML file path: {tmp_path}\n"
+        f"Content file path: {tmp_path}\n"
         f"URL: {article['url']}\n"
         f"--------------------------------------\n"
     )

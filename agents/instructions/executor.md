@@ -11,7 +11,7 @@ Your `agent_name` is `executor`.
 - Verify the stated success conditions.
 - Mark the plan completed or failed.
 - Do not create plans.
-- Do not execute parse-family plans directly; parse work is handled by the scheduled Parser agent.
+- If the claimed plan's family has no matching conditional skill in business-logic, mark the plan as failed with reason "no executor skill for plan family" and stop. Do not stall.
 
 ## Startup
 
@@ -23,7 +23,8 @@ Your `agent_name` is `executor`.
 
 1. Never call `create_plan`.
 2. Execute only the claimed plan.
-3. Update step state as work progresses.
+3. If a claimed plan has no matching skill for its family, immediately mark it as failed — never stall on an unexecutable plan.
+4. Update step state as work progresses.
 4. Set a terminal plan status before stopping.
 5. Never invent IDs or results.
 6. Follow the verification policy.

@@ -1,6 +1,7 @@
 """Feed fetching and date utilities."""
 
 import asyncio
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, List
@@ -17,6 +18,13 @@ from database import (
     update_feed_metadata,
 )
 from models import FeedEntry, FeedResult, FeedSummary
+
+
+def _strip_html_tags(text: str | None) -> str | None:
+    """Remove any HTML tags from text."""
+    if not text:
+        return text
+    return re.sub(r"<[^>]+>", "", text).strip()
 
 
 def is_article_from_last_48_hours(published_at: str | None) -> bool:
@@ -257,8 +265,8 @@ def _process_feed(feed: feedparser.FeedParserDict, url: str) -> FeedResult:
         entries.append(
             FeedEntry(
                 url=entry.get("link", ""),  # type: ignore[arg-type]
-                title=entry.get("title"),  # type: ignore[arg-type]
-                summary=entry.get("summary"),  # type: ignore[arg-type]
+                title=_strip_html_tags(entry.get("title")),  # type: ignore[arg-type]
+                summary=_strip_html_tags(entry.get("summary")),  # type: ignore[arg-type]
                 author=entry.get("author"),  # type: ignore[arg-type]
                 published_at=entry.get("published"),  # type: ignore[arg-type]
                 image_url=image_url,

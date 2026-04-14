@@ -7,7 +7,7 @@ from html_to_markdown import convert
 
 from agents.tools._helpers import _safe_json
 from config import Services
-from helpers.bypass import fetch_url_content, get_byparr_solution
+from helpers.bypass import fetch_url_content, get_byparr_solution, strip_html_noise
 from helpers.url import get_base_url
 from models import ByparrSolution
 
@@ -75,7 +75,9 @@ async def fetch_webpage_content(
             solution = await get_solution(domain)
             content = await fetch_url_content(url=url, solution=solution)
             if markdown:
-                content = convert(content)
+                content = convert(content)["content"] or ""
+            else:
+                content = strip_html_noise(content)
 
             return {"url": url, "content": content, "success": True}
         except Exception as e:

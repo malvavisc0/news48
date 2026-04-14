@@ -7,7 +7,7 @@ This module provides utilities organized into submodules:
 - seo: SEO and social sharing metadata helpers
 """
 
-from helpers.bypass import fetch_url_content, get_byparr_solution
+from helpers.bypass import fetch_url_content, get_byparr_solution, strip_html_noise
 from helpers.feed import (
     extract_favicon,
     generate_rss_feed,
@@ -24,6 +24,7 @@ __all__ = [
     "get_base_url",
     "get_byparr_solution",
     "fetch_url_content",
+    "strip_html_noise",
     "is_article_from_last_48_hours",
     "extract_og_image",
     "extract_favicon",

@@ -371,8 +371,9 @@ def test_update_plan_rejects_terminal_plan_mutation(tmp_path, monkeypatch):
         )
     )
 
-    assert payload["result"] == ""
-    assert "already terminal" in payload["error"]
+    assert payload["result"] != ""
+    assert payload["error"] == ""
+    assert "already terminal" in payload["warning"]
 
 
 def test_create_plan_dedupes_active_same_family(tmp_path, monkeypatch):
@@ -433,8 +434,9 @@ def test_update_plan_rejects_terminal_plan_restatus_even_if_step_matches(
         )
     )
 
-    assert payload["result"] == ""
-    assert "already terminal" in payload["error"]
+    assert payload["result"] != ""
+    assert payload["error"] == ""
+    assert "already terminal" in payload["warning"]
 
 
 def test_create_plan_allows_multiple_feed_scoped_download_children(

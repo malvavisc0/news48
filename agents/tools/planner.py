@@ -719,8 +719,12 @@ def update_plan(
             if plan_is_terminal and (next_status != current_status or result_changed):
                 return _safe_json(
                     {
-                        "result": "",
-                        "error": ("Plan is already terminal and cannot be " "mutated"),
+                        "result": _serialize_plan(plan),
+                        "error": "",
+                        "warning": (
+                            "Plan is already terminal. No changes applied. "
+                            "Do not call update_plan again."
+                        ),
                     }
                 )
 
@@ -769,8 +773,12 @@ def update_plan(
             if plan_is_terminal:
                 return _safe_json(
                     {
-                        "result": "",
-                        "error": ("Plan is already terminal and " "cannot be mutated"),
+                        "result": _serialize_plan(plan),
+                        "error": "",
+                        "warning": (
+                            "Plan is already terminal. No changes applied. "
+                            "Do not call update_plan again."
+                        ),
                     }
                 )
             plan["steps"] = [s for s in plan["steps"] if s["id"] not in remove_set]
@@ -781,8 +789,12 @@ def update_plan(
             if plan_is_terminal:
                 return _safe_json(
                     {
-                        "result": "",
-                        "error": ("Plan is already terminal and " "cannot be mutated"),
+                        "result": _serialize_plan(plan),
+                        "error": "",
+                        "warning": (
+                            "Plan is already terminal. No changes applied. "
+                            "Do not call update_plan again."
+                        ),
                     }
                 )
             next_num = len(plan["steps"]) + 1
@@ -817,9 +829,11 @@ def update_plan(
             ) in _TERMINAL_PLAN_STATUSES and requested_status != plan.get("status"):
                 return _safe_json(
                     {
-                        "result": "",
-                        "error": (
-                            "Plan is already terminal and " "cannot change status"
+                        "result": _serialize_plan(plan),
+                        "error": "",
+                        "warning": (
+                            "Plan is already terminal. No changes applied. "
+                            "Do not call update_plan again."
                         ),
                     }
                 )
@@ -857,7 +871,13 @@ def update_plan(
             plan["updated_at"] = timestamp
             _write_plan(plan)
 
-        return _safe_json({"result": _serialize_plan(plan), "error": ""})
+        response: dict = {"result": _serialize_plan(plan), "error": ""}
+        if derived_status and derived_status in _TERMINAL_PLAN_STATUSES:
+            response["notice"] = (
+                f"Plan auto-transitioned to '{derived_status}' because all "
+                "steps are terminal. Do not call update_plan again."
+            )
+        return _safe_json(response)
     except Exception as exc:
         return _safe_json({"result": "", "error": str(exc)})
 
