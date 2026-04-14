@@ -141,7 +141,8 @@ def _get_article_stats() -> dict:
                         THEN 1 ELSE 0 END) AS without_content,
                     SUM(CASE WHEN content IS NULL AND download_failed = 0
                         THEN 1 ELSE 0 END) AS download_backlog,
-                    SUM(CASE WHEN content IS NOT NULL AND parsed_at IS NULL
+                    SUM(CASE WHEN content IS NOT NULL AND content != ''
+                        AND parsed_at IS NULL
                         AND parse_failed = 0 THEN 1 ELSE 0 END)
                         AS parse_backlog,
                     SUM(CASE WHEN download_failed = 1 THEN 1 ELSE 0 END)

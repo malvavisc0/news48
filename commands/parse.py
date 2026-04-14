@@ -121,7 +121,7 @@ async def _parse(article_id: int, *, force: bool = False) -> dict:
         status_msg(f"Parsing: {article['title']}")
 
         # Delegate to the parser agent for this explicitly claimed article.
-        await run_parser(task)
+        agent_response = await run_parser(task)
 
         # Verify the agent actually updated the article
         updated_article = get_article_by_id(db_path, article["id"])
@@ -151,16 +151,15 @@ async def _parse(article_id: int, *, force: bool = False) -> dict:
             }
 
         # Agent truly did nothing — no update, no explicit failure
-        status_msg("  Agent did not update article")
-        mark_article_parse_failed(
-            db_path, article["id"], "Agent did not update article"
-        )
+        error = (agent_response or "").strip() or "Agent did not update article"
+        status_msg(f"  Parse failed: {error}")
+        mark_article_parse_failed(db_path, article["id"], error)
         return {
             "id": article_id,
             "title": article["title"],
             "url": article["url"],
             "success": False,
-            "error": "Agent did not update article",
+            "error": error,
         }
 
     except Exception as e:

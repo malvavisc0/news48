@@ -49,11 +49,25 @@ async def _parse_claimed_article(article: dict, owner: str) -> dict:
     from commands._common import require_db
 
     db_path = require_db()
+
+    # Guard: skip articles with no usable content
+    raw_content = article.get("content") or ""
+    if not raw_content.strip():
+        error = "Article has no content to parse"
+        mark_article_parse_failed(db_path, int(article["id"]), error)
+        return {
+            "id": int(article["id"]),
+            "title": article.get("title"),
+            "url": article.get("url"),
+            "success": False,
+            "error": error,
+        }
+
     tmp_path = None
     try:
-        tmp_path = _get_temp_file_path(article.get("content") or "")
+        tmp_path = _get_temp_file_path(raw_content)
         task = _build_parse_task(article, tmp_path)
-        await run_agent(lambda: get_agent({}), task)
+        agent_response = await run_agent(lambda: get_agent({}), task)
 
         updated = get_article_by_id(db_path, int(article["id"]))
         if updated and updated.get("parsed_at"):
@@ -76,7 +90,7 @@ async def _parse_claimed_article(article: dict, owner: str) -> dict:
                 or "Agent reported failure (no detail)",
             }
 
-        error = "Agent did not update article"
+        error = (agent_response or "").strip() or "Agent did not update article"
         mark_article_parse_failed(db_path, int(article["id"]), error)
         return {
             "id": int(article["id"]),

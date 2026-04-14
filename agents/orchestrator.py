@@ -884,28 +884,26 @@ class Orchestrator:
                     n_r = result["running_total"]
 
                     if n_c or n_f:
-                        logger.info(
-                            "Tick: %d forked, %d completed, %d running",
-                            n_f,
-                            n_c,
-                            n_r,
-                        )
+                        parts = [
+                            "Tick: forked=%d completed=%d running=%d" % (n_f, n_c, n_r)
+                        ]
                         for comp_key, info in result["completed"].items():
-                            logger.info(
-                                "  %s: %s (exit=%s, duration=%s)",
-                                comp_key,
-                                info["result"],
-                                info.get("exit_code"),
-                                info.get("duration", "?"),
+                            parts.append(
+                                "%s=%s/exit=%s/%s"
+                                % (
+                                    comp_key,
+                                    info["result"],
+                                    info.get("exit_code"),
+                                    info.get("duration", "?"),
+                                )
                             )
                         for name in result["forked"]:
                             instances = self.running.get(name, [])
                             if instances:
-                                logger.info(
-                                    "  %s: forked → PID %d",
-                                    name,
-                                    instances[-1].pid,
+                                parts.append(
+                                    "%s=forked/pid=%d" % (name, instances[-1].pid)
                                 )
+                        logger.info(" ".join(parts))
 
                     await asyncio.sleep(tick_seconds)
             finally:

@@ -337,6 +337,7 @@ def get_unparsed_articles(
                    FROM articles a
                    JOIN feeds f ON a.feed_id = f.id
                    WHERE a.content IS NOT NULL
+                     AND a.content != ''
                      AND parsed_at IS NULL
                      AND a.parse_failed = 0
                      AND f.url LIKE '%' || ? || '%'
@@ -350,6 +351,7 @@ def get_unparsed_articles(
                    FROM articles a
                    JOIN feeds f ON a.feed_id = f.id
                    WHERE a.content IS NOT NULL
+                     AND a.content != ''
                      AND parsed_at IS NULL
                      AND a.parse_failed = 0
                    ORDER BY a.created_at ASC
@@ -749,7 +751,8 @@ def get_article_stats(db_path: Path) -> dict:
                     AS parse_failed,
                 SUM(CASE WHEN content IS NULL AND download_failed = 0
                     THEN 1 ELSE 0 END) AS download_backlog,
-                SUM(CASE WHEN content IS NOT NULL AND parsed_at IS NULL
+                SUM(CASE WHEN content IS NOT NULL AND content != ''
+                    AND parsed_at IS NULL
                     AND parse_failed = 0 THEN 1 ELSE 0 END)
                     AS parse_backlog,
                 SUM(CASE WHEN sentiment = 'positive' THEN 1 ELSE 0 END)
