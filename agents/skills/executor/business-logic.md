@@ -12,7 +12,7 @@ flowchart TD
     WaveFlow --> Execute
     Execute --> Step{Step status?}
     Step -->|pending| UpdateExec[Update: executing]
-    UpdateExec --> RunCmd[Translate step intent into<br/>documented news48 command]
+    UpdateExec --> RunCmd[Run exact plan command or<br/>documented skill-authorized command]
     RunCmd --> UpdateComplete[Update: completed]
     UpdateComplete --> MoreSteps{More steps?}
     MoreSteps -->|Yes| Execute
@@ -32,7 +32,7 @@ flowchart TD
 |-------|---------|
 | `claim-plan` | Call once, exit if no plans |
 | `manage-steps` | Use exact step IDs, never rollback failed steps |
-| `run-command` | timeout as tool param, --json on all news48 commands |
+| `run-command` | timeout as tool param, use `uv run news48 ... --json` when supported |
 | `verify-plan` | PASS/FAIL/INVALID per condition, all must pass for completed |
 
 ## Conditional Skills (by plan_family)
@@ -51,6 +51,8 @@ flowchart TD
 
 - Parse-family plans may still be executed by the executor, but they do not
   currently load a dedicated parse-family skill; they rely on the always-on
-  execution skills.
+  execution skills and must still use only documented commands.
 - The executor follows one claimed plan only and must always end with a
   terminal plan status.
+- If a plan step cannot be mapped to an exact documented command or skill-defined
+  action, the step is invalid and should fail explicitly.

@@ -5,25 +5,41 @@
 ```mermaid
 flowchart TD
     A[Start sentinel cycle] --> B[Gather system metrics]
-    B --> C[Evaluate thresholds]
-    C --> D{Thresholds breached?}
-    D -->|Yes| E[Create fix plans]
-    D -->|No| F[Check feed health]
-    E --> F
-    F --> G{Unhealthy feeds?}
-    G -->|Yes| H[Delete problematic feeds]
-    G -->|No| I[Write report]
-    H --> I
-    I --> J[End cycle]
+    B --> C[Evaluate thresholds and evidence quality]
+    C --> D{Actionable breach?}
+    D -->|Yes| E[Create or update recovery plans]
+    D -->|No| F[Record report-only findings]
+    E --> G[Check feed health]
+    F --> G
+    G --> H{Feed issue proven?}
+    H -->|Strong evidence| I[Recommend deletion or create review plan]
+    H -->|Weak or mixed evidence| J[Report concern only]
+    I --> K[Write report]
+    J --> K
+    K --> L[End cycle]
 ```
 
 ## Steps
 
-1. **Gather metrics** — Run `news48 stats --json`, `news48 feeds list --json`, `news48 plans list --json`, and `news48 cleanup health --json`.
-2. **Check for empty database** — If total feeds is 0, the database needs seeding. Create a plan for the executor with one step: `news48 seed seed.txt --json`. The file `seed.txt` contains feed URLs and lives in the project root. Skip all other steps (no thresholds to evaluate on an empty system).
-3. **Evaluate thresholds** — Compare metrics against the thresholds skill. Classify as HEALTHY, WARNING, or CRITICAL. Note: download and parse backlogs are self-healing (automated by the orchestrator) and must not trigger plan creation. **Feed fetching is NOT self-healing** — if feeds are stale, the sentinel must create a fetch plan.
-4. **Detect malformed articles** — Check the `malformed` count from `news48 stats --json`. If > 0, include the count as a WARNING in the sentinel report. Do NOT create a plan for malformed articles — HTML stripping is handled automatically at insert time. A non-zero count indicates a stripping edge case; log it for investigation but do not create plans.
-5. **Create fix plans** — If WARNING or CRITICAL for non-automated metrics, use `create_plan` with concrete CLI steps. Check `news48 plans list --json` first to avoid duplicating existing pending plans. **Never create plans for bulk downloads or bulk parsing** — these are self-healing once articles exist. **Feed fetch plans are allowed and required** — if feeds are stale or `articles_today` is 0, create a plan with step `news48 fetch --json` to bring new articles into the pipeline.
-6. **Check feed health** — Apply feed-curation rules to detect and delete problematic feeds.
-7. **Write report** — Call `write_sentinel_report` with status, metrics, alerts, and recommendations.
-8. **Save lessons** — Record any new insight using `save_lesson`.
+1. **Gather metrics** — Run `uv run news48 stats --json`, `uv run news48 feeds list --json`, `uv run news48 plans list --json`, `uv run news48 cleanup health --json`, and any other documented evidence commands needed to prove a claim.
+2. **Check for empty database** — If total feeds is 0, the database needs seeding. Create a plan for the executor with one step: `uv run news48 seed seed.txt --json`. The file `seed.txt` contains feed URLs and lives in the project root. Skip all other threshold-driven actions because the system is not yet seeded.
+3. **Evaluate thresholds** — Compare metrics against the thresholds skill and classify the system as HEALTHY, WARNING, or CRITICAL. Use only documented metrics and respect undefined-rate semantics when denominators are zero.
+4. **Separate actionable vs report-only findings** — Treat download backlog, parse backlog, malformed article counts, and any undefined rate as report-only unless another skill explicitly authorizes action. Do not manufacture plans for self-healing or unprovable conditions.
+5. **Create recovery plans only for allowed plan families** — If a non-automated metric breaches threshold and the issue is both actionable and proven, use `create_plan` with concrete CLI steps. Check `uv run news48 plans list --json` first to avoid duplicating equivalent pending or executing plans.
+6. **Apply no-op rules explicitly** — If an equivalent plan already exists, a fetch is already running, evidence is mixed, or the issue is self-healing, write the finding into the report and do not create duplicate work.
+7. **Check feed health** — Apply feed-curation rules to determine whether the outcome should be report-only, a review plan, or a deletion recommendation. Do not perform feed deletion directly from sentinel instructions.
+8. **Write report** — Call `write_sentinel_report` with status, evidence, breached thresholds, report-only findings, actions taken, and no-op justifications.
+9. **Save lessons** — Record any new insight using `save_lesson`.
+
+## Allowed Plan Catalog
+
+- **Seed plan** — Trigger: total feeds is 0. Step: `uv run news48 seed seed.txt --json`.
+- **Fetch plan** — Trigger: fetch freshness threshold breached or `articles_today` is 0 for more than 1 hour, and no equivalent active plan exists. Step: `uv run news48 fetch --json`.
+- **Fact-check recovery plan** — Trigger: fact-check backlog metrics breach threshold, the backlog is eligible for processing, and no equivalent active plan exists. Include concrete CLI steps and verifiable success conditions.
+- **Human review plan** — Trigger: a feed or system condition appears harmful, but evidence is not strong enough for direct destructive action. Include the exact evidence to verify.
+
+## Reporting Requirements
+
+- For every breached threshold, record whether the result was `planned`, `suppressed`, or `report-only`.
+- When suppressing action, state the reason explicitly: self-healing, duplicate active plan, running job, insufficient evidence, or undefined metric.
+- If evidence does not directly prove a condition, say so plainly instead of inferring causation.

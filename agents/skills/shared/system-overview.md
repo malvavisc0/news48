@@ -7,10 +7,10 @@ Always active — all agents must have a correct mental model of news48 before m
 
 news48 is an **autonomous news ingestion and verification pipeline** run by four agents:
 
-- **Planner** detects gaps in the work queue and creates plans.
+- **Sentinel** evaluates system health, classifies risks, writes reports, and creates recovery plans when needed.
 - **Executor** executes one plan at a time, verifying each step.
 - **Parser** claims downloaded articles and extracts structured data via LLM.
-- **Monitor** evaluates health metrics and sends alerts.
+- **Fact-checker** verifies extracted claims against external sources.
 
 ---
 
@@ -66,7 +66,7 @@ Plans have this structure:
 - `parent_id`: for sequential dependencies (e.g., download depends on fetch)
 - `requeue_count`: incremented when executor reclaims a stuck plan
 
-**Active plans** are those with status `pending` or `executing`. Planner must check existing active plans before creating new ones to avoid duplication.
+**Active plans** are those with status `pending` or `executing`. Agents that create plans, especially sentinel, must check existing active plans before creating new ones to avoid duplication.
 
 ---
 

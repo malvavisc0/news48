@@ -13,7 +13,7 @@ flowchart TD
     QualityGate -->|No| Fail[/Emit PARSE_FAIL<br/>reason_code/]
     QualityGate -->|Yes| Rewrite[Rewrite content<br/>simple, faithful English]
     Rewrite --> Stage[Write to /tmp/parsed_ID.txt]
-    Stage --> Update[news48 articles update<br/>--content-file]
+    Stage --> Update[uv run news48 articles update<br/>--content-file]
     Update --> Success[/Emit PARSE_OK<br/>fields list/]
     Success --> Stop([Stop])
     Fail --> Stop
@@ -44,3 +44,5 @@ flowchart TD
   persisted result after the agent run.
 - Failure reporting is an intra-run branch triggered after source reading or
   quality evaluation, not something that must be known at prompt composition.
+- Successful persistence uses `uv run news48 articles update ... --json`.
+- Failure persistence uses `uv run news48 articles fail ... --error ... --json`.

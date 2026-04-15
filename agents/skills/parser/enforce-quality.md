@@ -23,7 +23,7 @@ Ensure all are true before writing content:
 ## Failure Handling
 If any quality gate or fidelity check fails:
 ```bash
-news48 articles fail ARTICLEID --error "Failed parser quality gate: <reason>" --json
+uv run news48 articles fail ARTICLEID --error "parse.<reason_code>: Failed parser quality gate: <reason>" --json
 ```
 
 Failure reason codes (must use codes from the canonical error taxonomy in `shared/error-taxonomy.md`):
