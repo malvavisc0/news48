@@ -1,5 +1,6 @@
 """Article CRUD, search, stats, and query operations."""
 
+import logging
 import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -53,9 +54,13 @@ def insert_articles(
         db.execute("PRAGMA journal_mode = WAL")
         should_close = True
 
+    _log = logging.getLogger(__name__)
+    skipped_no_url = 0
+    duplicates = 0
     try:
         for entry in entries:
             if not entry.get("url"):
+                skipped_no_url += 1
                 continue  # Skip entries without URLs
             try:
                 db.execute(
@@ -78,7 +83,15 @@ def insert_articles(
                 )
                 count += 1
             except sqlite3.IntegrityError:
-                pass  # URL already exists
+                duplicates += 1
+        if entries:
+            _log.info(
+                "insert_articles: %d entries, %d new, " "%d duplicates, %d no-url",
+                len(entries),
+                count,
+                duplicates,
+                skipped_no_url,
+            )
         # Only commit if we own the connection; caller commits otherwise
         if should_close:
             db.commit()

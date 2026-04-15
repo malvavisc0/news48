@@ -29,15 +29,16 @@ Your `agent_name` is `sentinel`.
 5. When creating plans, include specific CLI commands in each step.
 6. Follow the skills.
 
-## Automated Pipelines — Do NOT Plan These
+## Automated Pipelines — Do NOT Plan
 
-The orchestrator runs feed fetching (60s), article downloading (30s), and parse triggering as background loops. **Never create plans** for bulk download, fetch, parse, or "populate content" tasks.
+Downloading (30s) and parsing run as background loops. **Never plan** bulk download, parse, or "populate content" — self-healing once articles exist. **Never retry** download/parse failures — most are permanent.
 
-**Never create retry plans** for download/parse failures — most are permanent. Investigate root cause via feed health instead.
+## Feed Fetching — MUST Plan When Stale
+
+Fetching is the pipeline inflow; without it no articles enter the system. **Create a fetch plan** when `fetches.last_fetch_at` is >10 min old (WARNING) or >30 min (CRITICAL), or when `articles_today` is 0. Plan step: `news48 fetch --json`. Check `news48 plans list --json` first to avoid duplicates.
 
 ## Plans the Sentinel Should Create
 
-- **Seed plan** — if 0 feeds, create plan: `news48 seed seed.txt --json`
-- Feed health / feed curation plans (remove problematic feeds)
-- Cleanup / retention plans
-- Fact-check backlog plans
+- **Seed** — 0 feeds → `news48 seed seed.txt --json`
+- **Fetch** — stale feeds or `articles_today=0` → `news48 fetch --json`
+- Feed curation, cleanup, retention, fact-check backlog plans

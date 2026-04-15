@@ -9,7 +9,8 @@ Always active for monitor and planner agents — single source of truth for all 
 |--------|---------|----------|
 | Total feeds | — | 0 (empty DB, needs seeding) |
 | Database size | 100 MB | 500 MB |
-| Feed stale | 7 days | 14 days |
+| Feed stale (no recent fetch) | 10 minutes | 30 minutes |
+| Articles today | 0 | 0 for >1 hour |
 | Download failure rate | 10% | 25% |
 | Parse failure rate | 10% | 25% |
 | Malformed parsed articles | ≥ 1 | ≥ 10 |
@@ -25,6 +26,15 @@ The following backlogs are handled by the orchestrator's automated background lo
 - **Downloaded article backlog** (parse backlog) — the parser is triggered automatically after each download batch, and also runs on its own schedule.
 
 These metrics may still be reported in the sentinel report for visibility, but they should **never** result in fix plans.
+
+## Feed Fetching (MUST Create Plans)
+
+Feed fetching is the pipeline inflow — without it, no articles enter the system and all downstream backlogs stay at zero. The sentinel **must** create a fetch plan when:
+
+- **Feed stale threshold breached** — no successful fetch in the last 10 minutes (WARNING) or 30 minutes (CRITICAL).
+- **Articles today is 0** — no new articles have been inserted today, meaning feeds have not been fetched recently enough.
+
+The fetch plan should contain a single step: `news48 fetch --json`. Check `news48 plans list --json` first to avoid duplicating an existing pending fetch plan.
 
 ## Rate Denominator Semantics
 All failure rates in this table are computed as **lifetime rates** (since system initialization), not per-cycle or per-24h rates. The denominator includes all articles processed since the system started.

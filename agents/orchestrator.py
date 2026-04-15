@@ -853,12 +853,16 @@ class Orchestrator:
         while True:
             try:
                 result = await _download(limit=100, delay=0.0)
-                if result.get("total", 0) > 0:
+                total = result.get("total", 0)
+                if total > 0:
                     logger.info(
-                        "Download loop: %d downloaded, %d failed",
+                        "Download loop: %d downloaded, " "%d failed of %d",
                         result["downloaded"],
                         result["failed"],
+                        total,
                     )
+                else:
+                    logger.debug("Download loop: no articles to download")
             except Exception as exc:
                 logger.error("Download loop error: %s", exc)
 

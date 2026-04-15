@@ -1,6 +1,7 @@
 """Feed fetching and date utilities."""
 
 import asyncio
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -18,6 +19,8 @@ from database import (
     update_feed_metadata,
 )
 from models import FeedEntry, FeedResult, FeedSummary
+
+logger = logging.getLogger(__name__)
 
 
 def _strip_html_tags(text: str | None) -> str | None:
@@ -39,6 +42,7 @@ def is_article_from_last_48_hours(published_at: str | None) -> bool:
         False if the article is older or if published_at is None/empty.
     """
     if not published_at:
+        logger.debug("48h filter: rejected entry with no published_at")
         return False
 
     try:
@@ -46,6 +50,10 @@ def is_article_from_last_48_hours(published_at: str | None) -> bool:
         # We try common formats used in RSS/Atom feeds
         article_date = _parse_feed_date(published_at)
         if article_date is None:
+            logger.debug(
+                "48h filter: rejected entry, date unparseable: %s",
+                published_at,
+            )
             return False
 
         # Get current date in UTC
@@ -57,9 +65,20 @@ def is_article_from_last_48_hours(published_at: str | None) -> bool:
         # Article must be published within the last 48 hours.
         # Explicitly exclude future-dated timestamps (clock skew / publisher
         # error) to avoid processing articles that aren't yet available.
-        return timedelta(hours=0) <= age <= timedelta(hours=48)
+        result = timedelta(hours=0) <= age <= timedelta(hours=48)
+        if not result:
+            logger.debug(
+                "48h filter: rejected entry, age=%s, " "published_at=%s",
+                age,
+                published_at,
+            )
+        return result
     except Exception:
         # If we can't parse the date, skip the article
+        logger.debug(
+            "48h filter: rejected entry on exception, " "published_at=%s",
+            published_at,
+        )
         return False
 
 
@@ -171,11 +190,22 @@ async def get_fetch_summary(
                         favicon_url=extract_favicon(url),
                     )
                     # Filter: only articles from current month or later
+                    all_entries_count = len(result.entries)
                     articles = [
                         entry.model_dump()
                         for entry in result.entries
                         if is_article_from_last_48_hours(entry.published_at)
                     ]
+                    filtered_out = all_entries_count - len(articles)
+                    if filtered_out > 0 or all_entries_count > 0:
+                        logger.info(
+                            "Feed %s: %d entries, %d passed "
+                            "48h filter, %d filtered out",
+                            url,
+                            all_entries_count,
+                            len(articles),
+                            filtered_out,
+                        )
                     # Each function manages its own connection
                     insert_articles(
                         db_path,
