@@ -17,11 +17,11 @@ class TestAgentSchedule:
 
     def test_default_values(self):
         schedule = AgentSchedule(
-            agent_name="planner",
+            agent_name="sentinel",
             task_prompt="Check health",
             interval_minutes=15,
         )
-        assert schedule.agent_name == "planner"
+        assert schedule.agent_name == "sentinel"
         assert schedule.task_prompt == "Check health"
         assert schedule.interval_minutes == 15
         assert schedule.enabled is True
@@ -29,8 +29,8 @@ class TestAgentSchedule:
 
     def test_custom_values(self):
         schedule = AgentSchedule(
-            agent_name="planner",
-            task_prompt="Run planner",
+            agent_name="sentinel",
+            task_prompt="Run sentinel",
             interval_minutes=60,
             enabled=False,
             last_run="2024-01-01T00:00:00+00:00",
@@ -58,7 +58,7 @@ class TestOrchestrator:
 
     def test_should_run_when_never_run(self):
         schedule = AgentSchedule(
-            agent_name="planner",
+            agent_name="sentinel",
             task_prompt="Check",
             interval_minutes=15,
         )
@@ -67,7 +67,7 @@ class TestOrchestrator:
 
     def test_should_not_run_when_disabled(self):
         schedule = AgentSchedule(
-            agent_name="planner",
+            agent_name="sentinel",
             task_prompt="Check",
             interval_minutes=15,
             enabled=False,
@@ -79,7 +79,7 @@ class TestOrchestrator:
         from datetime import datetime, timedelta, timezone
 
         schedule = AgentSchedule(
-            agent_name="planner",
+            agent_name="sentinel",
             task_prompt="Check",
             interval_minutes=15,
             last_run=(datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(),
@@ -91,7 +91,7 @@ class TestOrchestrator:
         from datetime import datetime, timedelta, timezone
 
         schedule = AgentSchedule(
-            agent_name="planner",
+            agent_name="sentinel",
             task_prompt="Check",
             interval_minutes=15,
             last_run=(datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat(),

@@ -131,7 +131,7 @@ def test_skill_matches_condition_compound_key_or():
     skill = SkillDef(
         id="test",
         file="test.md",
-        agents=("monitor",),
+        agents=("sentinel",),
         always=False,
         condition_key="status:WARNING|CRITICAL",
     )

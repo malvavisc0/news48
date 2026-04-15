@@ -9,11 +9,12 @@ Tools are organized into the following modules:
 | Module | File |
 |--------|------|
 | [`bypass`](../agents/tools/bypass.py) | Webpage content fetching with anti-bot bypass |
-| [`email`](../agents/tools/email.py) | Email delivery for monitoring reports |
+| [`email`](../agents/tools/email.py) | Email delivery for sentinel reports |
 | [`files`](../agents/tools/files.py) | Unified file reading (content, metadata, chunks) |
 | [`lessons`](../agents/tools/lessons.py) | Lessons learned — persistent cross-run agent memory |
-| [`planner`](../agents/tools/planner.py) | Persistent execution plan management |
+| [`planner`](../agents/tools/planner.py) | Persistent execution plan management (tool module, not an agent) |
 | [`searxng`](../agents/tools/searxng.py) | Web search via SearXNG |
+| [`sentinel`](../agents/tools/sentinel.py) | Sentinel health report generation |
 | [`shell`](../agents/tools/shell.py) | Shell command execution |
 | [`system`](../agents/tools/system.py) | System and news48 environment information |
 | [`_helpers`](../agents/tools/_helpers.py) | Shared utility functions |
@@ -53,7 +54,7 @@ async def fetch_webpage_content(
 
 #### `send_email`
 
-Send an email report. Used by the Monitor agent for delivering alerts.
+Send an email report. Used by the Sentinel agent for delivering alerts when health issues are detected.
 
 **Signature:**
 ```python
@@ -122,7 +123,7 @@ def read_file(
 
 #### `create_plan`
 
-Create a new execution plan, persisted to `.plans/{id}.json`. Includes built-in duplicate detection and pipeline dependency inference.
+Create a new execution plan, persisted to `data/plans/{id}.json`. Includes built-in duplicate detection and pipeline dependency inference.
 
 **Signature:**
 ```python
@@ -314,7 +315,7 @@ def run_shell_command(
 
 #### `save_lesson`
 
-Save a lesson learned to the persistent `.lessons.md` file. Agents use this to persist knowledge across runs — correct command syntax, process insights, error recovery techniques, and feed-specific quirks. Lessons are automatically loaded into every agent's system prompt at startup.
+Save a lesson learned to the persistent `data/lessons.md` file. Agents use this to persist knowledge across runs — correct command syntax, process insights, error recovery techniques, and feed-specific quirks. Lessons are automatically loaded into every agent's system prompt at startup.
 
 **Signature:**
 ```python
@@ -330,12 +331,12 @@ def save_lesson(
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | `reason` | `str` | Required | Why this lesson is being saved |
-| `agent_name` | `str` | Required | Which agent learned this (`executor`, `parser`, `planner`, `monitor`) |
+| `agent_name` | `str` | Required | Which agent learned this (`executor`, `parser`, `sentinel`, `fact_checker`) |
 | `category` | `str` | Required | Category for grouping (e.g., "Command Syntax", "Process Insights") |
 | `lesson` | `str` | Required | The lesson text — should be specific and actionable |
 
 **Behavior:**
-- Creates `.lessons.md` with header if file doesn't exist
+- Creates `data/lessons.md` with header if file doesn't exist
 - Creates agent section and category subsection if they don't exist
 - Appends the lesson as a bullet point under the correct section
 - Idempotent: skips if the exact lesson text already exists
@@ -345,7 +346,7 @@ def save_lesson(
 - `result`: Confirmation message with agent/category and lesson preview
 - `error`: Empty on success, or error description
 
-**Internal helper:** `_load_lessons()` reads the full `.lessons.md` content and is called by `compose_agent_instructions()` to inject lessons into every agent's system prompt.
+**Internal helper:** `_load_lessons()` reads the full `data/lessons.md` content and is called by `compose_agent_instructions()` to inject lessons into every agent's system prompt.
 
 ---
 
@@ -402,16 +403,16 @@ Each active runtime agent uses a specific subset of tools:
 
 | Agent | Tools | Purpose |
 |-------|-------|---------|
-| **Planner** | `run_shell_command`, `read_file`, `get_system_info`, `create_plan`, `update_plan`, `list_plans`, `save_lesson` | Gather evidence, detect gaps, create minimal executable plans, avoid duplicate work, persist learned insights |
+| **Sentinel** | `run_shell_command`, `read_file`, `get_system_info`, `send_email`, `write_sentinel_report`, `save_lesson` | Gather metrics, classify alerts, deliver reports when email is configured, write health reports |
 | **Executor** | `claim_plan`, `update_plan`, `run_shell_command`, `read_file`, `get_system_info`, `perform_web_search`, `fetch_webpage_content`, `save_lesson` | Claim and execute one pending plan, verify success conditions, perform fact-check evidence lookups, save command syntax and process lessons |
-| **Monitor** | `run_shell_command`, `read_file`, `get_system_info`, `send_email`, `save_lesson` | Gather metrics, classify alerts, deliver reports when email is configured, persist threshold and timing observations |
 | **Parser** | `run_shell_command`, `read_file`, `save_lesson` | Parse one claimed article at a time, update the article record, release the processing claim, and save content handling lessons |
+| **Fact-checker** | `run_shell_command`, `read_file`, `perform_web_search`, `fetch_webpage_content`, `save_lesson` | Claim fact-unchecked articles, search for evidence, record verdicts |
 
 ### Design Notes
 
-- **Planner is plan-authoring only**: it never claims or executes plans; it focuses on evidence-driven plan creation and sequencing.
+- **Sentinel is the health and monitoring agent**: it observes system health via CLI metrics, evaluates thresholds, and writes structured reports to `data/monitor/latest-report.json`. It sends email only when configuration is available and the current status requires it.
 - **Executor is execution-only**: it does not create plans directly; it claims pending plans and drives steps to completion or failure with verification evidence.
-- **Monitor is read-only for system state**: it does not create or update plans, and sends email only when configuration is available and the current status requires it.
-- **Fact-checking is executed by Executor**: fact-check work is produced by Planner plans and executed through Executor tool access to search and page fetch tools.
 - **Parser is autonomous and DB-claim based**: it is scheduler-driven, does not use plan files, and prevents duplicate parse work by claiming articles in the database before parsing.
+- **Fact-checker is a dedicated scheduled agent**: it runs on its own schedule and claims fact-unchecked articles directly from the database, independent of the plan queue.
+- **The `planner` tool module is legitimate**: [`agents/tools/planner.py`](../agents/tools/planner.py) manages execution plans (create, update, claim, list). It is a tool module used by the Executor agent, not a retired planner agent role.
 - **All agents learn**: every agent has access to `save_lesson` and all accumulated lessons are injected into every agent's system prompt at startup, enabling cross-agent knowledge sharing.

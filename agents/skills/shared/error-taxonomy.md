@@ -27,6 +27,8 @@ Error codes follow the pattern `category.detail` — a category prefix, a dot, a
 | `parse.out_of_bounds` | Out of bounds | Title, summary, or content length outside limits |
 | `parse.invalid_field` | Invalid field | Country code, category, or sentiment normalization failed |
 | `parse.fidelity` | Fidelity violation | Invented facts or missing core facts |
+| `parse.html_in_output` | HTML in output | HTML tags found in title, summary, or content |
+| `parse.clickbait_title` | Clickbait title | Title is vague, deictic, or clickbait without a descriptive subject |
 | `sys` | System | Infrastructure or tool failures |
 | `sys.db` | Database error | SQLite write contention, connection failure |
 | `sys.plan` | Plan error | Plan claim failure, stale plan, step transition error |

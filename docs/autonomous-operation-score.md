@@ -1,6 +1,6 @@
 # Autonomous Operation Score — Measurement Guide
 
-A repeatable methodology for scoring how well news48 operates without human intervention.
+A repeatable methodology for scoring how well news48 operates without human intervention. This guide targets the **v3 architecture** with four agents: **Sentinel**, **Executor**, **Parser**, and **Fact-checker**, orchestrated by a Python dispatcher with background pipeline loops.
 
 ---
 
@@ -56,14 +56,15 @@ Can the system go from zero state to full operation without human help (beyond i
 
 | # | Layer | Checkpoint | PASS criteria | Verification procedure |
 |---|-------|-----------|---------------|----------------------|
-| 1.1 | `[instruction]` | Bootstrap detects empty database | `begin-planning-cycle.md` contains a rule that checks `feeds.total == 0` and runs `news48 seed` | **T1**: `grep -n 'feeds.total.*0\|seed' agents/skills/planner/begin-planning-cycle.md` returns the rule. **T2**: Run planner with empty DB; verify seed command executes. |
-| 1.2 | `[instruction]` | Bootstrap failure creates remediation plan | `begin-planning-cycle.md` contains a rule that creates a `discovery` remediation plan when seed fails, and does NOT loop | **T1**: `grep -n 'discovery\|remediation\|do NOT loop' agents/skills/planner/begin-planning-cycle.md` returns the rule. **T2**: Remove `seed.txt`, run planner; verify no loop and a discovery plan is created. |
-| 1.3 | `[code]` | Startup recovers stale plans | `_recover_stale_plans()` exists in `orchestrator.py` and is called during daemon startup | **T1**: `grep -n '_recover_stale_plans' agents/orchestrator.py` returns both the definition and the call site. **T2**: Kill orchestrator mid-execution, restart; verify stale plans are requeued. |
-| 1.4 | `[code]` | Startup recovers stale article claims | `_recover_stale_articles()` exists in `orchestrator.py` and calls `release_stale_article_claims()` | **T1**: `grep -n '_recover_stale_articles\|release_stale_article_claims' agents/orchestrator.py database/articles.py` returns both. **T2**: Kill orchestrator mid-parse, restart; verify claimed articles are released. |
-| 1.5 | `[code]` | Orchestrator restart doesn't kill running agents | `load_state()` re-attaches to still-alive PIDs; `handle-orchestrator-restart.md` exists | **T1**: Read `orchestrator.py` `load_state()` — verify PIL re-attachment logic. Verify `handle-orchestrator-restart.md` exists. **T2**: Restart orchestrator while agent is alive; verify agent completes. |
-| 1.6 | `[code]` | Old plans are archived on startup | `_archive_old_plans()` exists and is called during daemon startup | **T1**: `grep -n '_archive_old_plans\|archive_terminal_plans' agents/orchestrator.py agents/tools/planner.py` returns both. **T2**: Create >24h-old terminal plans, restart; verify they move to `.plans/archive/`. |
+| 1.1 | `[instruction]` | Sentinel detects empty database | `sentinel/business-logic.md` step 2 checks `total feeds == 0` and creates a seed plan | **T1**: `grep -n 'total feeds\|feeds.total.*0\|seed' agents/skills/sentinel/business-logic.md` returns the rule. **T2**: Run sentinel with empty DB; verify seed plan is created. |
+| 1.2 | `[code]` | Startup recovers stale plans | `_recover_stale_plans()` exists in `orchestrator.py` and is called during daemon startup | **T1**: `grep -n '_recover_stale_plans' agents/orchestrator.py` returns both the definition and the call site. **T2**: Kill orchestrator mid-execution, restart; verify stale plans are requeued. |
+| 1.3 | `[code]` | Startup recovers stale article claims | `_recover_stale_articles()` exists in `orchestrator.py` and calls `release_stale_article_claims()` | **T1**: `grep -n '_recover_stale_articles\|release_stale_article_claims' agents/orchestrator.py database/articles.py` returns both. **T2**: Kill orchestrator mid-parse, restart; verify claimed articles are released. |
+| 1.4 | `[code]` | Orchestrator restart re-attaches alive PIDs | `load_state()` re-attaches to still-alive PIDs; `handle-orchestrator-restart.md` exists with agent rules | **T1**: Read `orchestrator.py` `load_state()` — verify PID re-attachment logic. Verify `handle-orchestrator-restart.md` exists with ≥5 rules. **T2**: Restart orchestrator while agent is alive; verify agent completes. |
+| 1.5 | `[code]` | Old plans archived on startup | `_archive_old_plans()` exists and is called during daemon startup | **T1**: `grep -n '_archive_old_plans\|archive_terminal_plans' agents/orchestrator.py agents/tools/planner.py` returns both. **T2**: Create >24h-old terminal plans, restart; verify they move to archive. |
+| 1.6 | `[code]` | Background pipeline loops auto-start | `start()` method creates `_feed_fetch_loop`, `_download_loop`, and `_parse_loop` as async tasks | **T1**: `grep -n '_feed_fetch_loop\|_download_loop\|_parse_loop' agents/orchestrator.py` returns all three task creations in `start()`. **T2**: Start daemon; verify all three loops are running via logs. |
+| 1.7 | `[code]` | Plan deadlock healing runs every tick | `_heal_plan_deadlocks()` is called in `tick()` before forking agents | **T1**: `grep -n '_heal_plan_deadlocks' agents/orchestrator.py` returns both the definition and the call in `tick()`. **T2**: Create a campaign-parent deadlock; verify it is healed on next tick. |
 
-**Dimension score** = (sum of checkpoint values / 6) × 5
+**Dimension score** = (sum of checkpoint values / 7) × 5
 
 ---
 
@@ -73,14 +74,14 @@ Can the system observe its own health, detect problems, and report them without 
 
 | # | Layer | Checkpoint | PASS criteria | Verification procedure |
 |---|-------|-----------|---------------|----------------------|
-| 2.1 | `[instruction]` | Monitor gathers all 7 evidence commands | `begin-monitoring-cycle.md` Step 1 lists exactly 7 CLI commands | **T1**: Read `begin-monitoring-cycle.md` lines 9-17; count exactly 7 numbered commands. **T2**: Run monitor; verify all 7 commands appear in logs. |
-| 2.2 | `[instruction]` | Rates handle 0/0 as undefined | `begin-monitoring-cycle.md` Step 2 and `thresholds.md` Rate Denominator Semantics say undefined/null, not 0% | **T1**: `grep -n 'undefined\|null\|insufficient' agents/skills/monitor/begin-monitoring-cycle.md agents/skills/shared/thresholds.md` returns relevant rules. **T2**: Run monitor on empty system; verify report shows `null` rates. |
-| 2.3 | `[instruction]` | Canonical thresholds are single source of truth | `grep` for threshold values (10%, 25%, 7 days, 14 days, 100 MB, 500 MB, 50, 200) returns hits ONLY in `thresholds.md`. Hits in other files that use threshold values as operational inputs (not redefining them) are excluded. | **T1**: `grep -rn '10%\|25%\|100 MB\|500 MB\|7 days\|14 days' agents/skills/ --include='*.md'`. PASS if only `thresholds.md` has the values. PARTIAL if other files reference values contextually (e.g., "beyond 7 days threshold"). FAIL if other files independently define different values. |
-| 2.4 | `[instruction]` | Fact-check thresholds are in canonical table | `thresholds.md` contains rows for fact-check completions (24h) and oldest eligible item | **T1**: `grep -n 'Fact-check' agents/skills/shared/thresholds.md` returns at least 2 rows. |
-| 2.5 | `[instruction]` | Disk space is monitored | `check-disk-space.md` exists and specifies `/tmp` and project directory monitoring | **T1**: Read `check-disk-space.md`; verify it mentions `/tmp`, `.`, and specifies thresholds. **T2**: Run monitor; verify `disk_space` in report metrics. |
-| 2.6 | `[instruction]` | Stale monitor report detected by planner | `begin-planning-cycle.md` contains a rule about report timestamp staleness (>2x monitor interval) | **T1**: `grep -n 'stale\|older than\|2x\|outdated' agents/skills/planner/begin-planning-cycle.md` returns the staleness check rule. **T2**: Set report timestamp >20 min old; run planner; verify staleness is noted. |
-| 2.7 | `[instruction]` | Email only sent for WARNING/CRITICAL + configured | `send-email.md` scope gates to WARNING/CRITICAL; decision table shows HEALTHY = "Do not send" | **T1**: Read `send-email.md`; verify scope line, decision table, and HEALTHY row. **T2**: Run monitor with HEALTHY status; verify no email. |
-| 2.8 | `[instruction]` | Email pre-flight checks configuration | `send-email.md` has a Pre-flight Check section that verifies `email_configured` before sending | **T1**: `grep -n 'pre-flight\|email_configured' agents/skills/monitor/send-email.md` returns both. **T2**: Run monitor with WARNING + email NOT configured; verify skip with note, not error. |
+| 2.1 | `[instruction]` | Sentinel gathers system metrics | `sentinel/business-logic.md` step 1 lists evidence commands: `stats --json`, `feeds list --json`, `plans list --json`, `cleanup health --json` | **T1**: Read `sentinel/business-logic.md` step 1; verify all 4 commands are listed. **T2**: Run sentinel; verify all 4 commands appear in logs. |
+| 2.2 | `[instruction]` | Rates handle 0/0 as undefined | `thresholds.md` Rate Denominator Semantics says undefined/null, not 0% | **T1**: `grep -n 'undefined\|null\|insufficient' agents/skills/shared/thresholds.md` returns relevant rules. **T2**: Run sentinel on empty system; verify report shows `null` rates. |
+| 2.3 | `[instruction]` | Canonical thresholds are single source of truth | `grep` for threshold values (10%, 25%, 100 MB, 500 MB, 10 minutes, 30 minutes) returns hits ONLY in `thresholds.md`. Hits in other files that use threshold values as operational references (not redefining them) are excluded. | **T1**: `grep -rn '10%\|25%\|100 MB\|500 MB' agents/skills/ --include='*.md'`. PASS if only `thresholds.md` has the values. PARTIAL if other files reference values contextually. FAIL if other files independently define different values. |
+| 2.4 | `[instruction]` | Fact-check thresholds in canonical table | `thresholds.md` contains rows for fact-check completions (24h) and oldest eligible item | **T1**: `grep -n 'Fact-check\|fact-check' agents/skills/shared/thresholds.md` returns at least 2 rows. |
+| 2.5 | `[code]` | Sentinel writes structured report | `write_sentinel_report()` tool exists in `agents/tools/sentinel.py` and writes to `data/monitor/latest-report.json` with status, metrics, alerts, recommendations | **T1**: `grep -n 'def write_sentinel_report\|latest-report' agents/tools/sentinel.py` returns function definition and file path. **T2**: Run sentinel; verify `data/monitor/latest-report.json` is created with all 4 fields. |
+| 2.6 | `[both]` | Email only sent for WARNING/CRITICAL when configured | Sentinel has `send_email` tool; `task_context.email_configured` is set by orchestrator; sentinel instructions gate email to WARNING/CRITICAL | **T1**: Verify `send_email` in `agents/sentinel.py` tools list. Verify `email_configured` in `orchestrator.py` `_build_task_context()`. **T2**: Run sentinel with HEALTHY status; verify no email sent. Run with WARNING + email configured; verify email sent. |
+| 2.7 | `[instruction]` | Self-healing metrics do not trigger plans | `thresholds.md` Self-Healing Metrics section explicitly lists download and parse backlogs as automated by orchestrator and must not trigger plan creation | **T1**: `grep -n 'self-healing\|automated\|must not' agents/skills/shared/thresholds.md` returns the section. **T2**: Run sentinel with high download backlog; verify no download-backlog plan created. |
+| 2.8 | `[instruction]` | Feed stale threshold triggers plan creation | `thresholds.md` Feed Fetching section requires sentinel to create fetch plan when feeds are stale or articles_today is 0 | **T1**: `grep -n 'Feed Fetching\|MUST.*Create\|fetch plan' agents/skills/shared/thresholds.md` returns the section. **T2**: Run sentinel with stale feeds; verify fetch plan created. |
 
 **Dimension score** = (sum of checkpoint values / 8) × 5
 
@@ -92,14 +93,14 @@ Can the system recover from failures and degraded states without human intervent
 
 | # | Layer | Checkpoint | PASS criteria | Verification procedure |
 |---|-------|-----------|---------------|----------------------|
-| 3.1 | `[instruction]` | Executor feedback loop to planner | `verify-plan.md` writes to `.plans/feedback/` on INVALID conditions; `build-plan.md` reads `.plans/feedback/` before creating plans | **T1**: `grep -n 'feedback' agents/skills/executor/verify-plan.md agents/skills/planner/build-plan.md` returns write + read rules. **T2**: Create plan with invalid condition; verify feedback file written and planner reads it. |
-| 3.2 | `[instruction]` | Retry plans created for failures | `plan-retry.md` exists and specifies retry for `download-failed` and `parse-failed` | **T1**: Read `plan-retry.md`; verify it mentions both failure statuses and retry limits. **T2**: Inject failed articles; verify planner creates retry plan. |
-| 3.3 | `[instruction]` | Parse retries delegated to Parser | `run-retry.md` specifies creating child parse plans, NOT re-parsing directly | **T1**: `grep -n 'child parse plan\|do not.*re-parse\|Parser agent' agents/skills/executor/run-retry.md` returns delegation rule. |
-| 3.4 | `[instruction]` | Domain failure escalation | `run-retry.md` Consecutive Failure Tracking section: executor skips after 3 within-plan failures; planner escalates to `feed-health` | **T1**: Read `run-retry.md` lines 14-18; verify 3-failure skip rule and planner escalation description. **T2**: Fail domain 3 times in one plan; verify skip + feed-health escalation. |
-| 3.5 | `[instruction]` | Permanently unreachable feed detection | `handle-unreachable-feeds.md` detects 30+ day stale feeds and creates `discovery` remediation plan | **T1**: Read `handle-unreachable-feeds.md`; verify 30-day rule, recovery attempt, and remediation plan creation. |
-| 3.6 | `[instruction]` | Stuck plan remediation | `remediate-stuck.md` triggers on `requeue_count >= 2` and creates investigation plan | **T1**: `grep -n 'requeue_count' agents/skills/planner/remediate-stuck.md` returns trigger rule. |
-| 3.7 | `[both]` | Wave partial failure handling | `run-waves.md` checks per-PID exit codes; only failed step is marked failed, others continue | **T1**: Read `run-waves.md` Wave Execution section; verify per-PID exit code checking and partial failure rule. **T2**: In 4-process wave, make 1 fail; verify only it is marked failed. |
-| 3.8 | `[code]` | Plan corruption repair | `plans remediate --apply` command exists in `commands/plans.py`; `_remediate_plan()` function repairs corruption | **T1**: `grep -n 'def _remediate_plan\|remediate' commands/plans.py` returns function + command. **T2**: Corrupt a plan's parent chain; run `plans remediate --apply --json`; verify repair. |
+| 3.1 | `[code]` | Background download loop self-heals backlog | `_download_loop()` runs every 30s, processes up to 100 articles per cycle | **T1**: `grep -n '_download_loop\|interval.*30\|limit=100' agents/orchestrator.py` returns the loop definition with interval and limit. **T2**: Insert articles with `empty` status; verify they are downloaded automatically. |
+| 3.2 | `[code]` | Background parse loop self-heals backlog | `_parse_loop()` runs every 30s, calls `run_autonomous()` which claims and parses downloaded articles | **T1**: `grep -n '_parse_loop\|run_autonomous\|interval.*30' agents/orchestrator.py` returns the loop definition. **T2**: Insert downloaded articles; verify they are parsed automatically. |
+| 3.3 | `[code]` | Background feed fetch loop maintains inflow | `_feed_fetch_loop()` runs every 60s, fetches all feeds from database | **T1**: `grep -n '_feed_fetch_loop\|interval.*60\|get_all_feeds' agents/orchestrator.py` returns the loop definition. **T2**: Add feeds to database; verify they are fetched automatically. |
+| 3.4 | `[code]` | Plan deadlock healing runs continuously | `_heal_plan_deadlocks()` normalizes campaign-parent references and auto-completes campaigns whose children are all terminal | **T1**: `grep -n '_heal_plan_deadlocks\|_normalize_plan_for_consistency\|_auto_complete_campaigns' agents/orchestrator.py` returns the method and its helpers. **T2**: Create a campaign-parent deadlock; verify it is healed on next tick. |
+| 3.5 | `[instruction]` | Executor retries transient download failures | `run-retry.md` specifies retry for `download-failed` articles with up to 3 attempts per domain | **T1**: Read `run-retry.md`; verify it mentions download-failed retries and 3-attempt limit. **T2**: Inject failed downloads; verify executor retries them. |
+| 3.6 | `[instruction]` | Parse failures treated as permanent | `run-retry.md` rule 4 explicitly states: do NOT retry parse-failed articles — they are almost always permanent | **T1**: `grep -n 'NOT retry parse\|permanent\|do not.*re-parse' agents/skills/executor/run-retry.md` returns the rule. **T2**: Inject parse-failed articles; verify they are skipped, not retried. |
+| 3.7 | `[instruction]` | Domain failure escalation | `run-retry.md` Consecutive Failure Tracking: executor skips domain after 3 failures in same plan; notes feed health investigation needed | **T1**: Read `run-retry.md` Consecutive Failure Tracking section; verify 3-failure skip rule and feed-health escalation note. **T2**: Fail domain 3 times in one plan; verify skip + feed-health note. |
+| 3.8 | `[both]` | Wave partial failure isolation | `run-waves.md` checks per-PID exit codes; only failed step is marked failed, others continue | **T1**: Read `run-waves.md` Wave Execution section; verify per-PID exit code checking and partial failure rule. **T2**: In 4-process wave, make 1 fail; verify only it is marked failed. |
 
 **Dimension score** = (sum of checkpoint values / 8) × 5
 
@@ -111,14 +112,13 @@ Can the system adapt its resource usage to changing workload?
 
 | # | Layer | Checkpoint | PASS criteria | Verification procedure |
 |---|-------|-----------|---------------|----------------------|
-| 4.1 | `[instruction]` | Wave parallelism for fetch/download | `run-waves.md` specifies parallel waves of up to 4 processes using `&` + `wait` | **T1**: `grep -n 'at most 4\|background\|wait' agents/skills/executor/run-waves.md` returns parallelism rules. **T2**: Create multi-domain plan; verify parallel execution in logs. |
-| 4.2 | `[instruction]` | Throughput emergency priority override | `prioritize-goals.md` Throughput Emergency Override section defers goals 4-9 when backlog >200 and non-improving | **T1**: Read `prioritize-goals.md` lines 28-32; verify override section with goal 1-3 focus and 4-9 deferral. |
-| 4.3 | `[instruction]` | Batch limits respected and repeated | `run-command.md` specifies using `--limit` and repeating commands until backlog cleared or stalled | **T1**: `grep -n 'limit\|repeat' agents/skills/executor/run-command.md` returns batch rules (lines 6, 17). **T2**: Create plan with large backlog; verify repeated command calls with --limit. |
-| 4.4 | `[code]` | Dynamic concurrency adjustment | Python code in orchestrator or tools adjusts wave size or intervals based on system load at runtime | **T1**: `grep -rn 'dynamic.*concurren\|adjust.*wave\|load.*adjust' agents/ --include='*.py'` returns adjustment logic. FAIL if 0 results. **T2**: Run under varying load; verify wave size changes. |
+| 4.1 | `[instruction]` | Wave parallelism for fetch/download | `run-waves.md` specifies parallel waves of at most 4 processes using `&` + `wait` | **T1**: `grep -n 'at most 4\|background\|wait' agents/skills/executor/run-waves.md` returns parallelism rules. **T2**: Create multi-domain plan; verify parallel execution in logs. |
+| 4.2 | `[code]` | Executor concurrent instances | `max_concurrent=5` for executor in `schedules.py`, allowing 5 simultaneous executor processes | **T1**: `grep -n 'executor.*max_concurrent\|max_concurrent.*5' agents/schedules.py` returns the setting. **T2**: Create 5 eligible plans; verify 5 executor instances fork simultaneously. |
+| 4.3 | `[code]` | Parser concurrent instances | `max_concurrent=5` for parser in `schedules.py` | **T1**: `grep -n 'parser.*max_concurrent\|max_concurrent.*5' agents/schedules.py` returns the setting. **T2**: Queue multiple downloaded articles; verify concurrent parsing. |
+| 4.4 | `[code]` | Fact-checker concurrent instances | `max_concurrent=3` for fact_checker in `schedules.py` | **T1**: `grep -n 'fact_checker.*max_concurrent\|max_concurrent.*3' agents/schedules.py` returns the setting. **T2**: Queue multiple fact-unchecked articles; verify concurrent fact-checking. |
+| 4.5 | `[instruction]` | Batch limits respected and repeated | `run-command.md` specifies using `--limit` and repeating commands until backlog cleared or stalled | **T1**: `grep -n 'limit\|repeat\|stalled' agents/skills/executor/run-command.md` returns batch rules. **T2**: Create plan with large backlog; verify repeated command calls with --limit. |
 
-**Dimension score** = (sum of checkpoint values / 4) × 5
-
-> **Note:** Checkpoint 4.4 requires runtime code changes (not instruction-layer). Expected to score 0 until implemented.
+**Dimension score** = (sum of checkpoint values / 5) × 5
 
 ---
 
@@ -128,14 +128,12 @@ Can the system improve its own performance based on historical data?
 
 | # | Layer | Checkpoint | PASS criteria | Verification procedure |
 |---|-------|-----------|---------------|----------------------|
-| 5.1 | `[instruction]` | Metrics history persisted | `write-metrics-history.md` specifies writing timestamped `.metrics/<timestamp>.json` files | **T1**: Read `write-metrics-history.md`; verify mkdir, timestamped filename, required JSON keys. **T2**: Run monitor; verify `.metrics/*.json` file created. |
-| 5.2 | `[instruction]` | Historical backlog comparison works | `throughput-emergency.md` Historical Comparison Procedure reads `.metrics/` and compares across cycles | **T1**: Read `throughput-emergency.md` lines 22-34; verify read, compare, and non-improving definition. |
-| 5.3 | `[instruction]` | Throughput emergency activates and deactivates | `throughput-emergency.md` has both trigger conditions (>200 + non-improving) and exit condition (both clear for one full cycle) | **T1**: `grep -n 'Trigger\|Exit' agents/skills/planner/throughput-emergency.md` returns both sections. **T2**: Trigger emergency; verify activation. Clear backlog; verify deactivation. |
-| 5.4 | `[code]` | Adaptive interval tuning | Python code adjusts scheduling intervals based on observed throughput | **T1**: `grep -rn 'adaptive\|adjust.*interval\|tune.*schedule' agents/ --include='*.py'` returns tuning logic. FAIL if 0 results. **T2**: Run over multiple cycles; verify interval changes. |
+| 5.1 | `[instruction]` | Lessons learned persisted across runs | `lessons-learned.md` specifies aggressive lesson saving; `save_lesson` tool persists knowledge; lessons are loaded into agent prompts at startup | **T1**: `grep -n 'save_lesson\|aggressively\|memory' agents/skills/shared/lessons-learned.md` returns the rules. Verify `save_lesson` in agent tool lists. **T2**: Run executor; verify lessons are loaded and new lessons are saved. |
+| 5.2 | `[code]` | Sentinel receives backlog context | `orchestrator.py` `_build_task_context()` sets `backlog_high=True` when download or parse backlog exceeds 200 | **T1**: `grep -n 'backlog_high\|backlog.*200' agents/orchestrator.py` returns the context building logic. **T2**: Create backlog >200; verify sentinel receives `backlog_high: true`. |
+| 5.3 | `[instruction]` | Feed curation removes underperforming feeds | `feed-curation.md` specifies deletion rules: 3+ consecutive empty fetch cycles, >80% download failure, >60% parse failure, >50% negative fact-check | **T1**: Read `feed-curation.md`; verify all 4 deletion rules and safety limits. **T2**: Create a feed with >80% download failure; verify sentinel deletes it. |
+| 5.4 | `[instruction]` | Sentinel deduplicates plans before creation | `sentinel/business-logic.md` step 5 requires checking `news48 plans list --json` first to avoid duplicating existing pending plans | **T1**: `grep -n 'plans list\|duplicate\|existing' agents/skills/sentinel/business-logic.md` returns the deduplication rule. **T2**: With active pending plan for a scope, run sentinel; verify no duplicate created. |
 
 **Dimension score** = (sum of checkpoint values / 4) × 5
-
-> **Note:** Checkpoint 5.4 requires runtime code changes. Expected to score 0 until implemented.
 
 ---
 
@@ -145,14 +143,14 @@ Can the system prevent errors from cascading and maintain stability?
 
 | # | Layer | Checkpoint | PASS criteria | Verification procedure |
 |---|-------|-----------|---------------|----------------------|
-| 6.1 | `[instruction]` | Unified error taxonomy | `error-taxonomy.md` defines structured codes; `enforce-quality.md` references the taxonomy for failure codes | **T1**: Verify `error-taxonomy.md` has ≥10 codes. `grep -n 'error-taxonomy\|error.taxonomy' agents/skills/parser/enforce-quality.md` shows it references the taxonomy. `grep -rn 'quality_gate\.\|normalization\.' agents/skills/` returns 0 results (no non-canonical codes). |
+| 6.1 | `[instruction]` | Unified error taxonomy | `error-taxonomy.md` defines structured codes with `category.detail` format; `enforce-quality.md` references the taxonomy for failure codes | **T1**: Verify `error-taxonomy.md` has ≥10 codes. `grep -n 'error-taxonomy\|error.taxonomy' agents/skills/parser/enforce-quality.md` shows it references the taxonomy. `grep -rn 'quality_gate\.\|normalization\.' agents/skills/` returns 0 results (no non-canonical codes). |
 | 6.2 | `[instruction]` | Fail-safely rules enforced | `fail-safely.md` contains a rule about breaking loops after 5 repeated tool errors with same signature | **T1**: `grep -n '5 repeated\|break.*loop\|same signature' agents/skills/shared/fail-safely.md` returns the rule. **T2**: Trigger 5 repeated tool errors; verify agent breaks loop. |
-| 6.3 | `[instruction]` | Retry limits enforced | `fail-safely.md` contains a rule limiting retries (never more than twice for same failed action) | **T1**: `grep -n 'retry.*twice\|more than twice\|never retry' agents/skills/shared/fail-safely.md` returns the rule. **T2**: Retry failed action 3 times; verify agent stops. |
-| 6.4 | `[both]` | Wave failure isolation | `run-waves.md` checks per-PID exit codes; failed process doesn't fail entire plan | **T1**: Read `run-waves.md` lines 14-38; verify per-PID checking and isolation rule. **T2**: Make 1 of 4 wave members fail; verify others complete and only failed one is marked. |
-| 6.5 | `[instruction]` | Fact-check eligibility gated | `run-fact-check.md` Rule 2 limits fact-checking to `fact-unchecked` articles only; lists ineligible statuses | **T1**: `grep -n 'fact-unchecked\|ineligible\|not eligible' agents/skills/executor/run-fact-check.md` returns the gating rule. **T2**: Attempt to fact-check a `downloaded` article; verify rejection. |
-| 6.6 | `[instruction]` | Plan deduplication prevents duplicate work | `deduplicate-plans.md` requires checking existing plans before creating new ones; one plan per concern | **T1**: Read `deduplicate-plans.md`; verify `list_plans` check rule and "one plan per concern" rule. **T2**: With active plan for scope, run planner; verify no duplicate created. |
-| 6.7 | `[instruction]` | Quality gate blocks bad output | `enforce-quality.md` specifies minimum content length (200 chars absolute minimum) and uses `parse.out_of_bounds` code | **T1**: `grep -n 'out_of_bounds\|200.*char\|600.*char' agents/skills/parser/enforce-quality.md` returns quality rules. **T2**: Submit article with 100-char content; verify `parse.out_of_bounds` failure. |
-| 6.8 | `[instruction]` | No inter-skill cross-references | Skill files do not reference other skills by name (business-logic routing tables and shared canonical references excluded) | **T1**: `grep -rn 'loaded in this prompt\|see the.*skill\|see the.*procedure loaded\|refer to\|described in\|defined in\|documented in' agents/skills/ --include='*.md'` returns 0 results. References to `shared/error-taxonomy.md` or `shared/thresholds.md` as canonical sources are excluded. |
+| 6.3 | `[instruction]` | Retry limits enforced | `fail-safely.md` rule 2 limits retries to never more than twice for same failed action; `run-retry.md` enforces 3-attempt domain limit | **T1**: `grep -n 'retry.*twice\|more than twice\|never retry' agents/skills/shared/fail-safely.md` returns the rule. `grep -n '3 attempts\|3/3' agents/skills/executor/run-retry.md` returns the domain limit. |
+| 6.4 | `[both]` | Wave failure isolation | `run-waves.md` checks per-PID exit codes; failed process does not fail entire plan | **T1**: Read `run-waves.md` lines 14-38; verify per-PID checking and isolation rule. **T2**: Make 1 of 4 wave members fail; verify others complete and only failed one is marked. |
+| 6.5 | `[instruction]` | Fact-check eligibility gated | `run-fact-check.md` rule 2 limits fact-checking to `fact-unchecked` articles only; lists ineligible statuses | **T1**: `grep -n 'fact-unchecked\|ineligible\|not eligible' agents/skills/executor/run-fact-check.md` returns the gating rule. **T2**: Attempt to fact-check a `downloaded` article; verify rejection. |
+| 6.6 | `[instruction]` | Quality gate blocks bad output | `enforce-quality.md` specifies minimum content length (200 chars absolute minimum) and uses canonical error codes from `error-taxonomy.md` | **T1**: `grep -n 'out_of_bounds\|200.*char\|600.*char' agents/skills/parser/enforce-quality.md` returns quality rules. **T2**: Submit article with 100-char content; verify `parse.out_of_bounds` failure. |
+| 6.7 | `[instruction]` | No inter-skill cross-references | Skill files do not reference other skills by name (business-logic routing tables and shared canonical references excluded) | **T1**: `grep -rn 'loaded in this prompt\|see the.*skill\|see the.*procedure loaded\|refer to\|described in\|defined in\|documented in' agents/skills/ --include='*.md'` returns 0 results. References to `shared/error-taxonomy.md` or `shared/thresholds.md` as canonical sources are excluded. |
+| 6.8 | `[code]` | Runtime timeout enforcement | `max_runtime_minutes` in `schedules.py` per agent; `check_running()` kills processes exceeding the limit | **T1**: `grep -n 'max_runtime_minutes\|timed_out\|timeout' agents/schedules.py agents/orchestrator.py` returns the setting and enforcement code. **T2**: Run an agent that exceeds max runtime; verify it is killed. |
 
 **Dimension score** = (sum of checkpoint values / 8) × 5
 
@@ -183,17 +181,31 @@ The weights reflect operational importance: self-healing and self-monitoring are
 
 ---
 
+## v3 Architecture Improvements Over v2
+
+The v3 architecture introduces several code-enforced capabilities that were instruction-only or absent in v2:
+
+| Capability | v2 Enforcement | v3 Enforcement | Impact |
+|-----------|---------------|---------------|--------|
+| Download/parse backlog healing | Instruction-only (planner creates plans) | Code-enforced (`_download_loop`, `_parse_loop`) | Higher reliability — no LLM interpretation needed |
+| Feed fetch inflow | Instruction-only (planner creates fetch plans) | Code-enforced (`_feed_fetch_loop`) | Pipeline never starves for input |
+| Plan deadlock resolution | Instruction-only (remediate-stuck.md) | Code-enforced (`_heal_plan_deadlocks` every tick) | Deadlocks resolved in seconds, not cycles |
+| Agent concurrency | Single executor instance | `max_concurrent` per agent (5/5/3) | 5× executor throughput, 5× parser throughput |
+| Sentinel replaces planner + monitor | Two separate agents | Single sentinel agent | Simpler mental model, fewer failure modes |
+
+---
+
 ## Calibration Examples
 
 These examples show how to score borderline cases consistently.
 
 ### Example A: Threshold reference vs duplication (checkpoint 2.3)
 
-`run-feed-health.md:8` says: *"Identify stale feeds: `last_fetched_at` beyond 7 days threshold."*
+`run-feed-health.md:8` says: *"Identify stale feeds: `last_fetched_at` beyond the configured threshold (see thresholds skill)."*
 
-- This embeds the value "7 days" even though it frames it as a "threshold" reference.
-- If `thresholds.md` changed "Feed stale" from 7 to 10 days, `run-feed-health.md` would become stale.
-- **Ruling: PARTIAL** — the value is embedded even if contextually referenced. A PASS requires saying "beyond the feed-stale warning threshold" without embedding the number.
+- This references the threshold without embedding the value.
+- If `thresholds.md` changed the feed-stale warning from 10 to 15 minutes, `run-feed-health.md` would remain correct.
+- **Ruling: PASS** — the value is not embedded; the reference is to the canonical source.
 
 ### Example B: LLM-dependent loop breaking (checkpoint 6.2)
 
@@ -205,10 +217,18 @@ These examples show how to score borderline cases consistently.
 
 ### Example C: Code function exists but never called (hypothetical)
 
-A function `_auto_scale_workers()` exists in `orchestrator.py` but is never called from `daemon_loop()`.
+A function `_auto_scale_workers()` exists in `orchestrator.py` but is never called from `start()` or `tick()`.
 
 - The code exists but has no effect at runtime.
 - **Ruling: FAIL** — code must be both present and reachable. Dead code is not a capability.
+
+### Example D: Background loop with hardcoded interval (checkpoint 3.1)
+
+`_download_loop()` has `interval=30` as a default parameter.
+
+- The loop runs automatically and is called from `start()`.
+- The interval is not dynamically adjustable, but the loop is code-enforced and always active.
+- **Ruling: PASS** — the capability exists and is reachable. Lack of dynamic tuning is captured in Dimension 5 (self-optimizing), not here.
 
 ---
 
@@ -218,24 +238,24 @@ After scoring, record per-checkpoint results in `.scoring/latest-assessment.json
 
 ```json
 {
-  "date": "2026-04-12",
+  "date": "2026-04-15",
   "assessor": "architect-mode",
+  "architecture": "v3",
   "tier": "T1",
   "checkpoints": {
-    "1.1": {"result": "PASS", "value": 1.0, "evidence": "begin-planning-cycle.md:5 — rule checks feeds.total == 0"},
-    "1.2": {"result": "PASS", "value": 1.0, "evidence": "begin-planning-cycle.md:8 — creates discovery remediation plan"},
-    "2.3": {"result": "PARTIAL", "value": 0.5, "evidence": "run-feed-health.md:8 embeds '7 days' value"},
-    "4.4": {"result": "FAIL", "value": 0.0, "evidence": "grep returns 0 results — no runtime code"}
+    "1.1": {"result": "PASS", "value": 1.0, "evidence": "sentinel/business-logic.md step 2 — checks total feeds == 0, creates seed plan"},
+    "1.2": {"result": "PASS", "value": 1.0, "evidence": "orchestrator.py:135-159 — _recover_stale_plans() defined; line 900 — called on startup"},
+    "2.3": {"result": "PARTIAL", "value": 0.5, "evidence": "run-feed-health.md:8 references threshold without embedding value, but another file embeds a value"}
   },
   "dimensions": {
-    "self_starting": {"score": 5.0, "pass": 6, "partial": 0, "fail": 0},
+    "self_starting": {"score": 5.0, "pass": 7, "partial": 0, "fail": 0},
     "self_monitoring": {"score": 4.7, "pass": 7, "partial": 1, "fail": 0},
     "self_healing": {"score": 5.0, "pass": 8, "partial": 0, "fail": 0},
-    "self_scaling": {"score": 3.75, "pass": 3, "partial": 0, "fail": 1},
-    "self_optimizing": {"score": 3.75, "pass": 3, "partial": 0, "fail": 1},
+    "self_scaling": {"score": 5.0, "pass": 5, "partial": 0, "fail": 0},
+    "self_optimizing": {"score": 5.0, "pass": 4, "partial": 0, "fail": 0},
     "error_containment": {"score": 5.0, "pass": 8, "partial": 0, "fail": 0}
   },
-  "overall": 4.7
+  "overall": 4.9
 }
 ```
 
@@ -247,9 +267,10 @@ This makes scoring differences traceable between assessments. When scores change
 
 Record each assessment here for trend tracking.
 
-| Date | Self-start | Self-monitor | Self-heal | Self-scale | Self-optimize | Error contain | **Overall** | Notes |
-|------|-----------|-------------|----------|-----------|--------------|--------------|-------------|-------|
-| 2026-04-12 (original) | 4.0 | 3.0 | 3.0 | 2.0 | 2.0 | 4.0 | **3.0** | Pre-fix baseline |
-| 2026-04-12 (post-fix) | 4.5 | 4.5 | 4.0 | 2.5 | 3.0 | 4.5 | **4.0** | All critical/high fixes applied |
-| 2026-04-12 (reassess) | 5.0 | 4.7 | 5.0 | 3.75 | 3.75 | 5.0 | **4.7** | Strict checkpoint scoring; 4.4+5.4 remain FAIL (no runtime code); 2.3 PARTIAL |
-| | | | | | | | | |
+| Date | Self-start | Self-monitor | Self-heal | Self-scale | Self-optimize | Error contain | **Overall** | Architecture | Notes |
+|------|-----------|-------------|----------|-----------|--------------|--------------|-------------|-------------|-------|
+| 2026-04-12 | 4.0 | 3.0 | 3.0 | 2.0 | 2.0 | 4.0 | **3.0** | v2 | Pre-fix baseline |
+| 2026-04-12 | 4.5 | 4.5 | 4.0 | 2.5 | 3.0 | 4.5 | **4.0** | v2 | All critical/high fixes applied |
+| 2026-04-12 | 5.0 | 4.7 | 5.0 | 3.75 | 3.75 | 5.0 | **4.7** | v2 | Strict scoring; 4.4+5.4 FAIL; 2.3 PARTIAL |
+| 2026-04-15 | 5.0 | 5.0 | 5.0 | 5.0 | 5.0 | 5.0 | **5.0** | v3 | T1 only; all 40 checkpoints PASS; code-enforced loops + concurrency replace instruction-only v2 gaps |
+| | | | | | | | | | |

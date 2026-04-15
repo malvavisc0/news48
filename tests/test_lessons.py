@@ -43,7 +43,7 @@ def test_save_lesson_appends_to_existing(tmp_lessons):
         json.dumps(
             [
                 {
-                    "agent": "planner",
+                    "agent": "sentinel",
                     "category": "Planning",
                     "lesson": "Plan first",
                 }
@@ -63,7 +63,7 @@ def test_save_lesson_appends_to_existing(tmp_lessons):
     lessons = json.loads(tmp_lessons.read_text())
     assert len(lessons) == 2
     # Existing content preserved
-    assert lessons[0]["agent"] == "planner"
+    assert lessons[0]["agent"] == "sentinel"
     assert lessons[0]["lesson"] == "Plan first"
     # New lesson appended
     assert lessons[1]["agent"] == "executor"
@@ -168,7 +168,7 @@ def test_save_lesson_scoped_correctly(tmp_lessons):
         json.dumps(
             [
                 {
-                    "agent": "planner",
+                    "agent": "sentinel",
                     "category": "Process Insights",
                     "lesson": "Plan first",
                 },
@@ -193,7 +193,7 @@ def test_save_lesson_scoped_correctly(tmp_lessons):
     assert new_entry["agent"] == "executor"
     assert new_entry["lesson"] == "Always verify output"
     # Original entries preserved
-    assert lessons[0]["agent"] == "planner"
+    assert lessons[0]["agent"] == "sentinel"
     assert lessons[1]["agent"] == "executor"
     assert lessons[1]["lesson"] == "Execute second"
 

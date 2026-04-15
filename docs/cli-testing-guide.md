@@ -495,8 +495,9 @@ Expected: JSON array of log entries with timestamp, module, message, source_file
 ### 13.3 Logs list -- filter by agent
 ```bash
 uv run news48 logs list --agent executor --json
-uv run news48 logs list --agent planner --json
-uv run news48 logs list --agent monitor --json
+uv run news48 logs list --agent sentinel --json
+uv run news48 logs list --agent fact_checker --json
+uv run news48 logs list --agent parser --json
 ```
 Expected: entries only from specified agent
 
@@ -536,7 +537,7 @@ Expected: oldest 10 entries first
 ```bash
 uv run news48 logs list --agent bogus --json
 ```
-Expected: `{"error": "Invalid agent type 'bogus'. Choose from: executor, planner, monitor"}`, exit code 1
+Expected: `{"error": "Invalid agent type 'bogus'. Choose from: executor, sentinel, fact_checker, parser"}`, exit code 1
 
 ### 13.10 Logs list -- invalid date
 ```bash
@@ -612,12 +613,12 @@ Expected: `{"error": "..."}` to stdout, exit code 1
 
 ## 15. Lessons
 
-### 15.1 Lessons list -- empty (no .lessons.md)
+### 15.1 Lessons list -- empty (no data/lessons.md)
 ```bash
-rm -f .lessons.md
+rm -f data/lessons.md
 uv run news48 lessons list
 ```
-Expected: `No lessons found (.lessons.md does not exist).`
+Expected: `No lessons found (data/lessons.md does not exist).`
 
 ### 15.2 Lessons list -- JSON empty
 ```bash
@@ -675,12 +676,162 @@ Expected: `{"error": "Invalid agent 'badname'. Must be one of: ..."}`, exit code
 
 ### 15.11 Cleanup
 ```bash
-rm -f .lessons.md
+rm -f data/lessons.md
 ```
 
 ---
 
-## 16. Full Pipeline Walkthrough (stage by stage)
+## 16. Fact-check
+
+### 16.1 Fact-check -- text output
+```bash
+uv run news48 fact-check
+```
+Expected: `Fact-checked N articles`
+
+### 16.2 Fact-check -- JSON output
+```bash
+uv run news48 fact-check --json
+```
+Expected: `{"checked": N, ...}` JSON object
+
+### 16.3 Fact-check -- with limit
+```bash
+uv run news48 fact-check --limit 3 --json
+```
+Expected: at most 3 articles processed
+
+### 16.4 Fact-check -- nothing to check
+```bash
+uv run news48 fact-check --json
+```
+Expected (when no parsed articles exist): `{"checked": 0, ...}`
+
+---
+
+## 17. Search
+
+### 17.1 Search -- text output
+```bash
+uv run news48 search search "climate"
+```
+Expected: list of matching articles with title and URL
+
+### 17.2 Search -- JSON output
+```bash
+uv run news48 search search "climate" --json
+```
+Expected: `{"query": "climate", "total": N, "articles": [...]}` JSON object
+
+### 17.3 Search -- with filters
+```bash
+uv run news48 search search "technology" --hours 24 --limit 5 --json
+```
+Expected: at most 5 articles from the last 24 hours
+
+### 17.4 Search -- no results
+```bash
+uv run news48 search search "xyznonexistent" --json
+```
+Expected: `{"query": "xyznonexistent", "total": 0, "articles": []}`
+
+---
+
+## 18. Sitemap
+
+### 18.1 Sitemap generate
+```bash
+uv run news48 sitemap generate --site-url https://example.com --output /tmp/sitemap.xml
+```
+Expected: `Generated sitemap.xml with N articles`, file created at output path
+
+### 18.2 Sitemap generate -- cleanup
+```bash
+rm -f /tmp/sitemap.xml
+```
+
+---
+
+## 19. Plans
+
+### 19.1 Plans list -- text output
+```bash
+uv run news48 plans list
+```
+Expected: table of plans with ID, status, task, family
+
+### 19.2 Plans list -- JSON output
+```bash
+uv run news48 plans list --json
+```
+Expected: JSON array of plan objects
+
+### 19.3 Plans list -- filter by status
+```bash
+uv run news48 plans list --status pending --json
+```
+Expected: only plans with status "pending"
+
+### 19.4 Plans show -- text output
+```bash
+uv run news48 plans show <plan-id>
+```
+Expected: full plan details including steps and success conditions
+
+### 19.5 Plans show -- not found
+```bash
+uv run news48 plans show nonexistent --json
+```
+Expected: `{"error": "..."}`, exit code 1
+
+### 19.6 Plans cancel
+```bash
+uv run news48 plans cancel <plan-id> --json
+```
+Expected: plan status updated to cancelled
+
+### 19.7 Plans remediate -- preview
+```bash
+uv run news48 plans remediate --json
+```
+Expected: JSON list of remediable issues without applying fixes
+
+### 19.8 Plans remediate -- apply
+```bash
+uv run news48 plans remediate --apply --json
+```
+Expected: remediations applied, confirmation output
+
+---
+
+## 20. Feeds RSS
+
+### 20.1 Feeds rss -- stdout
+```bash
+uv run news48 feeds rss
+```
+Expected: RSS XML printed to stdout
+
+### 20.2 Feeds rss -- to file
+```bash
+uv run news48 feeds rss --output /tmp/feed.xml
+```
+Expected: `Generated RSS feed: /tmp/feed.xml (N articles)`, file created
+
+### 20.3 Feeds rss -- with filters
+```bash
+uv run news48 feeds rss --hours 24 --category technology --output /tmp/feed.xml
+```
+Expected: RSS feed filtered by time window and category
+
+### 20.4 Feeds rss -- cleanup
+```bash
+rm -f /tmp/feed.xml
+```
+
+---
+
+## 21. Full Pipeline Walkthrough (stage by stage)
 
 ```bash
 # 1. Start fresh

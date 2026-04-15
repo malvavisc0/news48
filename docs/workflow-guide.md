@@ -1,24 +1,30 @@
 # News48 Workflow Guide
 
-This guide explains the end-to-end workflow for using the `news48` CLI to fetch, download, and parse news articles, including autonomous agents for pipeline execution, monitoring, and reporting.
+This guide explains the end-to-end workflow for using the `news48` CLI to fetch, download, parse, and fact-check news articles, including autonomous agents for pipeline execution and health monitoring.
 
 ## Overview
 
 The system has two related workflows:
 
 1. **Setup**: seed feeds into the database when onboarding or changing sources
-2. **Recurring pipeline cycle**: fetch -> download -> parse -> cleanup
+2. **Recurring pipeline cycle**: fetch → download → parse → fact-check → cleanup
 
-Autonomous agents and the orchestrator sit above that recurring cycle; they are not a separate pipeline stage.
+Scheduled agents and the orchestrator sit above that recurring cycle; they are not a separate pipeline stage.
 
 ```
 Setup: seed feeds
 
 Recurring cycle:
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│    Fetch    │───▶│  Download   │───▶│    Parse    │───▶│   Cleanup   │
-│ (metadata)  │    │   (HTML)    │    │ (analysis)  │    │ (retention) │
-└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│    Fetch    │───▶│  Download   │───▶│    Parse    │───▶│ Fact-check  │───▶│   Cleanup   │
+│ (metadata)  │    │   (HTML)    │    │ (analysis)  │    │ (verdict)   │    │ (retention) │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+
+Scheduled agents (orchestrator):
+┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+│ Sentinel │  │ Executor │  │  Parser  │  │Fact-check│
+│(Health)  │  │ (Plans)  │  │(Articles)│  │(Articles)│
+└──────────┘  └──────────┘  └──────────┘  └──────────┘
 ```
 
 ---
@@ -70,6 +76,16 @@ uv run news48 feeds add https://example.com/feed.xml
 
 # Add with JSON output for scripting
 uv run news48 feeds add https://example.com/feed.xml --json
+```
+
+### Generate Feed RSS
+
+```bash
+# Generate RSS feed from saved articles
+uv run news48 feeds rss --feed arstechnica.com
+
+# Generate RSS for a specific date range
+uv run news48 feeds rss --feed arstechnica.com --days 7
 ```
 
 ---
@@ -180,7 +196,7 @@ uv run news48 articles list --status download-failed
 
 ## Stage 4: Parse Articles with LLM
 
-The final stage uses an LLM to extract structured data from the HTML content.
+The next stage uses an LLM to extract structured data from the HTML content.
 
 ### Prerequisites
 
@@ -265,6 +281,89 @@ uv run news48 articles list --status parse-failed
 
 ---
 
+## Stage 5: Fact-Check Articles
+
+The fact-check stage searches for evidence and records verdicts on article claims.
+
+### Check What Needs Fact-Checking
+
+```bash
+# List articles that haven't been fact-checked
+uv run news48 articles list --status parsed
+
+# Count fact-checkable articles
+uv run news48 articles list --status parsed --json | jq '.total'
+```
+
+### Run Fact-Check
+
+```bash
+# Fact-check up to 10 articles
+uv run news48 fact-check
+
+# Fact-check with custom limit
+uv run news48 fact-check --limit 5
+
+# Fact-check with JSON output for scripting
+uv run news48 fact-check --json
+```
+
+### Check Fact-Check Results
+
+```bash
+# List fact-checked articles
+uv run news48 articles list --status fact-checked
+
+# View article with fact-check verdict
+uv run news48 articles info 42
+
+# List articles with failed fact-check attempts
+uv run news48 articles list --status fact-check-failed
+```
+
+### What Happens During Fact-Check
+
+1. The CLI identifies articles that are parsed but not yet fact-checked
+2. For each article, it extracts claims from the parsed content
+3. It searches the web for evidence using SearXNG
+4. It evaluates the claims against the evidence
+5. It records a verdict (verified, false, unverified, or mixed) for each article
+
+---
+
+## Stage 6: Cleanup and Retention
+
+The cleanup stage removes old articles based on retention policy.
+
+### Check Retention Status
+
+```bash
+# View retention policy status
+uv run news48 cleanup status
+
+# View cleanup history
+uv run news48 cleanup history
+```
+
+### Purge Old Articles
+
+```bash
+# Preview what would be purged (dry run)
+uv run news48 cleanup purge --dry-run
+
+# Purge expired articles
+uv run news48 cleanup purge --force
+```
+
+### Database Health
+
+```bash
+# Check database health
+uv run news48 cleanup health
+```
+
+---
+
 ## Complete Workflow Example
 
 Here's a complete end-to-end workflow:
@@ -288,10 +387,16 @@ uv run news48 download --limit 10
 # 6. Parse the downloaded articles
 uv run news48 parse --limit 10
 
-# 7. View final statistics
+# 7. Fact-check parsed articles
+uv run news48 fact-check --limit 5
+
+# 8. View final statistics
 uv run news48 stats
 
-# 8. Browse parsed articles
+# 9. Check retention policy status
+uv run news48 cleanup status
+
+# 10. Browse parsed articles
 uv run news48 articles list --status parsed
 ```
 
@@ -326,6 +431,9 @@ uv run news48 articles list --status parse-failed
 
 # Retry all failed parses
 uv run news48 parse --retry
+
+# List failed fact-checks
+uv run news48 articles list --status fact-check-failed
 ```
 
 ### Reset Articles for Re-processing
@@ -337,7 +445,10 @@ uv run news48 articles reset 42 --download
 # Reset parse failure flag
 uv run news48 articles reset 42 --parse
 
-# Reset both flags
+# Reset fact-check status
+uv run news48 articles reset 42 --fact-check
+
+# Reset all flags
 uv run news48 articles reset 42 --all
 ```
 
@@ -355,6 +466,9 @@ uv run news48 feeds delete 1 --force
 
 # View feed details
 uv run news48 feeds info 1
+
+# Generate RSS for a feed
+uv run news48 feeds rss --feed arstechnica.com
 ```
 
 ### Manage Articles
@@ -370,11 +484,31 @@ uv run news48 articles info 42
 uv run news48 articles content 42
 ```
 
+### Search Articles
+
+```bash
+# Search article content
+uv run news48 search "climate change"
+
+# Search with custom limit
+uv run news48 search "technology" --limit 20
+```
+
+### Generate Sitemap
+
+```bash
+# Generate XML sitemap from parsed articles
+uv run news48 sitemap --output sitemap.xml
+
+# Generate sitemap with custom URL base
+uv run news48 sitemap --url https://example.com --output sitemap.xml
+```
+
 ---
 
 ## Log Inspection
 
-The `logs` command group provides structured access to agent execution logs stored in `.logs/`:
+The `logs` command group provides structured access to agent execution logs stored in `data/logs/`:
 
 ### List Log Entries
 
@@ -384,8 +518,9 @@ uv run news48 logs list
 
 # Filter by agent type
 uv run news48 logs list --agent executor
-uv run news48 logs list --agent planner
-uv run news48 logs list --agent monitor
+uv run news48 logs list --agent sentinel
+uv run news48 logs list --agent fact_checker
+uv run news48 logs list --agent parser
 
 # Filter by date
 uv run news48 logs list --date today
@@ -548,9 +683,20 @@ uv run news48 logs list --agent executor --limit 20 --json
 
 ---
 
-## Autonomous Agents and Scheduling
+## Scheduled Agents and the Orchestrator
 
-The news48 system uses LlamaIndex `FunctionAgent` instances for autonomous planning, execution, parsing, and monitoring. All agents share a consistent interface: `get_agent()` returns the configured agent, and the runtime invokes the appropriate run entrypoint for the agent's mode.
+The news48 system runs four autonomous agents on a schedule managed by the Orchestrator. The Orchestrator is a pure Python dispatcher — it is not an LLM agent itself.
+
+### Valid Agent Names
+
+The four active runtime agents are:
+
+| Agent | Purpose | Schedule |
+|-------|---------|----------|
+| `sentinel` | Health monitoring, threshold evaluation, feed curation | Every 5 minutes |
+| `executor` | Claims and executes plans from the queue | Every 1 minute (up to 5 concurrent) |
+| `parser` | Claims and parses downloaded articles from the database | Every 1 minute (up to 5 concurrent) |
+| `fact_checker` | Claims and fact-checks parsed articles | Every 5 minutes (up to 3 concurrent) |
 
 ### Check Agent Status
 
@@ -562,55 +708,55 @@ uv run news48 agents status
 uv run news48 agents status --json
 ```
 
-### Run Agents
+### Run Agents Manually
 
 ```bash
 # Run all due agents (based on schedule)
 uv run news48 agents run
 
 # Run specific agent
-uv run news48 agents run --agent planner
+uv run news48 agents run --agent sentinel
 uv run news48 agents run --agent executor
 uv run news48 agents run --agent parser
-uv run news48 agents run --agent monitor
+uv run news48 agents run --agent fact_checker
 
 # Run agent with custom task prompt
-uv run news48 agents run --agent planner --task "Run a full planning cycle and ensure fact-check coverage goals are planned"
-uv run news48 agents run --agent executor --task "Claim and execute one pending plan with verification"
+uv run news48 agents run --agent sentinel --task "Run a health check cycle"
+uv run news48 agents run --agent fact_checker --task "Run a fact-check cycle for technology articles"
 
 # JSON output
-uv run news48 agents run --agent monitor --json
+uv run news48 agents run --agent fact_checker --json
 ```
 
 ### What Each Agent Does
 
-#### Planner Agent
-- Gathers evidence from CLI metrics and current plan state
-- Detects unmet goals across pipeline flow, retries, fact-check coverage, and health
-- Creates minimum plans with explicit success conditions
-- Avoids duplicate work already covered by pending or executing plans
+#### Sentinel Agent
+- Runs health monitoring cycles every 5 minutes
+- Gathers system health metrics via CLI commands
+- Evaluates thresholds and detects issues
+- Creates fix plans for consistently problematic feeds
+- Writes structured reports to `data/monitor/latest-report.json`
 
 #### Executor Agent
-- Claims one eligible pending plan and executes steps in order
+- Claims one eligible pending plan and executes its steps
 - Runs plan work and final verification without creating plans
 - Performs final verification against plan success conditions
 - Marks each plan completed or failed with evidence
+- Does not create plans — only executes them
 
 #### Parser Agent
-- Runs on its own schedule and does not consume plan files
+- Runs on its own schedule, independent of plan files
 - Claims eligible downloaded articles directly from the database
-- Parses one claimed article at a time from the standard parser task payload
+- Parses one claimed article at a time
 - Updates the article record and releases the claim when done
 - Prevents duplicate parse work across concurrent parser processes
 
-#### Monitor Agent
-- Intelligent system health observation with LLM reasoning
-- Gathers metrics via CLI, reasons about patterns and anomalies
-- Generates alerts with severity classification (info/warning/critical)
-- Suggests concrete corrective actions
-- Read-only except optional email delivery when configured
-
-Fact-checking is executed by the Executor when the Planner creates fact-check plans. It is not a separate scheduled agent in the current architecture.
+#### Fact-Checker Agent
+- Runs on its own schedule, independent of plan files
+- Claims fact-unchecked articles directly from the database
+- Searches for evidence using SearXNG
+- Records verdicts (verified, false, unverified, mixed)
+- Prevents duplicate fact-check work across concurrent processes
 
 ### Agent Architecture
 
@@ -619,47 +765,31 @@ Fact-checking is executed by the Executor when the Planner creates fact-check pl
               (Python dispatcher, NOT an LLM agent)
               Runs agents on a schedule
                          |
-         ┌───────────┬──────────┬──────────┬───────────┐
-         |           |          |          |
-         v           v          v          v
-  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
-  | Planner  | | Executor | |  Parser  | | Monitor  |
-  | (Plans)  | | (Worker) | | (Parser) | |(Observer)|
-  └──────────┘ └──────────┘ └──────────┘ └──────────┘
-         |           |          |          |
-         v           v          v          v
-  ┌──────────────────────────────────────────────────┐
-  │             Shared Tool Library                   │
-  │  shell / files / planner / search / bypass / sys  │
-  └──────────────────────────────────────────────────┘
+        ┌────────────┬───────────┬──────────┬──────────────┐
+        |            |           |          |              |
+        v            v           v          v              v
+ ┌──────────┐  ┌──────────┐ ┌──────────┐ ┌─────────────┐
+ │ Sentinel │  │ Executor │ │  Parser  │ │Fact-checker │
+ │(Health)  │  │ (Plans)  │ │(Articles)│  │ (Articles)  │
+ └──────────┘  └──────────┘ └──────────┘ └─────────────┘
+       |             |           |              |
+       v             v           v              v
+ ┌──────────────────────────────────────────────────────┐
+ │             Shared Tool Library                       │
+ │  shell / files / planner / searxng / bypass / system  │
+ └──────────────────────────────────────────────────────┘
 ```
-
-All agents are LlamaIndex `FunctionAgent` instances except the Orchestrator, which is a pure Python dispatcher. The Orchestrator does not use an LLM -- it simply runs agents on a timer with predefined task prompts.
-
-### Scheduled Maintenance
-
-The orchestrator runs agents on a schedule:
-
-- **Planner**: Every 5 minutes
-- **Executor**: Every 1 minute (up to 5 concurrent)
-- **Parser**: Every 1 minute (up to 5 concurrent)
-- **Monitor**: Every 120 minutes
-
-> **Note**: Agent schedules are currently configured in code. A future
-> enhancement will add persistent schedule management via CLI commands.
 
 ### Manual CLI vs Autonomous Agent Operations
 
 | Operation | Manual CLI Command | Autonomous Agent |
 |-----------|-------------------|------------------|
-| Run recurring pipeline cycle | `uv run news48 fetch && uv run news48 download --limit 10 && uv run news48 parse --limit 10 && uv run news48 cleanup purge --force` | Planner + Executor + Parser loop |
+| Run recurring pipeline cycle | `uv run news48 fetch && uv run news48 download --limit 10 && uv run news48 parse --limit 10` | Sentinel → Executor → Parser loop |
+| Fact-check articles | `uv run news48 fact-check` | Fact-checker agent on schedule |
+| Check database health | `uv run news48 cleanup health` | Sentinel Agent (every 5m) |
+| View retention status | `uv run news48 cleanup status` | Sentinel Agent (alerts) |
+| View system stats | `uv run news48 stats` | Sentinel Agent report context |
 | Purge old articles | `uv run news48 cleanup purge --force` | Executor via explicit cleanup plan steps |
-| Check database health | `uv run news48 cleanup health` | Monitor Agent (every 120m) |
-| View retention status | `uv run news48 cleanup status` | Monitor Agent (alerts) |
-| View system stats | `uv run news48 stats` | Monitor Agent report context |
-| Read stored article content | `uv run news48 articles content <id> --json` | Executor during fact-check plan execution |
-| Set fact-check verdict | `uv run news48 articles check <id> --status verified --result "..." --json` | Executor during fact-check plan execution |
-| List fact-checked articles | `uv run news48 articles list --status fact-checked` | Planner + Executor recurring planning and execution |
 
 **Key Principle**: Use Manual CLI for one-off operations and troubleshooting. Use Autonomous Agents for scheduled, recurring maintenance.
 
@@ -686,29 +816,33 @@ uv run news48 download --limit 10
 # 6. Parse the downloaded articles
 uv run news48 parse --limit 10
 
-# 7. View final statistics
+# 7. Fact-check parsed articles
+uv run news48 fact-check --limit 5
+
+# 8. View final statistics
 uv run news48 stats
 
-# 8. Check retention policy status
+# 9. Check retention policy status
 uv run news48 cleanup status
 
-# 9. Run maintenance (purge expired articles)
+# 10. Run maintenance (purge expired articles)
 uv run news48 cleanup purge --force
 
-# 9b. Preview what would be purged (dry run)
+# 10b. Preview what would be purged (dry run)
 uv run news48 cleanup purge --dry-run
 
-# 10. Verify database health
+# 11. Verify database health
 uv run news48 cleanup health
 ```
 
 Or run the agent system autonomously:
 
 ```bash
-# Run specific roles explicitly
-uv run news48 agents run --agent planner
+# Run specific agents explicitly
+uv run news48 agents run --agent sentinel
 uv run news48 agents run --agent executor
 uv run news48 agents run --agent parser
+uv run news48 agents run --agent fact_checker
 
 # Or let the Orchestrator handle it on schedule
 uv run news48 agents run
@@ -721,7 +855,7 @@ uv run news48 agents run
 - See [CLI Testing Guide](cli-testing-guide.md) for detailed command reference
 - Check [README.md](../README.md) for installation and configuration
 - Review [pyproject.toml](../pyproject.toml) for project dependencies
-- See [Planner Agent Instructions](../agents/instructions/planner.md) for planning details
-- See [Executor Agent Instructions](../agents/instructions/executor.md) for execution details
+- See [Sentinel Agent Instructions](../agents/instructions/sentinel.md) for health monitoring details
+- See [Executor Agent Instructions](../agents/instructions/executor.md) for plan execution details
 - See [Parser Agent Instructions](../agents/instructions/parser.md) for parsing details
-- See [Monitor Agent Instructions](../agents/instructions/monitor.md) for monitoring details
+- See [Fact-checker Agent Instructions](../agents/instructions/fact_checker.md) for fact-checking details

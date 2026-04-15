@@ -1,7 +1,7 @@
 # Skill: Health thresholds reference
 
 ## Scope
-Always active for monitor and planner agents — single source of truth for all health thresholds.
+Always active for sentinel agent — single source of truth for all health thresholds.
 
 ## Thresholds
 
