@@ -1,7 +1,6 @@
 """Fact-check agent for autonomous article verification."""
 
 import logging
-import os
 from os import getenv
 
 from llama_index.core.agent.workflow import FunctionAgent
@@ -9,13 +8,7 @@ from llama_index.llms.openai_like import OpenAILike
 
 from agents._run import run_agent
 from agents.skills import compose_agent_instructions
-from database import (
-    claim_articles_for_processing,
-    clear_article_processing_claim,
-    get_article_by_id,
-    get_articles_paginated,
-    init_database,
-)
+from database import get_article_by_id, get_articles_paginated, init_database
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +27,8 @@ async def run_cycle(limit: int = 10) -> dict:
     if not articles:
         return {"checked": 0, "results": []}
 
-    owner = f"fact-check:{os.getpid()}"
-    claimed_ids = claim_articles_for_processing(
-        db_path, [a["id"] for a in articles], "fact_check", owner
-    )
-    claimed = [a for a in articles if a["id"] in claimed_ids]
-
     results = []
-    for article in claimed:
+    for article in articles:
         try:
             task = (
                 f"Fact-check article {article['id']}: {article['title']}\n"
@@ -62,9 +49,9 @@ async def run_cycle(limit: int = 10) -> dict:
                     }
                 )
         except Exception as exc:
-            results.append({"id": article["id"], "success": False, "error": str(exc)})
-        finally:
-            clear_article_processing_claim(db_path, article["id"], owner=owner)
+            results.append(
+                {"id": article["id"], "success": False, "error": str(exc)}
+            )
 
     checked = sum(1 for r in results if r.get("success"))
     return {"checked": checked, "results": results}
@@ -91,7 +78,8 @@ def get_agent(task_context: dict | None = None) -> FunctionAgent:
     return FunctionAgent(
         name="FactChecker",
         description=(
-            "Fact-checks articles by searching for evidence and " "recording verdicts."
+            "Fact-checks articles by searching for evidence and "
+            "recording verdicts."
         ),
         tools=[
             perform_web_search,

@@ -1,5 +1,6 @@
 """Articles sub-app - manage articles in the database (list, info)."""
 
+import json
 import os
 import sys
 
@@ -8,11 +9,14 @@ import typer
 from database import (
     claim_articles_for_processing,
     clear_article_processing_claim,
+    compute_overall_verdict,
     delete_article,
     get_article_by_id,
     get_article_by_url,
     get_articles_paginated,
+    get_claims_for_article,
     init_database,
+    insert_claims,
     mark_article_parse_failed,
     reset_article_download,
     reset_article_parse,
@@ -48,7 +52,8 @@ def _resolve_status(status: str, as_json: bool = False) -> str:
     }
     if status not in valid:
         emit_error(
-            f"Invalid status '{status}'. " f"Valid: {', '.join(sorted(valid))}",
+            f"Invalid status '{status}'. "
+            f"Valid: {', '.join(sorted(valid))}",
             as_json=as_json,
         )
     return status
@@ -202,7 +207,9 @@ def article_info(
         "title": article["title"],
         "url": article["url"],
         "feed_url": feed_url,
-        "content_length": (len(article["content"]) if article.get("content") else 0),
+        "content_length": (
+            len(article["content"]) if article.get("content") else 0
+        ),
         "status": status,
         "published_at": article.get("published_at"),
         "parsed_at": article.get("parsed_at"),
@@ -266,7 +273,9 @@ def article_info(
 @articles_app.command(name="delete")
 def delete_article_cmd(
     identifier: str = typer.Argument(..., help="Article ID or URL to delete"),
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Skip confirmation prompt"
+    ),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Delete an article by ID or URL."""
@@ -294,7 +303,9 @@ def delete_article_cmd(
     # Ask for confirmation when not forced (human mode)
     if not force and not output_json:
         title = article["title"] or "Untitled"
-        confirm = typer.confirm(f"Delete article '{title}' (ID: {article_id})?")
+        confirm = typer.confirm(
+            f"Delete article '{title}' (ID: {article_id})?"
+        )
         if not confirm:
             print("Deletion cancelled")
             return
@@ -325,7 +336,9 @@ def reset_article_cmd(
     download: bool = typer.Option(
         False, "--download", help="Reset download failure flag"
     ),
-    parse: bool = typer.Option(False, "--parse", help="Reset parse failure flag"),
+    parse: bool = typer.Option(
+        False, "--parse", help="Reset parse failure flag"
+    ),
     all_flags: bool = typer.Option(
         False, "--all", help="Reset both download and parse failure flags"
     ),
@@ -440,7 +453,7 @@ def article_content(
 def check_article(
     identifier: str = typer.Argument(..., help="Article ID or URL"),
     status: str = typer.Option(
-        ...,
+        None,
         "--status",
         "-s",
         help="Fact-check verdict: verified|disputed|unverifiable|mixed",
@@ -451,11 +464,18 @@ def check_article(
         "-r",
         help="Free-text summary of the fact-check assessment",
     ),
+    claims_json: str = typer.Option(
+        None,
+        "--claims-json",
+        "-c",
+        help="JSON array of claims: "
+        '[{"claim_text", "verdict", "evidence_summary", "sources"}]',
+    ),
     force: bool = typer.Option(
         False,
         "--force",
         "-f",
-        help="Overwrite an existing fact-check result and override active claims",
+        help="Overwrite existing fact-check and override active claims",
     ),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
@@ -463,8 +483,26 @@ def check_article(
     db_path = require_db()
     init_database(db_path)
 
+    # Parse claims if provided
+    claims = None
+    if claims_json:
+        try:
+            claims = json.loads(claims_json)
+        except json.JSONDecodeError as e:
+            emit_error(
+                f"Invalid JSON for --claims-json: {e}",
+                as_json=output_json,
+            )
+
+    # Validate status: required when no claims provided
+    if status is None and claims is None:
+        emit_error(
+            "Must specify --status or --claims-json",
+            as_json=output_json,
+        )
+
     valid_statuses = {"verified", "disputed", "unverifiable", "mixed"}
-    if status.lower() not in valid_statuses:
+    if status and status.lower() not in valid_statuses:
         emit_error(
             f"Invalid fact-check status '{status}'. "
             f"Valid: {', '.join(sorted(valid_statuses))}",
@@ -515,11 +553,35 @@ def check_article(
             as_json=output_json,
         )
 
+    # Determine the final status
+    if claims is not None:
+        # Normalize keys: text->claim_text, evidence->evidence_summary
+        normalized_claims = []
+        for c in claims:
+            normalized = {
+                "claim_text": c.get("claim_text", c.get("text", "")),
+                "verdict": c.get("verdict", "unverifiable"),
+                "evidence_summary": c.get(
+                    "evidence_summary", c.get("evidence", "")
+                ),
+                "sources": c.get("sources", []),
+            }
+            normalized_claims.append(normalized)
+
+        insert_claims(db_path, article["id"], normalized_claims)
+        final_status = (
+            status.lower()
+            if status
+            else compute_overall_verdict(normalized_claims)
+        )
+    else:
+        final_status = status.lower()
+
     try:
         updated = update_article_fact_check(
             db_path,
             article["id"],
-            status=status.lower(),
+            status=final_status,
             result=result,
             force=force,
         )
@@ -542,8 +604,9 @@ def check_article(
         "id": article["id"],
         "url": article["url"],
         "title": article["title"],
-        "fact_check_status": status.lower(),
+        "fact_check_status": final_status,
         "fact_check_result": result,
+        "claims_count": len(claims) if claims else 0,
     }
 
     if output_json:
@@ -553,7 +616,7 @@ def check_article(
         if updated:
             print(f"Fact-checked article: {title}")
             print(f"  ID: {article['id']}")
-            print(f"  Status: {status.lower()}")
+            print(f"  Status: {final_status}")
             if result:
                 print(f"  Result: {result}")
         else:
@@ -563,7 +626,9 @@ def check_article(
 @articles_app.command(name="feature")
 def feature_article(
     identifier: str = typer.Argument(..., help="Article ID or URL"),
-    remove: bool = typer.Option(False, "--remove", help="Remove featured status"),
+    remove: bool = typer.Option(
+        False, "--remove", help="Remove featured status"
+    ),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Mark an article as featured."""
@@ -603,7 +668,9 @@ def feature_article(
 @articles_app.command(name="breaking")
 def breaking_article(
     identifier: str = typer.Argument(..., help="Article ID or URL"),
-    remove: bool = typer.Option(False, "--remove", help="Remove breaking status"),
+    remove: bool = typer.Option(
+        False, "--remove", help="Remove breaking status"
+    ),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Mark an article as breaking news."""
@@ -640,6 +707,68 @@ def breaking_article(
         print(f"{action}: {article['title'] or 'Untitled'}")
 
 
+@articles_app.command(name="claims")
+def article_claims(
+    identifier: str = typer.Argument(..., help="Article ID or URL"),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Show per-claim fact-check results for an article."""
+    db_path = require_db()
+    init_database(db_path)
+
+    # Resolve article
+    article = None
+    try:
+        article_id = int(identifier)
+        article = get_article_by_id(db_path, article_id)
+    except ValueError:
+        article = get_article_by_url(db_path, identifier)
+
+    if not article:
+        emit_error(
+            f"Article not found: {identifier}",
+            as_json=output_json,
+        )
+
+    claims = get_claims_for_article(db_path, article["id"])
+
+    # Count verdicts
+    verdict_counts = {}
+    for c in claims:
+        v = c["verdict"]
+        verdict_counts[v] = verdict_counts.get(v, 0) + 1
+
+    data = {
+        "id": article["id"],
+        "url": article["url"],
+        "title": article["title"],
+        "total_claims": len(claims),
+        "verdict_counts": verdict_counts,
+        "claims": claims,
+    }
+
+    if output_json:
+        emit_json(data)
+    else:
+        title = article["title"] or "Untitled"
+        print(f"Claims for: {title}")
+        print(f"  ID: {article['id']}")
+        print(f"  Total claims: {len(claims)}")
+        if verdict_counts:
+            counts = ", ".join(
+                f"{v}: {c}" for v, c in sorted(verdict_counts.items())
+            )
+            print(f"  Verdicts: {counts}")
+        print()
+        for c in claims:
+            print(f"  [{c['verdict']}] {c['claim_text']}")
+            if c.get("evidence_summary"):
+                print(f"    Evidence: {c['evidence_summary']}")
+            if c.get("sources"):
+                srcs = ", ".join(c["sources"])
+                print(f"    Sources: {srcs}")
+
+
 @articles_app.command(name="update")
 def update_article_cmd(
     article_id: int = typer.Argument(..., help="Article ID to update"),
@@ -659,8 +788,12 @@ def update_article_cmd(
         None, "--sentiment", help="positive|negative|neutral"
     ),
     image_url: str = typer.Option(None, "--image-url", help="Image URL"),
-    language: str = typer.Option(None, "--language", help="ISO 639-1 language code"),
-    published_at: str = typer.Option(None, "--published-at", help="Publication date"),
+    language: str = typer.Option(
+        None, "--language", help="ISO 639-1 language code"
+    ),
+    published_at: str = typer.Option(
+        None, "--published-at", help="Publication date"
+    ),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Update article with parsed content and metadata.

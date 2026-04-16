@@ -92,6 +92,19 @@ CREATE TABLE IF NOT EXISTS articles (
 )
 """
 
+CREATE_CLAIMS_TABLE = """
+CREATE TABLE IF NOT EXISTS claims (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    article_id INTEGER NOT NULL,
+    claim_text TEXT NOT NULL,
+    verdict TEXT NOT NULL,
+    evidence_summary TEXT,
+    sources TEXT,
+    created_at DATETIME NOT NULL,
+    FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
+)
+"""
+
 CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_articles_feed_id ON articles(feed_id)",
     "CREATE INDEX IF NOT EXISTS idx_articles_fetch_id ON articles(fetch_id)",
@@ -108,15 +121,30 @@ CREATE_INDEXES = [
         "CREATE INDEX IF NOT EXISTS idx_articles_published_at "
         "ON articles(published_at)"
     ),
-    ("CREATE INDEX IF NOT EXISTS idx_articles_created_at " "ON articles(created_at)"),
-    ("CREATE INDEX IF NOT EXISTS idx_articles_sentiment " "ON articles(sentiment)"),
+    (
+        "CREATE INDEX IF NOT EXISTS idx_articles_created_at "
+        "ON articles(created_at)"
+    ),
+    (
+        "CREATE INDEX IF NOT EXISTS idx_articles_sentiment "
+        "ON articles(sentiment)"
+    ),
     (
         "CREATE INDEX IF NOT EXISTS idx_articles_fact_check_status "
         "ON articles(fact_check_status)"
     ),
-    ("CREATE INDEX IF NOT EXISTS idx_articles_is_featured " "ON articles(is_featured)"),
-    ("CREATE INDEX IF NOT EXISTS idx_articles_is_breaking " "ON articles(is_breaking)"),
-    ("CREATE INDEX IF NOT EXISTS idx_articles_parsed_at " "ON articles(parsed_at)"),
+    (
+        "CREATE INDEX IF NOT EXISTS idx_articles_is_featured "
+        "ON articles(is_featured)"
+    ),
+    (
+        "CREATE INDEX IF NOT EXISTS idx_articles_is_breaking "
+        "ON articles(is_breaking)"
+    ),
+    (
+        "CREATE INDEX IF NOT EXISTS idx_articles_parsed_at "
+        "ON articles(parsed_at)"
+    ),
     (
         "CREATE INDEX IF NOT EXISTS idx_articles_processing "
         "ON articles(processing_status, processing_started_at)"
@@ -140,6 +168,11 @@ CREATE_INDEXES = [
     ),
 ]
 
+CREATE_CLAIMS_INDEXES = [
+    "CREATE INDEX IF NOT EXISTS idx_claims_article_id ON claims(article_id)",
+    "CREATE INDEX IF NOT EXISTS idx_claims_verdict ON claims(verdict)",
+]
+
 
 # Migrations for existing databases that lack newer columns.
 _MIGRATIONS = [
@@ -155,9 +188,18 @@ _MIGRATIONS = [
     "ALTER TABLE feeds ADD COLUMN icon_url TEXT",
     "ALTER TABLE feeds ADD COLUMN favicon_url TEXT",
     # --- NEW — editorial ---
-    ("ALTER TABLE articles ADD COLUMN view_count " "INTEGER NOT NULL DEFAULT 0"),
-    ("ALTER TABLE articles ADD COLUMN is_featured " "INTEGER NOT NULL DEFAULT 0"),
-    ("ALTER TABLE articles ADD COLUMN is_breaking " "INTEGER NOT NULL DEFAULT 0"),
+    (
+        "ALTER TABLE articles ADD COLUMN view_count "
+        "INTEGER NOT NULL DEFAULT 0"
+    ),
+    (
+        "ALTER TABLE articles ADD COLUMN is_featured "
+        "INTEGER NOT NULL DEFAULT 0"
+    ),
+    (
+        "ALTER TABLE articles ADD COLUMN is_breaking "
+        "INTEGER NOT NULL DEFAULT 0"
+    ),
     # --- NEW — denormalized source ---
     "ALTER TABLE articles ADD COLUMN source_name TEXT",
     # --- NEW — language ---
@@ -165,6 +207,22 @@ _MIGRATIONS = [
     "ALTER TABLE feeds ADD COLUMN language TEXT DEFAULT 'en'",
     # --- NEW — feed category ---
     "ALTER TABLE feeds ADD COLUMN category TEXT",
+]
+
+# Migrations for the claims table (applied to existing databases)
+_MIGRATIONS_CLAIMS = [
+    """CREATE TABLE IF NOT EXISTS claims (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        article_id INTEGER NOT NULL,
+        claim_text TEXT NOT NULL,
+        verdict TEXT NOT NULL,
+        evidence_summary TEXT,
+        sources TEXT,
+        created_at DATETIME NOT NULL,
+        FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_claims_article_id ON claims(article_id)",
+    "CREATE INDEX IF NOT EXISTS idx_claims_verdict ON claims(verdict)",
 ]
 
 # FTS5 virtual table for full-text search
@@ -225,7 +283,9 @@ _CLAIM_TIMEOUT_MINUTES = 30
 
 def _claim_cutoff(minutes: int = _CLAIM_TIMEOUT_MINUTES) -> str:
     """Return the cutoff timestamp for stale processing claims."""
-    return (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
+    return (
+        datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    ).isoformat()
 
 
 def init_database(db_path: Path) -> None:
@@ -241,13 +301,21 @@ def init_database(db_path: Path) -> None:
         db.execute(CREATE_FEEDS_TABLE)
         db.execute(CREATE_FETCHES_TABLE)
         db.execute(CREATE_ARTICLES_TABLE)
+        db.execute(CREATE_CLAIMS_TABLE)
         # Apply migrations first so new columns exist before indexing
         for migration in _MIGRATIONS:
             try:
                 db.execute(migration)
             except sqlite3.OperationalError:
                 pass  # Column already exists
+        for migration in _MIGRATIONS_CLAIMS:
+            try:
+                db.execute(migration)
+            except sqlite3.OperationalError:
+                pass  # Already exists
         for index_sql in CREATE_INDEXES:
+            db.execute(index_sql)
+        for index_sql in CREATE_CLAIMS_INDEXES:
             db.execute(index_sql)
         # Create FTS5 virtual table and sync triggers
         db.execute(CREATE_ARTICLES_FTS_TABLE)

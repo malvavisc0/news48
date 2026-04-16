@@ -310,6 +310,12 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
     # -------------------------------------------------------------------------
     # Fact-Checker skills
     # -------------------------------------------------------------------------
+    "cli-reference-fact-checker": SkillDef(
+        id="cli-reference-fact-checker",
+        file="shared/cli-reference-fact-checker.md",
+        agents=("fact_checker",),
+        always=True,
+    ),
     "fc-business-logic": SkillDef(
         id="fc-business-logic",
         file="fact_checker/business-logic.md",
@@ -455,7 +461,9 @@ def compose_agent_instructions(
     if base_prompt_path.exists():
         base_prompt = base_prompt_path.read_text(encoding="utf-8")
     else:
-        base_prompt = f"# {agent_name.capitalize()} Agent\n\n(No base prompt found.)"
+        base_prompt = (
+            f"# {agent_name.capitalize()} Agent\n\n(No base prompt found.)"
+        )
 
     if agent_name == "sentinel":
         if ctx.get("email_configured"):

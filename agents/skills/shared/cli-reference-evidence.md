@@ -1,7 +1,7 @@
 # Skill: Common evidence commands
 
 ## Scope
-Always active for planner, executor, and monitor — shared evidence-gathering commands.
+Always active for executor, fact_checker, and sentinel — shared evidence-gathering commands.
 
 ## Evidence Commands
 Use these commands to observe system state. All agents that load this skill may run any of these:

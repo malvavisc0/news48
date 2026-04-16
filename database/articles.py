@@ -1122,6 +1122,120 @@ def get_all_tags(db_path: Path, hours: int = 48, limit: int = 50) -> list[dict]:
         ]
 
 
+def get_topic_clusters(
+    db_path: Path,
+    hours: int = 48,
+    limit: int = 8,
+    min_articles: int = 3,
+    per_cluster_limit: int = 3,
+    excluded_tags: set[str] | None = None,
+) -> list[dict]:
+    """Build lightweight topic clusters from recent article tags.
+
+    This helper is intentionally simple for the website v1. It:
+
+    - looks only at recent articles within the provided time window
+    - uses recurring tags as temporary cluster labels
+    - filters weak/generic tags with a small deny-list
+    - includes a few recent article previews per cluster
+
+    Returns list of dicts shaped like:
+
+    [{
+        "name": "chip exports",
+        "slug": "chip-exports",
+        "article_count": 6,
+        "articles": [{...}, ...],
+    }]
+    """
+
+    threshold = _hours_ago_iso(hours)
+    ignored = {
+        "news",
+        "breaking",
+        "update",
+        "updates",
+        "world",
+        "latest",
+        "story",
+        "stories",
+    }
+    if excluded_tags:
+        ignored.update(tag.strip().lower() for tag in excluded_tags if tag.strip())
+
+    with get_connection(db_path) as db:
+        cursor = db.execute(
+            """SELECT a.id, a.title, a.summary, a.url,
+                       a.published_at, a.created_at,
+                       a.source_name, a.fact_check_status, a.tags,
+                       f.title as feed_source_name
+                FROM articles a
+                JOIN feeds f ON a.feed_id = f.id
+                WHERE a.created_at >= ?
+                  AND a.tags IS NOT NULL
+                  AND a.tags != ''
+                ORDER BY a.created_at DESC""",
+            (threshold,),
+        )
+        rows = cursor.fetchall()
+
+    clusters: dict[str, dict] = {}
+    for row in rows:
+        article = dict(row)
+        tokens = []
+        for raw_tag in article["tags"].split(","):
+            tag = raw_tag.strip().lower()
+            if not tag or tag in ignored or len(tag) < 3:
+                continue
+            tokens.append(tag)
+
+        for tag in tokens:
+            cluster = clusters.setdefault(
+                tag,
+                {
+                    "name": tag,
+                    "slug": tag.replace(" ", "-"),
+                    "article_count": 0,
+                    "articles": [],
+                    "article_ids": set(),
+                },
+            )
+            if article["id"] in cluster["article_ids"]:
+                continue
+
+            cluster["article_ids"].add(article["id"])
+            cluster["article_count"] += 1
+            if len(cluster["articles"]) < per_cluster_limit:
+                cluster["articles"].append(
+                    {
+                        "id": article["id"],
+                        "title": article.get("title"),
+                        "summary": article.get("summary"),
+                        "url": article.get("url"),
+                        "published_at": article.get("published_at"),
+                        "created_at": article.get("created_at"),
+                        "source_name": article.get("source_name")
+                        or article.get("feed_source_name"),
+                        "fact_check_status": article.get("fact_check_status"),
+                    }
+                )
+
+    ranked = sorted(
+        (
+            {
+                "name": cluster["name"],
+                "slug": cluster["slug"],
+                "article_count": cluster["article_count"],
+                "articles": cluster["articles"],
+            }
+            for cluster in clusters.values()
+            if cluster["article_count"] >= min_articles
+        ),
+        key=lambda cluster: (-cluster["article_count"], cluster["name"]),
+    )
+    return ranked[:limit]
+
+
 def get_articles_by_category(
     db_path: Path,
     category: str,

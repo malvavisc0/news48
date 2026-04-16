@@ -15,6 +15,9 @@ dependencies = [
     "python-dotenv",
     "rich",
     "typer",
+    "Jinja2",
+    "fastapi",
+    "uvicorn",
 ]
 
 [project.scripts]

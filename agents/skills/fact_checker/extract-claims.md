@@ -1,20 +1,36 @@
 # Extract Claims
 
-Extract the key factual claims from the article that need verification.
+Extract the material factual claims from the article that need verification.
 
 ## Steps
 
-1. Read the article metadata and parsed content using `uv run news48 articles info <id> --json` and `uv run news48 articles content <id> --json`.
-2. Identify the main factual claims in the article (typically 3-7 claims).
-3. Focus on verifiable statements, not opinions or analysis.
-4. Prioritize claims that are central to the article's thesis.
+1. Read the article metadata and parsed content:
+   ```
+   news48 articles info <id> --json
+   news48 articles content <id> --json
+   ```
+2. Identify 3–7 material factual claims.
+3. Focus on verifiable statements: specific numbers, events, named entities,
+   direct quotes, dates, and attributions. Skip opinion, prediction, and
+   rhetorical framing.
+4. Prioritize claims that are central to the article's thesis — if you can
+   only verify a handful, verifying the central ones matters most.
 
-## Claim Selection Policy
+## Claim selection policy
 
-- Prefer claims that can be checked against external reporting, official statements, or primary documents.
-- Skip pure opinion, prediction, or rhetorical framing unless it contains a concrete factual assertion.
-- If the article contains many claims, prioritize the most material ones rather than exhaustively checking trivia.
+- Prefer claims that can be checked against external reporting, official
+  statements, regulatory filings, or primary documents.
+- Skip pure opinion, forecast, analysis, or rhetorical framing unless it
+  contains a concrete factual assertion that could be falsified.
+- If the article contains many claims, prioritize the most material ones
+  rather than exhaustively checking trivia.
+- Preserve the claim's meaning when you rewrite it: it should still be a
+  faithful, standalone statement that a reader could verify without
+  re-reading the article.
 
 ## Output
 
-Return a list of claims to verify, each as a separate statement.
+Return an internal list of claim strings. This list is the input for
+**search-evidence** and then **record-verdict**. The exact `text` you list here is
+what will be persisted in the `claims.claim_text` column, so write each
+entry as a clean, self-contained sentence.

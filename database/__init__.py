@@ -27,6 +27,12 @@ from .articles import (
     update_article,
     update_article_fact_check,
 )
+from .claims import (
+    compute_overall_verdict,
+    delete_claims_for_article,
+    get_claims_for_article,
+    insert_claims,
+)
 from .connection import get_connection, init_database
 from .feeds import (
     delete_feed,
