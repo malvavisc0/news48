@@ -378,9 +378,9 @@ def test_base_prompt_sizes_are_reasonable(tmp_path, monkeypatch):
             content = base_path.read_text(encoding="utf-8")
             # Rough token estimate: 1 token ≈ 4 chars
             estimated_tokens = len(content) / 4
-            assert estimated_tokens < 900, (
+            assert estimated_tokens < 600, (
                 f"Base prompt for {agent} is too large: "
-                f"~{estimated_tokens:.0f} tokens (expected < 500)"
+                f"~{estimated_tokens:.0f} tokens (expected < 600)"
             )
 
 
