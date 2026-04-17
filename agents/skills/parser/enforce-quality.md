@@ -26,7 +26,7 @@ If any quality gate or fidelity check fails:
 uv run news48 articles fail ARTICLEID --error "parse.<reason_code>: Failed parser quality gate: <reason>" --json
 ```
 
-Failure reason codes (must use codes from the canonical error taxonomy in `shared/error-taxonomy.md`):
+Failure reason codes (must use codes from the canonical error taxonomy):
 - `parse.duplicate_title` — summary duplicates the title
 - `parse.out_of_bounds` — title, summary, or content length outside limits
 - `parse.invalid_field` — country code, category, or sentiment normalization failed

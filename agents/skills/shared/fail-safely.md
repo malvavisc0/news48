@@ -5,7 +5,8 @@ Always active — stop loops, avoid duplicate work, exit deterministically.
 
 ## Rules
 1. If `claim_plan` returns `no_eligible_plans`, exit immediately.
-2. Never retry the same failed action more than twice.
+2. Never retry the same failed action more than twice. A failed action is one command or tool invocation with the same intent and error signature.
 3. After writing terminal state for the current unit of work, stop or move to the next explicit cycle boundary.
 4. Never fabricate plan IDs, step IDs, or article IDs.
 5. Break loops after 5 repeated tool errors with the same signature.
+6. Use structured taxonomy codes when stopping because of invalid commands, verification failure, or unrecoverable tool errors.

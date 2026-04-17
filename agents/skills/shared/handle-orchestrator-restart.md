@@ -28,3 +28,9 @@ The orchestrator may restart while an agent is running. When this happens:
 - If an agent was mid-execution when the orchestrator restarted, it will complete normally and exit.
 - The orchestrator will collect its result on the next tick when it discovers the process has exited.
 - No agent action is needed — the design is self-healing as long as agents follow rule 1 (write terminal state before exit).
+
+## Terminal State Reference
+- Executor: claimed plan marked `completed` or `failed`.
+- Parser: article update persisted or parse failure persisted.
+- Fact-checker: claims recorded and verified, or explicit failure recorded.
+- Sentinel: report written and any chosen plan actions persisted.

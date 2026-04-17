@@ -9,3 +9,4 @@ Always active — all agents must ground reasoning in observable state.
 3. Record what you observed, not what you expect.
 4. Prefer evidence that maps directly to persisted fields or documented derived statuses.
 5. If evidence does not cleanly support a claim, say that the claim is unproven.
+6. If evidence gathering fails, report uncertainty and use a `sys.tool` reason instead of inferring the missing state.

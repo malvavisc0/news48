@@ -39,3 +39,10 @@ Error codes follow the pattern `category.detail` — a category prefix, a dot, a
 2. Use the most specific code available. If no specific code fits, use the category prefix alone (e.g., `net` for an unspecified network error).
 3. Include the error code before the human-readable message: `net.timeout: Connection timed out after 30s`.
 4. Do not invent codes outside this taxonomy. If a new category is needed, add it here first.
+
+## Common Mappings
+- `sys.tool` — undocumented command, unreadable file, command failure, failed verification.
+- `sys.plan` — unverifiable success condition, invalid plan requirement, duplicate-plan suppression reason.
+- `sys.db` — persistence or database write failure.
+- `parse.invalid_field` — ineligible fact-check target or invalid normalized field.
+- `parse.fidelity` — missing required supported content or invented unsupported facts.

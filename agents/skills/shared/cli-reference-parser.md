@@ -40,11 +40,6 @@ Always active — parser must only use documented commands.
 ### Failure Reporting
 - `news48 articles fail ARTICLE_ID --error "reason" --json` — mark article as parse-failed with error reason.
 
-### Re-download Corrupted or Empty Content
-If the HTML file is corrupt or empty, re-download the article content:
-- `news48 download --article ARTICLE_ID --json` — download HTML for a specific article by ID.
-- After re-download, re-read the HTML file path provided in the task.
-
 ### Evidence (rarely needed)
 - `news48 stats --json` — broad system snapshot. Rarely needed; the parser operates on one pre-assigned article.
 

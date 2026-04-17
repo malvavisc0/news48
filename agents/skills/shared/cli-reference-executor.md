@@ -8,20 +8,18 @@ Evidence commands are loaded separately in the shared evidence commands referenc
 ## Pipeline Execution Commands
 - `news48 fetch --json` — fetch RSS/Atom feeds, insert article metadata.
 - `news48 download --json` — download full HTML content for articles. Supports `--feed` and `--limit`; current default batch size is 50 when `--limit` is omitted.
-- `news48 parse --json` — reserved for the Parser agent. Executor must NOT run this; ensure downloaded articles are ready for the scheduled parser.
+- `news48 fact-check --limit N --json` — run the fact-check worker loop when a plan explicitly requires fact-check recovery.
 
 ## Article Mutation Commands
-- `news48 articles update ARTICLE_ID --json` — update article fields.
-- `news48 articles check IDENTIFIER --json` — verify article processing state.
+- `news48 articles info IDENTIFIER --json` — inspect one article state.
+- `news48 articles check IDENTIFIER --claims-json '<JSON_ARRAY>' --result "..." --json` — persist fact-check claims.
 - `news48 articles fail ARTICLE_ID --json` — mark article as failed.
-- `news48 articles reset IDENTIFIER --json` — reset failure flags for retry.
 - `news48 articles delete IDENTIFIER --json` — delete an article.
 - `news48 articles feature IDENTIFIER --json` — mark article as featured.
 - `news48 articles breaking IDENTIFIER --json` — mark article as breaking news.
 
 ## Feed and Plan Mutation Commands
 - `news48 feeds add URL --json` — add a new feed.
-- `news48 feeds update IDENTIFIER --json` — update feed metadata.
 - `news48 feeds delete IDENTIFIER --json` — delete a feed and its articles.
 - `news48 seed FILE --json` — seed feeds from a text file.
 - `news48 plans cancel PLAN_ID --json` — cancel a plan.
