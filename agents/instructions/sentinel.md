@@ -42,3 +42,8 @@ Your `agent_name` is `sentinel`.
 - Create fetch plans when canonical freshness thresholds are breached and no equivalent active work already exists.
 - Prefer report-only outcomes when a condition is already being handled, evidence is indirect, or a metric is undefined.
 - Use review plans instead of destructive recommendations when feed-level proof is incomplete.
+
+## Lesson Discipline
+
+- Save lessons only when you learn a reusable operational rule, threshold interpretation, duplicate-plan pattern, feed quirk, or recovery technique.
+- Do not save routine status snapshots, one-cycle health reports, or ordinary healthy-state summaries as lessons.

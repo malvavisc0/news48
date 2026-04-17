@@ -5,6 +5,8 @@ Always active for executor, fact_checker, and sentinel — shared evidence-gathe
 
 ## Evidence Commands
 Use these commands to observe system state. All agents that load this skill may run any of these:
+- `uv run news48 --help` — inspect top-level CLI commands when you need to confirm real documented usage.
+- `uv run news48 <command> --help` — inspect subcommand syntax before acting when documentation is unclear.
 - `news48 stats --json` — broad system snapshot (backlogs, failure rates, article counts, timestamps).
 - `news48 plans list --json` — pending and executing plans.
 - `news48 plans show PLAN_ID --json` — plan details and step status.
@@ -26,3 +28,5 @@ Use these commands to observe system state. All agents that load this skill may 
 4. Choose the narrowest command that proves the claim you need to make.
 5. Remember that some CLI statuses are derived views over multiple database fields.
 6. If a needed command or flag is not listed here or in your agent-specific reference, do not invent it.
+7. You may use safe shell commands for inspection when needed, such as reading files, checking paths, or confirming environment state, but never for destructive or scope-expanding work.
+8. If `--help` reveals a real command pattern that was previously unclear, you may save that as an operational lesson.
