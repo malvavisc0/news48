@@ -887,7 +887,7 @@ class Orchestrator:
 
             await asyncio.sleep(interval)
 
-    async def _parse_loop(self, interval: int = 30) -> None:
+    async def _parse_loop(self, interval: int = 60) -> None:
         """Continuously parse downloaded articles in a background loop."""
         from agents.parser import run_autonomous
 
@@ -930,33 +930,38 @@ class Orchestrator:
                 while True:
                     # IMPORTANT: tick() is synchronous (uses subprocess.Popen).
                     # Run in executor to avoid blocking the async event loop.
-                    loop = asyncio.get_event_loop()
-                    result = await loop.run_in_executor(None, self.tick)
-                    n_c = len(result["completed"])
-                    n_f = len(result["forked"])
-                    n_r = result["running_total"]
+                    try:
+                        loop = asyncio.get_event_loop()
+                        result = await loop.run_in_executor(None, self.tick)
+                        n_c = len(result["completed"])
+                        n_f = len(result["forked"])
+                        n_r = result["running_total"]
 
-                    if n_c or n_f:
-                        parts = [
-                            "Tick: forked=%d completed=%d running=%d" % (n_f, n_c, n_r)
-                        ]
-                        for comp_key, info in result["completed"].items():
-                            parts.append(
-                                "%s=%s/exit=%s/%s"
-                                % (
-                                    comp_key,
-                                    info["result"],
-                                    info.get("exit_code"),
-                                    info.get("duration", "?"),
-                                )
-                            )
-                        for name in result["forked"]:
-                            instances = self.running.get(name, [])
-                            if instances:
+                        if n_c or n_f:
+                            parts = [
+                                "Tick: forked=%d completed=%d running=%d" % (n_f, n_c, n_r)
+                            ]
+                            for comp_key, info in result["completed"].items():
                                 parts.append(
-                                    "%s=forked/pid=%d" % (name, instances[-1].pid)
+                                    "%s=%s/exit=%s/%s"
+                                    % (
+                                        comp_key,
+                                        info["result"],
+                                        info.get("exit_code"),
+                                        info.get("duration", "?"),
+                                    )
                                 )
-                        logger.info(" ".join(parts))
+                            for name in result["forked"]:
+                                instances = self.running.get(name, [])
+                                if instances:
+                                    parts.append(
+                                        "%s=forked/pid=%d" % (name, instances[-1].pid)
+                                    )
+                            logger.info(" ".join(parts))
+                    except Exception:
+                        logger.exception(
+                            "Tick error (background pipelines continue)"
+                        )
 
                     await asyncio.sleep(tick_seconds)
             finally:
