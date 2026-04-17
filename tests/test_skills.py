@@ -47,7 +47,6 @@ def test_plan_family_skills_covers_all_families():
     expected_families = {
         "fetch",
         "download",
-        "fact-check",
         "retention",
         "cleanup",
         "feed-health",
@@ -174,10 +173,10 @@ def test_get_skills_for_agent_excludes_other_agents():
 
 def test_get_skills_for_agent_includes_conditional_when_matched():
     """Conditional skills are included when condition matches."""
-    skills = set(_get_skills_for_agent("executor", {"plan_family": "fact-check"}))
+    skills = set(_get_skills_for_agent("executor", {"plan_family": "retention"}))
     assert (
-        "run-fact-check" in skills
-    ), "run-fact-check should be included for fact-check family"
+        "run-cleanup" in skills
+    ), "run-cleanup should be included for retention family"
 
 
 def test_get_skills_for_agent_excludes_conditional_when_not_matched():
@@ -262,10 +261,12 @@ def test_compose_includes_shared_skills():
     assert "current default batch size is 50" in result
 
 
-def test_compose_executor_with_fact_check_includes_run_fact_check():
-    """Executor with fact-check plan_family includes run-fact-check skill."""
+def test_compose_executor_with_fact_check_rejects_fact_check():
+    """Executor with fact-check family rejects the skill."""
     result = compose_agent_instructions("executor", {"plan_family": "fact-check"})
-    assert "# Skill: Execute fact-check plans" in result
+    assert "# Skill: Execute fact-check plans" not in result
+    # Business-logic note about rejecting fact-check plans
+    assert "Do NOT execute fact-check plans" in result
 
 
 def test_compose_executor_with_download_includes_run_waves():
@@ -328,7 +329,7 @@ def test_executor_business_logic_matches_runtime_loading_notes():
         encoding="utf-8"
     )
     assert "plan_family:fetch` or `plan_family:download" in content
-    assert "Parse-family plans may still be executed" in content
+    assert "fact-check-family plans have no executor path" in content
 
 
 def test_parser_business_logic_matches_caller_verification_model():

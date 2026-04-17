@@ -9,10 +9,8 @@ flowchart TD
     Read --> Family{plan family?}
     Family -->|fetch/download| WaveFlow[Use run-waves when step pattern fits]
     Family -->|retry/retention/feed-health/db-health/discovery| Execute[Execute steps in order]
-    Family -->|fact-check| FactCheck[Use documented fact-check execution path]
-    Family -->|parse or unknown| Invalid[Fail: no executor path]
+    Family -->|fact-check/parse or unknown| Invalid[Fail: no executor path]
     WaveFlow --> Execute
-    FactCheck --> Execute
     Execute --> Step{Step status?}
     Step -->|pending| UpdateExec[Update: executing]
     UpdateExec --> RunCmd[Run exact plan command or<br/>documented skill-authorized command]
@@ -44,7 +42,6 @@ flowchart TD
 |-------|-----------|
 | `run-waves` | `plan_family:fetch` or `plan_family:download` |
 | `add-steps` | plan_family:discovery |
-| `run-fact-check` | plan_family:fact-check |
 | `run-cleanup` | plan_family:retention |
 | `run-feed-health` | plan_family:feed-health |
 | `run-db-health` | plan_family:db-health |
@@ -52,10 +49,10 @@ flowchart TD
 
 ## Notes
 
-- Parse-family plans may still be executed only when a future dedicated path is
-  documented; today they have no executor path and must fail explicitly.
+- Parse-family and fact-check-family plans have no executor path and must fail explicitly.
+  Fact-checking is handled autonomously by the scheduled `fact_checker` agent (5-min interval, up to 3 concurrent).
+  Do NOT execute fact-check plans — they exceed the executor's 30-minute runtime limit and cause infinite timeout→requeue loops.
 - The executor follows one claimed plan only and must always end with a
   terminal plan status.
 - If a plan step cannot be mapped to an exact documented command or skill-defined
   action, the step is invalid and should fail explicitly.
-- Fact-check family plans are allowed only when the loaded fact-check execution path documents a concrete route based on real commands and evidence tools.

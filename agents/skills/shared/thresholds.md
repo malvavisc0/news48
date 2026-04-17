@@ -15,15 +15,14 @@ Always active for sentinel agent — single source of truth for all health thres
 | Parse failure rate | 10% | 25% |
 | Malformed parsed articles | ≥ 1 | ≥ 10 |
 | Articles older than 48h | present | 100+ |
-| Fact-check completions (24h) | < 1 with backlog | 0 with backlog |
-| Fact-check oldest eligible item | > 12h | > 24h |
 
 ## Self-Healing Metrics (Do NOT Create Plans)
 
-The following backlogs are handled by the orchestrator's automated background loops and **must not** trigger plan creation:
+The following backlogs are handled by the orchestrator's automated background loops or scheduled agents and **must not** trigger plan creation:
 
 - **Empty article backlog** (download backlog) — the `_download_loop` runs every 30s and processes up to 100 articles per cycle.
 - **Downloaded article backlog** (parse backlog) — the parser is triggered automatically after each download batch, and also runs on its own schedule.
+- **Fact-check backlog** — the `fact_checker` agent runs on its own 5-minute schedule with up to 3 concurrent instances. Creating executor plans for fact-check backlog causes an infinite timeout→requeue loop because a single executor cannot complete the work within its 30-minute runtime limit.
 
 These metrics may still be reported in the sentinel report for visibility, but they should **never** result in fix plans.
 

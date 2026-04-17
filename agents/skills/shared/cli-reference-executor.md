@@ -8,7 +8,6 @@ Evidence commands are loaded separately in the shared evidence commands referenc
 ## Pipeline Execution Commands
 - `news48 fetch --json` — fetch RSS/Atom feeds, insert article metadata.
 - `news48 download --json` — download full HTML content for articles. Supports `--feed` and `--limit`; current default batch size is 50 when `--limit` is omitted.
-- `news48 fact-check --limit N --json` — run the fact-check worker loop when a plan explicitly requires fact-check recovery.
 
 ## Article Mutation Commands
 - `news48 articles info IDENTIFIER --json` — inspect one article state.

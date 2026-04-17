@@ -73,7 +73,6 @@ class SkillDef:
 PLAN_FAMILY_SKILLS: dict[str, list[str]] = {
     "fetch": ["run-waves"],
     "download": ["run-waves"],
-    "fact-check": ["run-fact-check"],
     "retention": ["run-cleanup"],
     "cleanup": ["run-cleanup"],
     "feed-health": ["run-feed-health"],
@@ -192,13 +191,6 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
         agents=("executor",),
         always=False,
         condition_key="plan_family:discovery",
-    ),
-    "run-fact-check": SkillDef(
-        id="run-fact-check",
-        file="executor/run-fact-check.md",
-        agents=("executor",),
-        always=False,
-        condition_key="plan_family:fact-check",
     ),
     "run-cleanup": SkillDef(
         id="run-cleanup",
