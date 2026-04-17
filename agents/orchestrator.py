@@ -113,6 +113,9 @@ class Orchestrator:
             if not isinstance(entries, list):
                 continue  # skip malformed entries
             for entry in entries:
+                if not isinstance(entry, dict):
+                    logger.warning("Skipping malformed running entry for %s", name)
+                    continue
                 pid = entry.get("pid", 0)
                 if not _is_process_alive(pid):
                     if name in self.schedules:
@@ -122,15 +125,16 @@ class Orchestrator:
                             "Process disappeared (orchestrator restarted?)"
                         )
                 else:
-                    # Process is still running from a previous session
-                    self.running.setdefault(name, []).append(
-                        RunningAgent(
-                            pid=pid,
-                            agent_name=name,
-                            started_at=entry.get("started_at", ""),
-                            log_file=entry.get("log_file", ""),
+                    # Persisted PIDs cannot be trusted strongly enough across
+                    # orchestrator restarts without verifying process identity.
+                    # Mark them as unknown and let the agent be rescheduled.
+                    if name in self.schedules:
+                        self.schedules[name].last_run = entry.get("started_at")
+                        self.schedules[name].last_result = "unknown"
+                        self.schedules[name].last_error = (
+                            "Found live PID from previous session but could not "
+                            "safely reattach after restart"
                         )
-                    )
 
     def _recover_stale_plans(self) -> None:
         """Run an autonomous recovery pass for stale executing plans.
@@ -322,11 +326,26 @@ class Orchestrator:
             os.kill(pid, signal.SIGKILL)
         except OSError:
             pass
-        try:
-            config.PID_FILE.unlink(missing_ok=True)
-        except OSError:
-            pass
-        return {"daemon_pid": pid, "stopped": True, "signal": "SIGKILL"}
+
+        for _ in range(50):
+            time.sleep(0.1)
+            if not _is_process_alive(pid):
+                try:
+                    config.PID_FILE.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                return {
+                    "daemon_pid": pid,
+                    "stopped": True,
+                    "signal": "SIGKILL",
+                }
+
+        return {
+            "daemon_pid": pid,
+            "stopped": False,
+            "signal": "SIGKILL",
+            "error": f"Process {pid} remained alive after SIGKILL",
+        }
 
     def _write_heartbeat(self) -> None:
         """Write a heartbeat file with the current timestamp.
@@ -493,10 +512,9 @@ class Orchestrator:
                 "error": f"Unknown agent: {name}",
             }
 
-        task_context = self._build_task_context(name)
-        module = importlib.import_module(_AGENT_MODULES[name])
-
         try:
+            task_context = self._build_task_context(name)
+            module = importlib.import_module(_AGENT_MODULES[name])
             # Parser uses a dedicated autonomous entry point;
             # all other agents accept task_context as an optional kwarg.
             if name == "parser":
@@ -612,6 +630,7 @@ class Orchestrator:
         # Record the fork time so _should_run() doesn't re-trigger on
         # the very next tick for non-concurrent agents.
         self._update_schedule(name, "running")
+        self.save_state()
 
         logger.info("Forked agent %s as PID %d → %s", name, proc.pid, log_file)
         return True
@@ -944,6 +963,12 @@ class Orchestrator:
                 fetch_task.cancel()
                 download_task.cancel()
                 parse_task.cancel()
+                await asyncio.gather(
+                    fetch_task,
+                    download_task,
+                    parse_task,
+                    return_exceptions=True,
+                )
 
         try:
             asyncio.run(_main_loop())

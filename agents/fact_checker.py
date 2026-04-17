@@ -49,9 +49,7 @@ async def run_cycle(limit: int = 10) -> dict:
                     }
                 )
         except Exception as exc:
-            results.append(
-                {"id": article["id"], "success": False, "error": str(exc)}
-            )
+            results.append({"id": article["id"], "success": False, "error": str(exc)})
 
     checked = sum(1 for r in results if r.get("success"))
     return {"checked": checked, "results": results}
@@ -78,8 +76,7 @@ def get_agent(task_context: dict | None = None) -> FunctionAgent:
     return FunctionAgent(
         name="FactChecker",
         description=(
-            "Fact-checks articles by searching for evidence and "
-            "recording verdicts."
+            "Fact-checks articles by searching for evidence and " "recording verdicts."
         ),
         tools=[
             perform_web_search,

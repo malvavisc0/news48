@@ -81,14 +81,33 @@ DEFAULT_SCHEDULES: Dict[str, AgentSchedule] = {
 
 
 def _is_process_alive(pid: int) -> bool:
-    """Check if a process with the given PID is still running."""
+    """Check if a process with the given PID is still running.
+
+    On Linux, treats zombie processes as not alive for orchestration
+    purposes so stale PIDs do not block scheduling or shutdown logic.
+    """
     if pid <= 0:
         return False
     try:
         os.kill(pid, 0)  # Signal 0 = check existence
-        return True
     except (ProcessLookupError, PermissionError):
         return False
+
+    stat_path = f"/proc/{pid}/stat"
+    try:
+        stat = open(stat_path, "r", encoding="utf-8").read()
+    except OSError:
+        return True
+
+    try:
+        _pid, remainder = stat.split("(", 1)
+        _comm, remainder = remainder.rsplit(")", 1)
+        parts = remainder.strip().split()
+        state = parts[0]
+    except (IndexError, ValueError):
+        return True
+
+    return state != "Z"
 
 
 def _duration_since(iso_timestamp: str) -> str:
