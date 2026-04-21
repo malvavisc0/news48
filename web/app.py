@@ -31,6 +31,7 @@ templates.env.filters["word_count"] = filters.word_count
 templates.env.filters["read_time"] = filters.read_time
 templates.env.filters["parse_categories"] = filters.parse_categories
 templates.env.filters["parse_tags"] = filters.parse_tags
+templates.env.filters["format_category_name"] = filters.format_category_name
 
 DB_PATH = Database.path
 
@@ -39,6 +40,7 @@ DB_PATH = Database.path
 async def homepage(request: Request):
     """Homepage with live stories, stats, clusters, expiring articles."""
     from database.articles import (
+        get_all_categories,
         get_articles_paginated,
         get_expiring_articles,
         get_topic_clusters,
@@ -51,6 +53,7 @@ async def homepage(request: Request):
     )
     clusters = get_topic_clusters(DB_PATH, hours=48, parsed=True)
     expiring = get_expiring_articles(DB_PATH, within_hours=6, parsed=True)
+    categories = get_all_categories(DB_PATH, hours=48, parsed=True)
 
     # Compute max cluster count for proportional bar rendering
     max_cluster_count = max((c["article_count"] for c in clusters), default=10)
@@ -64,6 +67,8 @@ async def homepage(request: Request):
             "clusters": clusters,
             "expiring": expiring,
             "max_cluster_count": max_cluster_count,
+            "categories": categories,
+            "active_category": None,
         },
     )
 
@@ -72,6 +77,7 @@ async def homepage(request: Request):
 async def article_detail(request: Request, article_id: int):
     """Article detail page with fact-check claims and related stories."""
     from database.articles import (
+        get_all_categories,
         get_article_detail,
         get_related_articles,
         increment_view_count,
@@ -85,6 +91,7 @@ async def article_detail(request: Request, article_id: int):
 
     claims = get_claims_for_article(DB_PATH, article_id)
     related = get_related_articles(DB_PATH, article_id, limit=3, parsed=True)
+    categories = get_all_categories(DB_PATH, hours=48, parsed=True)
 
     # Compute claims summary from claims list
     claims_summary = {
@@ -120,6 +127,8 @@ async def article_detail(request: Request, article_id: int):
             "related": related,
             "og_tags": og_tags,
             "json_ld": json_ld,
+            "categories": categories,
+            "active_category": None,
         },
     )
 
@@ -127,13 +136,15 @@ async def article_detail(request: Request, article_id: int):
 @app.get("/cluster/{cluster_slug}")
 async def cluster_detail(request: Request, cluster_slug: str):
     """Cluster detail page showing all articles matching a tag."""
-    from database.articles import get_articles_by_tag
+    from database.articles import get_all_categories, get_articles_by_tag
 
     articles, total = get_articles_by_tag(
         DB_PATH, cluster_slug, hours=48, limit=50, parsed=True
     )
     if not articles:
         raise HTTPException(status_code=404, detail="Cluster not found")
+
+    categories = get_all_categories(DB_PATH, hours=48, parsed=True)
 
     return templates.TemplateResponse(
         request=request,
@@ -142,6 +153,50 @@ async def cluster_detail(request: Request, cluster_slug: str):
             "cluster_name": cluster_slug,
             "articles": articles,
             "total": total,
+            "categories": categories,
+            "active_category": None,
+        },
+    )
+
+
+@app.get("/category/{category_slug}")
+async def category_detail(request: Request, category_slug: str):
+    """Category detail page showing all articles matching a category."""
+    from database.articles import (
+        get_all_categories,
+        get_articles_by_category,
+        get_web_stats,
+    )
+
+    articles, total = get_articles_by_category(
+        DB_PATH, category_slug, hours=48, limit=50, parsed=True
+    )
+    if not articles:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    categories = get_all_categories(DB_PATH, hours=48, parsed=True)
+    stats = get_web_stats(DB_PATH, hours=48, parsed=True)
+
+    # Look up display name from categories list
+    cat_match = next(
+        (c for c in categories if c["slug"] == category_slug), None
+    )
+    raw_name = (
+        cat_match["name"] if cat_match else category_slug.replace("-", " ")
+    )
+    category_name = filters.format_category_name(raw_name)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="category.html",
+        context={
+            "category_name": category_name,
+            "category_slug": category_slug,
+            "articles": articles,
+            "total": total,
+            "categories": categories,
+            "active_category": category_slug,
+            "stats": stats,
         },
     )
 

@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}{{ cluster_name }} — news48{% endblock %}
+{% block title %}{{ category_name }} — news48{% endblock %}
 
-{% block body_class %}page-cluster{% endblock %}
+{% block body_class %}page-category{% endblock %}
 
 {% block content %}
 <a class="back-link" href="/">← back to all stories</a>
 
 <header>
-    <h1 class="masthead">{{ cluster_name }}</h1>
-    <div class="tagline">{{ total }} stories in this cluster</div>
+    <h1 class="masthead">{{ category_name }}</h1>
+    <div class="tagline">{{ total }} stories in this category</div>
 </header>
 
 <nav class="category-nav" aria-label="Categories">
@@ -20,8 +20,8 @@
     {% endfor %}
 </nav>
 
-<section class="section" aria-labelledby="cluster-stories-label">
-    <h2 class="section-label" id="cluster-stories-label">stories</h2>
+<section class="section" aria-labelledby="category-stories-label">
+    <h2 class="section-label" id="category-stories-label">stories</h2>
     <div class="story-list">
         {% for story in articles %}
         <article class="story{% if story.is_breaking %} is-breaking{% endif %}">

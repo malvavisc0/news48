@@ -28,6 +28,14 @@
     <div class="tagline">rewritten article · original source visible · expires inside 48 hours</div>
 </header>
 
+<nav class="category-nav" aria-label="Categories">
+    <a href="/" class="category-pill{% if not active_category %} active{% endif %}">all</a>
+    {% for cat in categories %}
+    <a href="/category/{{ cat.slug }}" class="category-pill{% if active_category == cat.slug %} active{% endif %}">{{
+        cat.name | format_category_name }}</a>
+    {% endfor %}
+</nav>
+
 <article class="article-shell">
     <h2 class="headline">{{ article.title }}</h2>
     {% if article.summary %}

@@ -1097,18 +1097,28 @@ def get_trending_articles(
         return [dict(row) for row in cursor.fetchall()]
 
 
-def get_all_categories(db_path: Path, hours: int = 48) -> list[dict]:
+def get_all_categories(
+    db_path: Path, hours: int = 48, parsed: bool = False
+) -> list[dict]:
     """Get distinct categories with article counts within time window.
 
     Parses the comma-separated categories column.
     Returns list of dicts: [{name, slug, article_count}]
+
+    Args:
+        db_path: Path to the SQLite database file.
+        hours: Time window in hours.
+        parsed: If True, only include articles that have been parsed
+            (parsed_at IS NOT NULL).
     """
     threshold = _hours_ago_iso(hours)
+    parsed_filter = "AND parsed_at IS NOT NULL" if parsed else ""
     with get_connection(db_path) as db:
         cursor = db.execute(
-            """SELECT categories FROM articles
+            f"""SELECT categories FROM articles
                 WHERE created_at >= ? AND categories IS NOT NULL
-                  AND categories != ''""",
+                  AND categories != ''
+                  {parsed_filter}""",
             (threshold,),
         )
         counts: dict[str, int] = {}
@@ -1296,29 +1306,42 @@ def get_articles_by_category(
     hours: int = 48,
     limit: int = 20,
     offset: int = 0,
+    parsed: bool = False,
 ) -> tuple[list[dict], int]:
     """Get articles matching a category within the time window.
 
     Uses LIKE matching on the comma-separated categories column.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        category: The category to search for.
+        hours: Time window in hours.
+        limit: Maximum number of articles to return.
+        offset: Offset for pagination.
+        parsed: If True, only include articles that have been parsed
+            (parsed_at IS NOT NULL).
     """
     threshold = _hours_ago_iso(hours)
+    parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
     with get_connection(db_path) as db:
         count_cursor = db.execute(
-            """SELECT COUNT(*) FROM articles
-                WHERE categories LIKE '%' || ? || '%'
-                  AND created_at >= ?""",
+            f"""SELECT COUNT(*) FROM articles a
+                WHERE a.categories LIKE '%' || ? || '%'
+                  AND a.created_at >= ?
+                  {parsed_filter}""",
             (category, threshold),
         )
         total = count_cursor.fetchone()[0]
 
         cursor = db.execute(
-            """SELECT a.*, f.title as source_name,
+            f"""SELECT a.*, f.title as source_name,
                        f.icon_url as feed_icon_url,
                        f.favicon_url as feed_favicon_url
                 FROM articles a
                 JOIN feeds f ON a.feed_id = f.id
                 WHERE a.categories LIKE '%' || ? || '%'
                   AND a.created_at >= ?
+                  {parsed_filter}
                 ORDER BY a.created_at DESC
                 LIMIT ? OFFSET ?""",
             (category, threshold, limit, offset),

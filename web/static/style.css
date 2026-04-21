@@ -118,7 +118,8 @@ a:hover {
 .status-line,
 .stat-kicker,
 .cluster-count,
-.story-index {
+.story-index,
+.category-pill {
     font-family: 'JetBrains Mono', monospace;
 }
 
@@ -139,6 +140,63 @@ a:hover {
     border-bottom-color: var(--action);
     border-bottom-style: solid;
     text-decoration: none;
+}
+
+/* === Category navigation === */
+
+.category-nav {
+    margin-top: 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--rule);
+}
+
+.page-article .category-nav,
+.page-cluster .category-nav,
+.page-category .category-nav {
+    margin-top: 20px;
+}
+
+/* Tighten spacing when nav precedes content sections */
+.category-nav+.section {
+    margin-top: 36px;
+}
+
+.category-nav+.article-shell {
+    margin-top: 32px;
+}
+
+.category-pill {
+    display: inline-flex;
+    padding: 4px 10px;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    border: 1px solid var(--rule);
+    text-decoration: none;
+    transition: background 0.15s ease, color 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.category-pill:hover {
+    background: var(--surface);
+    color: var(--ink);
+    text-decoration: none;
+}
+
+.category-pill.active {
+    background: var(--highlight-bg);
+    border-color: var(--highlight-bg);
+    color: var(--highlight-fg);
+    font-weight: 500;
+}
+
+.category-pill:focus-visible {
+    outline: 2px solid var(--action);
+    outline-offset: 1px;
 }
 
 /* === Status line (index only) === */
@@ -962,5 +1020,15 @@ a.cluster:hover {
     .claim-row {
         grid-template-columns: 1fr;
         gap: 6px;
+    }
+
+    .category-nav {
+        gap: 6px;
+        padding-bottom: 16px;
+    }
+
+    .category-pill {
+        padding: 3px 8px;
+        font-size: 11px;
     }
 }

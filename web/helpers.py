@@ -115,3 +115,28 @@ def cluster_bar(count: int, max_count: int = 10, bar_width: int = 20) -> str:
     filled = max(1, int(ratio * bar_width)) if count > 0 else 0
     empty = bar_width - filled
     return "\u2588" * filled + "\u2591" * empty
+
+
+def format_category_name(name: str) -> str:
+    """Format a category name for display.
+
+    Replaces underscores and 'and' with '&'. Hyphens become spaces.
+    Examples:
+        'health_medicine' -> 'health & medicine'
+        'science_and_society' -> 'science & society'
+        'plants_animals' -> 'plants & animals'
+        'food-and-drink' -> 'food & drink'
+        'middle-east' -> 'middle east'
+    """
+    if not name:
+        return name
+    # Replace '_and_' and '-and-' patterns first
+    result = name.replace("_and_", " & ").replace("-and-", " & ")
+    # Replace remaining underscores with ' & '
+    result = result.replace("_", " & ")
+    # Replace remaining hyphens with spaces
+    result = result.replace("-", " ")
+    # Also handle space-separated 'and' (no underscores/hyphens)
+    if "_" not in name and "-" not in name:
+        result = result.replace(" and ", " & ")
+    return result
