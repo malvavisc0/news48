@@ -53,6 +53,24 @@ app.add_typer(search_app, name="search")
 app.add_typer(sitemap_app, name="sitemap")
 
 
+@app.command()
+def serve(
+    host: str | None = None,
+    port: int | None = None,
+):
+    """Start the web server."""
+    import uvicorn
+
+    from config import Web
+    from web.app import app as web_app
+
+    uvicorn.run(
+        web_app,
+        host=host or Web.host,
+        port=port or Web.get_port(),
+    )
+
+
 def main():
     app()
 

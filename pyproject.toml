@@ -24,8 +24,8 @@ dependencies = [
 news48 = "main:main"
 
 [tool.setuptools]
-packages = ["agents", "commands", "database"]
-py-modules = ["config", "helpers", "models", "main"]
+packages = ["agents", "commands", "database", "helpers", "web"]
+py-modules = ["config", "models", "main"]
 
 [tool.uv]
 package = true

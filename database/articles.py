@@ -86,7 +86,8 @@ def insert_articles(
                 duplicates += 1
         if entries:
             _log.info(
-                "insert_articles: %d entries, %d new, " "%d duplicates, %d no-url",
+                "insert_articles: %d entries, %d new, "
+                "%d duplicates, %d no-url",
                 len(entries),
                 count,
                 duplicates,
@@ -543,6 +544,7 @@ def get_articles_paginated(
     sentiment: str | None = None,
     hours: int | None = None,
     include_source: bool = False,
+    parsed: bool = False,
 ) -> tuple[list[dict], int]:
     """Return filtered, paginated articles and total count.
 
@@ -558,6 +560,8 @@ def get_articles_paginated(
         sentiment: Optional sentiment filter.
         hours: Optional time window filter in hours.
         include_source: If True, join feed data for source info.
+        parsed: If True, only include articles that have been parsed
+            (parsed_at IS NOT NULL).
 
     Returns:
         A tuple of (articles list, total count).
@@ -565,7 +569,8 @@ def get_articles_paginated(
     status_conditions = {
         "empty": "a.content IS NULL AND a.download_failed = 0",
         "downloaded": (
-            "a.content IS NOT NULL AND a.parsed_at IS NULL " "AND a.parse_failed = 0"
+            "a.content IS NOT NULL AND a.parsed_at IS NULL "
+            "AND a.parse_failed = 0"
         ),
         "parsed": "a.parsed_at IS NOT NULL",
         "download-failed": "a.download_failed = 1",
@@ -601,6 +606,9 @@ def get_articles_paginated(
     if hours is not None:
         where_clauses.append("a.created_at >= ?")
         params.append(_hours_ago_iso(hours))
+
+    if parsed:
+        where_clauses.append("a.parsed_at IS NOT NULL")
 
     where_sql = ""
     if where_clauses:
@@ -661,7 +669,9 @@ def get_article_by_id(db_path: Path, article_id: int) -> dict | None:
         A dict with article data, or None if not found.
     """
     with get_connection(db_path) as db:
-        cursor = db.execute("SELECT * FROM articles WHERE id = ?", (article_id,))
+        cursor = db.execute(
+            "SELECT * FROM articles WHERE id = ?", (article_id,)
+        )
         row = cursor.fetchone()
         return dict(row) if row else None
 
@@ -682,7 +692,9 @@ def get_article_by_url(db_path: Path, url: str) -> dict | None:
         return dict(row) if row else None
 
 
-def mark_article_download_failed(db_path: Path, article_id: int, error: str) -> None:
+def mark_article_download_failed(
+    db_path: Path, article_id: int, error: str
+) -> None:
     """Mark an article as having a failed download.
 
     Args:
@@ -700,7 +712,9 @@ def mark_article_download_failed(db_path: Path, article_id: int, error: str) -> 
         db.commit()
 
 
-def mark_article_parse_failed(db_path: Path, article_id: int, error: str) -> None:
+def mark_article_parse_failed(
+    db_path: Path, article_id: int, error: str
+) -> None:
     """Mark an article as having a failed parse.
 
     Args:
@@ -764,7 +778,8 @@ def get_article_stats(db_path: Path) -> dict:
         malformed, oldest_unparsed_at, articles_today, articles_this_week.
     """
     with get_connection(db_path) as db:
-        cursor = db.execute("""SELECT
+        cursor = db.execute(
+            """SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN parsed_at IS NOT NULL THEN 1 ELSE 0 END)
                     AS parsed,
@@ -794,26 +809,35 @@ def get_article_stats(db_path: Path) -> dict:
                          OR title LIKE '%<%>%')
                     THEN 1 ELSE 0 END)
                     AS malformed
-            FROM articles""")
+            FROM articles"""
+        )
         row = dict(cursor.fetchone())
 
         # Oldest unparsed article
-        cursor = db.execute("""SELECT MIN(created_at) AS oldest_unparsed_at
+        cursor = db.execute(
+            """SELECT MIN(created_at) AS oldest_unparsed_at
                FROM articles
                WHERE content IS NOT NULL
                  AND parsed_at IS NULL
-                 AND parse_failed = 0""")
+                 AND parse_failed = 0"""
+        )
         oldest = cursor.fetchone()
-        row["oldest_unparsed_at"] = oldest["oldest_unparsed_at"] if oldest else None
+        row["oldest_unparsed_at"] = (
+            oldest["oldest_unparsed_at"] if oldest else None
+        )
 
         # Articles created today (UTC)
-        cursor = db.execute("""SELECT COUNT(*) AS cnt FROM articles
-               WHERE created_at >= date('now')""")
+        cursor = db.execute(
+            """SELECT COUNT(*) AS cnt FROM articles
+               WHERE created_at >= date('now')"""
+        )
         row["articles_today"] = cursor.fetchone()["cnt"]
 
         # Articles created this week (UTC, Monday-based)
-        cursor = db.execute("""SELECT COUNT(*) AS cnt FROM articles
-               WHERE created_at >= date('now', 'weekday 1', '-7 days')""")
+        cursor = db.execute(
+            """SELECT COUNT(*) AS cnt FROM articles
+               WHERE created_at >= date('now', 'weekday 1', '-7 days')"""
+        )
         row["articles_this_week"] = cursor.fetchone()["cnt"]
 
         return row
@@ -876,12 +900,14 @@ def get_feed_stats(db_path: Path, stale_days: int = 7) -> dict:
         row = dict(cursor.fetchone())
 
         # Top feeds by article count
-        cursor = db.execute("""SELECT f.title, f.url, COUNT(a.id) AS article_count
+        cursor = db.execute(
+            """SELECT f.title, f.url, COUNT(a.id) AS article_count
                FROM feeds f
                LEFT JOIN articles a ON f.id = a.feed_id
                GROUP BY f.id
                ORDER BY article_count DESC
-               LIMIT 10""")
+               LIMIT 10"""
+        )
         row["top_feeds"] = [dict(r) for r in cursor.fetchall()]
 
         return row
@@ -898,18 +924,22 @@ def get_fetch_stats(db_path: Path) -> dict:
         recent_runs (list of dicts).
     """
     with get_connection(db_path) as db:
-        cursor = db.execute("""SELECT
+        cursor = db.execute(
+            """SELECT
                 COUNT(*) AS total_runs,
                 MAX(started_at) AS last_run_at,
                 ROUND(AVG(articles_found), 1) AS avg_articles_per_run
-            FROM fetches""")
+            FROM fetches"""
+        )
         row = dict(cursor.fetchone())
 
-        cursor = db.execute("""SELECT id, started_at, completed_at, status,
+        cursor = db.execute(
+            """SELECT id, started_at, completed_at, status,
                       feeds_fetched, articles_found
                FROM fetches
                ORDER BY started_at DESC
-               LIMIT 5""")
+               LIMIT 5"""
+        )
         row["recent_runs"] = [dict(r) for r in cursor.fetchall()]
 
         return row
@@ -970,7 +1000,9 @@ def search_articles(
         return [dict(row) for row in rows], total
 
 
-def set_article_featured(db_path: Path, article_id: int, featured: bool = True) -> None:
+def set_article_featured(
+    db_path: Path, article_id: int, featured: bool = True
+) -> None:
     """Mark/unmark an article as featured."""
     with get_connection(db_path) as db:
         db.execute(
@@ -980,7 +1012,9 @@ def set_article_featured(db_path: Path, article_id: int, featured: bool = True) 
         db.commit()
 
 
-def set_article_breaking(db_path: Path, article_id: int, breaking: bool = True) -> None:
+def set_article_breaking(
+    db_path: Path, article_id: int, breaking: bool = True
+) -> None:
     """Mark/unmark an article as breaking news."""
     with get_connection(db_path) as db:
         db.execute(
@@ -1093,7 +1127,9 @@ def get_all_categories(db_path: Path, hours: int = 48) -> list[dict]:
         ]
 
 
-def get_all_tags(db_path: Path, hours: int = 48, limit: int = 50) -> list[dict]:
+def get_all_tags(
+    db_path: Path, hours: int = 48, limit: int = 50
+) -> list[dict]:
     """Get most common tags with article counts within time window.
 
     Returns list of dicts: [{name, slug, article_count}]
@@ -1118,7 +1154,9 @@ def get_all_tags(db_path: Path, hours: int = 48, limit: int = 50) -> list[dict]:
                 "slug": name.replace(" ", "-"),
                 "article_count": count,
             }
-            for name, count in sorted(counts.items(), key=lambda x: -x[1])[:limit]
+            for name, count in sorted(counts.items(), key=lambda x: -x[1])[
+                :limit
+            ]
         ]
 
 
@@ -1129,6 +1167,7 @@ def get_topic_clusters(
     min_articles: int = 3,
     per_cluster_limit: int = 3,
     excluded_tags: set[str] | None = None,
+    parsed: bool = False,
 ) -> list[dict]:
     """Build lightweight topic clusters from recent article tags.
 
@@ -1138,6 +1177,16 @@ def get_topic_clusters(
     - uses recurring tags as temporary cluster labels
     - filters weak/generic tags with a small deny-list
     - includes a few recent article previews per cluster
+
+    Args:
+        db_path: Path to the SQLite database file.
+        hours: Time window in hours.
+        limit: Maximum number of clusters to return.
+        min_articles: Minimum articles per cluster.
+        per_cluster_limit: Maximum article previews per cluster.
+        excluded_tags: Optional set of tags to exclude from cluster labels.
+        parsed: If True, only include articles that have been parsed
+            (parsed_at IS NOT NULL).
 
     Returns list of dicts shaped like:
 
@@ -1161,11 +1210,15 @@ def get_topic_clusters(
         "stories",
     }
     if excluded_tags:
-        ignored.update(tag.strip().lower() for tag in excluded_tags if tag.strip())
+        ignored.update(
+            tag.strip().lower() for tag in excluded_tags if tag.strip()
+        )
+
+    parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
 
     with get_connection(db_path) as db:
         cursor = db.execute(
-            """SELECT a.id, a.title, a.summary, a.url,
+            f"""SELECT a.id, a.title, a.summary, a.url,
                        a.published_at, a.created_at,
                        a.source_name, a.fact_check_status, a.tags,
                        f.title as feed_source_name
@@ -1174,6 +1227,7 @@ def get_topic_clusters(
                 WHERE a.created_at >= ?
                   AND a.tags IS NOT NULL
                   AND a.tags != ''
+                  {parsed_filter}
                 ORDER BY a.created_at DESC""",
             (threshold,),
         )
@@ -1278,6 +1332,54 @@ def get_articles_by_tag(
     hours: int = 48,
     limit: int = 20,
     offset: int = 0,
+    parsed: bool = False,
+) -> tuple[list[dict], int]:
+    """Get articles with a specific tag within the time window.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        tag: The tag to search for.
+        hours: Time window in hours.
+        limit: Maximum number of articles to return.
+        offset: Offset for pagination.
+        parsed: If True, only include articles that have been parsed
+            (parsed_at IS NOT NULL).
+    """
+    threshold = _hours_ago_iso(hours)
+    parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
+    with get_connection(db_path) as db:
+        count_cursor = db.execute(
+            f"""SELECT COUNT(*) FROM articles a
+                WHERE a.tags LIKE '%' || ? || '%'
+                  AND a.created_at >= ?
+                  {parsed_filter}""",
+            (tag, threshold),
+        )
+        total = count_cursor.fetchone()[0]
+
+        cursor = db.execute(
+            f"""SELECT a.id, a.title, a.summary, a.url,
+                       a.published_at, a.created_at,
+                       a.source_name, a.fact_check_status, a.tags,
+                       f.title as feed_source_name
+                FROM articles a
+                JOIN feeds f ON a.feed_id = f.id
+                WHERE a.tags LIKE '%' || ? || '%'
+                  AND a.created_at >= ?
+                  {parsed_filter}
+                ORDER BY a.created_at DESC
+                LIMIT ? OFFSET ?""",
+            (tag, threshold, limit, offset),
+        )
+        return [dict(row) for row in cursor.fetchall()], total
+
+
+def _get_articles_by_tag_legacy(
+    db_path: Path,
+    tag: str,
+    hours: int = 48,
+    limit: int = 20,
+    offset: int = 0,
 ) -> tuple[list[dict], int]:
     """Get articles with a specific tag within the time window."""
     threshold = _hours_ago_iso(hours)
@@ -1309,10 +1411,18 @@ def get_related_articles(
     db_path: Path,
     article_id: int,
     limit: int = 5,
+    parsed: bool = False,
 ) -> list[dict]:
     """Get related articles based on shared categories/tags.
 
     Strategy: find articles that share the most category/tag tokens.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        article_id: The article ID to find related articles for.
+        limit: Maximum number of related articles to return.
+        parsed: If True, only include articles that have been parsed
+            (parsed_at IS NOT NULL).
     """
     with get_connection(db_path) as db:
         # Get the article's categories and tags
@@ -1327,7 +1437,9 @@ def get_related_articles(
         tokens: list[str] = []
         if row["categories"]:
             tokens.extend(
-                t.strip().lower() for t in row["categories"].split(",") if t.strip()
+                t.strip().lower()
+                for t in row["categories"].split(",")
+                if t.strip()
             )
         if row["tags"]:
             tokens.extend(
@@ -1342,11 +1454,13 @@ def get_related_articles(
         params: list = []
         for token in tokens[:10]:  # Limit to avoid huge queries
             conditions.append(
-                "(categories LIKE '%' || ? || '%' " "OR tags LIKE '%' || ? || '%')"
+                "(a.categories LIKE '%' || ? || '%' "
+                "OR a.tags LIKE '%' || ? || '%')"
             )
             params.extend([token, token])
 
         where_sql = " OR ".join(conditions)
+        parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
         cursor = db.execute(
             f"""SELECT a.*, f.title as source_name,
                        f.icon_url as feed_icon_url,
@@ -1354,6 +1468,7 @@ def get_related_articles(
                 FROM articles a
                 JOIN feeds f ON a.feed_id = f.id
                 WHERE a.id != ? AND ({where_sql})
+                  {parsed_filter}
                 ORDER BY a.created_at DESC
                 LIMIT ?""",
             [article_id, *params, limit],
@@ -1361,20 +1476,30 @@ def get_related_articles(
         return [dict(row) for row in cursor.fetchall()]
 
 
-def get_article_detail(db_path: Path, article_id: int) -> dict | None:
+def get_article_detail(
+    db_path: Path, article_id: int, parsed: bool = False
+) -> dict | None:
     """Get full article detail for display page.
 
     Includes all article fields and feed info via JOIN.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        article_id: The article ID to retrieve.
+        parsed: If True, only return the article if it has been parsed
+            (parsed_at IS NOT NULL). Unparsed articles will return None.
     """
+    parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
     with get_connection(db_path) as db:
         cursor = db.execute(
-            """SELECT a.*, f.title as source_name,
+            f"""SELECT a.*, f.title as source_name,
                        f.url as feed_url,
                        f.icon_url as feed_icon_url,
                        f.favicon_url as feed_favicon_url
                 FROM articles a
                 JOIN feeds f ON a.feed_id = f.id
-                WHERE a.id = ?""",
+                WHERE a.id = ?
+                  {parsed_filter}""",
             (article_id,),
         )
         row = cursor.fetchone()
@@ -1400,7 +1525,9 @@ def get_articles_by_time_bucket(
     for i in range(num_buckets):
         start_hours = i * bucket_hours
         end_hours = (i + 1) * bucket_hours
-        bucket_bounds.append((_hours_ago_iso(end_hours), _hours_ago_iso(start_hours)))
+        bucket_bounds.append(
+            (_hours_ago_iso(end_hours), _hours_ago_iso(start_hours))
+        )
 
     # Build a single query using CASE WHEN for all buckets
     case_parts = []
@@ -1431,7 +1558,9 @@ def get_articles_by_time_bucket(
     return buckets
 
 
-def get_articles_older_than_hours(db_path: Path, hours: int = 48) -> list[dict]:
+def get_articles_older_than_hours(
+    db_path: Path, hours: int = 48
+) -> list[dict]:
     """Get articles older than specified hours.
 
     Args:
@@ -1498,3 +1627,74 @@ def release_stale_article_claims(
         db.commit()
 
     return {"released": count}
+
+
+def get_web_stats(
+    db_path: Path, hours: int = 48, parsed: bool = False
+) -> dict:
+    """Get homepage display stats within the given time window.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        hours: Time window in hours.
+        parsed: If True, only count articles that have been parsed
+            (parsed_at IS NOT NULL).
+
+    Returns dict with: live_stories, verified, clusters, sources, last_updated.
+    """
+    threshold = _hours_ago_iso(hours)
+    parsed_filter = "AND parsed_at IS NOT NULL" if parsed else ""
+    with get_connection(db_path) as db:
+        cursor = db.execute(
+            f"""SELECT
+                COUNT(*) AS live_stories,
+                SUM(CASE WHEN fact_check_status = 'verified'
+                         THEN 1 ELSE 0 END) AS verified,
+                COUNT(DISTINCT feed_id) AS sources,
+                MAX(created_at) AS last_updated
+            FROM articles
+            WHERE created_at >= ?
+              {parsed_filter}""",
+            (threshold,),
+        )
+        row = dict(cursor.fetchone())
+
+        # Count clusters using the same logic as get_topic_clusters
+        cluster_count = len(
+            get_topic_clusters(db_path, hours=hours, parsed=parsed)
+        )
+        row["clusters"] = cluster_count
+
+        return row
+
+
+def get_expiring_articles(
+    db_path: Path, within_hours: int = 6, parsed: bool = False
+) -> list[dict]:
+    """Get articles that will expire within the given number of hours.
+
+    Returns articles created between (48-within_hours) and 48 hours ago,
+    ordered by creation time ascending - most urgent first.
+
+    Args:
+        db_path: Path to the SQLite database file.
+        within_hours: Number of hours before expiry to include.
+        parsed: If True, only include articles that have been parsed
+            (parsed_at IS NOT NULL).
+    """
+    outer = _hours_ago_iso(48)
+    inner = _hours_ago_iso(48 - within_hours)
+    parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
+    with get_connection(db_path) as db:
+        cursor = db.execute(
+            f"""SELECT a.id, a.title, a.url, a.created_at, a.source_name,
+                       f.title as feed_source_name
+            FROM articles a
+            JOIN feeds f ON a.feed_id = f.id
+            WHERE a.created_at >= ? AND a.created_at < ?
+              {parsed_filter}
+            ORDER BY a.created_at ASC
+            LIMIT 10""",
+            (outer, inner),
+        )
+        return [dict(row) for row in cursor.fetchall()]

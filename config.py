@@ -45,3 +45,17 @@ class Database:
 
 class Services:
     byparr: str = _get_required_env("BYPARR_API_URL", str)
+
+
+class Web:
+    """Web server configuration."""
+
+    host: str = getenv("WEB_HOST", "0.0.0.0")
+
+    @classmethod
+    def get_port(cls) -> int:
+        """Parse WEB_PORT safely, falling back to 8000 on bad input."""
+        try:
+            return int(getenv("WEB_PORT", "8000"))
+        except (ValueError, TypeError):
+            return 8000

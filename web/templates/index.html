@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}news48 — live news within 48 hours{% endblock %}
+
+{% block body_class %}page-index{% endblock %}
+
+{% block content %}
+<header>
+    <h1 class="masthead">news48</h1>
+    <div class="tagline">ai-verified news · 48 hour window · live machine feed</div>
+    <div class="status-line">
+        <span><span class="live-dot"></span><strong>{{ stats.live_stories }}</strong> live stories</span>
+        <span><strong>{{ stats.verified }}</strong> verified</span>
+        <span><strong>{{ stats.clusters }}</strong> active clusters</span>
+        <span><strong>{{ stats.sources }}</strong> sources</span>
+        {% if stats.last_updated %}
+        <span>updated <strong>{{ stats.last_updated | relative_time }}</strong></span>
+        {% endif %}
+    </div>
+</header>
+
+<section class="section" aria-labelledby="now-label">
+    <h2 class="section-label" id="now-label">now</h2>
+    <div class="story-list">
+        {% for story in stories %}
+        <article class="story{% if story.is_breaking %} is-breaking{% endif %}">
+            <div class="story-index">[{{ "%02d" | format(loop.index) }}]</div>
+            <div>
+                <h3 class="story-headline">
+                    <a href="/article/{{ story.id }}">{{ story.title }}</a>
+                </h3>
+                {% if story.summary %}
+                <p class="standfirst">{{ story.summary }}</p>
+                {% endif %}
+                <div class="meta">
+                    <span><strong>{{ story.source_name or story.feed_source_name or "Unknown" }}</strong></span>
+                    <span>{{ story.created_at | relative_time }}</span>
+                    {% if story.fact_check_status == "verified" %}
+                    <span class="badge verified">Verified</span>
+                    {% endif %}
+                    {% if story.is_breaking %}
+                    <span class="badge breaking">Breaking</span>
+                    {% endif %}
+                    {% if story.fact_check_status == "disputed" %}
+                    <span class="badge disputed">Disputed</span>
+                    {% endif %}
+                    {% for tag in story.tags | parse_tags %}
+                    <span class="pill">{{ tag }}</span>
+                    {% endfor %}
+                    {% if story.sentiment %}
+                    <span
+                        class="sentiment {{ 'positive' if story.sentiment == 'positive' else 'negative' if story.sentiment == 'negative' else 'neutral' }}">
+                        {% if story.sentiment == 'positive' %}▲{% elif story.sentiment == 'negative' %}▼{% else %}—{%
+                        endif %}
+                        {{ story.sentiment }}
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="meta">
+                    <span class="freshness">
+                        {{ story.created_at | hours_remaining }}h left
+                        <span class="freshness-bar {{ story.created_at | hours_remaining | freshness_bar }}"></span>
+                    </span>
+                </div>
+                <div class="story-links">
+                    <a href="/article/{{ story.id }}">read article →</a>
+                    <a href="{{ story.url }}" target="_blank" rel="noopener">original source</a>
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+</section>
+
+{% if clusters %}
+<section class="section" aria-labelledby="clusters-label">
+    <h2 class="section-label" id="clusters-label">topic clusters</h2>
+    <div class="cluster-list">
+        {% for cluster in clusters %}
+        <a class="cluster" href="/cluster/{{ cluster.slug }}">
+            <div>
+                <div class="cluster-name">{{ cluster.name }}</div>
+                <div class="cluster-desc">
+                    {% if cluster.articles and cluster.articles[0].summary %}
+                    {{ cluster.articles[0].summary[:120] }}...
+                    {% endif %}
+                </div>
+                {% if cluster.articles and cluster.articles[0].title %}
+                <div class="cluster-lead">→ {{ cluster.articles[0].title }}</div>
+                {% endif %}
+            </div>
+            <div style="text-align: right;">
+                <div class="cluster-count">{{ cluster.article_count }} stories</div>
+                <span class="cluster-bar">{{ cluster.article_count | cluster_bar(max_cluster_count, 20) }}</span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+{% if expiring %}
+<section class="section expiring" aria-labelledby="expiring-label">
+    <h2 class="section-label" id="expiring-label">expiring soon</h2>
+    <div class="expiring-list">
+        {% for item in expiring %}
+        <div class="expiring-item">
+            <a href="/article/{{ item.id }}">{{ item.title }}</a>
+            <span class="expiring-time">{{ item.created_at | hours_remaining }}h left</span>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+<p class="footnote">Only stories inside the last 48 hours are visible. Older stories expire automatically.</p>
+{% endblock %}
