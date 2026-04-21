@@ -1,0 +1,119 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    entrypoint: [ "/app/docker-entrypoint.sh" ]
+    command: [ "uvicorn", "web.app:app", "--host", "0.0.0.0", "--port", "8000" ]
+    volumes:
+      - news48-data:/data
+    environment:
+      - DATABASE_PATH=/data/news48.db
+      - DATA_DIR=/data
+      - WEB_HOST=${WEB_HOST:-0.0.0.0}
+      - WEB_PORT=${WEB_PORT:-8000}
+      - WEB_WORKERS=${WEB_WORKERS:-1}
+      - WEB_LOG_LEVEL=${WEB_LOG_LEVEL:-info}
+      - WEB_RELOAD=${WEB_RELOAD:-0}
+      - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1}
+    networks:
+      - news48-net
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: orchestrator
+    entrypoint: [ "/app/docker-entrypoint.sh" ]
+    command: [ "news48", "agents", "start" ]
+    volumes:
+      - news48-data:/data
+    environment:
+      - DATABASE_PATH=/data/news48.db
+      - DATA_DIR=/data
+      - API_BASE=${API_BASE}
+      - API_KEY=${API_KEY}
+      - MODEL=${MODEL}
+      - CONTEXT_WINDOW=${CONTEXT_WINDOW:-49152}
+      - BYPARR_API_URL=${BYPARR_API_URL:-http://byparr:8191/v1}
+      - SEARXNG_URL=${SEARXNG_URL:-http://searxng:8080}
+      - ORCHESTRATOR_CMD_PREFIX=news48
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
+      - MONITOR_EMAIL_TO=${MONITOR_EMAIL_TO}
+    networks:
+      - news48-net
+
+  llamacpp:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda13
+    entrypoint: [ "bash", "/app/llamacpp-entrypoint.sh" ]
+    volumes:
+      - llamacpp-models:/models
+      - ./llamacpp/entrypoint.sh:/app/llamacpp-entrypoint.sh:ro
+    environment:
+      - LLAMACPP_MODEL_REPO=${LLAMACPP_MODEL_REPO:-mradermacher/claude-oss-i1-GGUF}
+      - LLAMACPP_MODEL_FILE=${LLAMACPP_MODEL_FILE:-claude-oss.i1-Q6_K.gguf}
+      - LLAMACPP_CTX_SIZE=${LLAMACPP_CTX_SIZE:-131072}
+      - LLAMACPP_PORT=${LLAMACPP_PORT:-8080}
+      - LLAMACPP_HOST=0.0.0.0
+      - LLAMACPP_N_GPU_LAYERS=${LLAMACPP_N_GPU_LAYERS:-999}
+      - LLAMACPP_PARALLEL=${LLAMACPP_PARALLEL:-4}
+      - LLAMACPP_THREADS=${LLAMACPP_THREADS:-8}
+      - LLAMACPP_CACHE_TYPE_K=${LLAMACPP_CACHE_TYPE_K:-q8_0}
+      - LLAMACPP_CACHE_TYPE_V=${LLAMACPP_CACHE_TYPE_V:-q8_0}
+      - LLAMACPP_FLASH_ATTN=${LLAMACPP_FLASH_ATTN:-on}
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+    networks:
+      - news48-net
+
+  searxng:
+    image: searxng/searxng:latest
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      - SEARXNG_SECRET=${SEARXNG_SECRET:-changeme}
+      - SEARXNG_BASE_URL=http://searxng:8080/
+    networks:
+      - news48-net
+
+  byparr:
+    image: ghcr.io/thephaseless/byparr:main
+    networks:
+      - news48-net
+
+  dozzle:
+    image: amir20/dozzle:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dozzle-data:/data
+    environment:
+      - DOZZLE_ENABLE_ACTIONS=true
+      - DOZZLE_ENABLE_SHELL=true
+    networks:
+      - news48-net
+
+volumes:
+  news48-data:
+  llamacpp-models:
+  dozzle-data:
+
+
+networks:
+  news48-net:
+    driver: bridge

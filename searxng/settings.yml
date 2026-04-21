@@ -1,0 +1,62 @@
+use_default_settings: true
+
+search:
+  formats:
+    - html
+    - csv
+    - json    # Required for news48 fact-checker agent
+
+server:
+  secret_key: "{{SEARXNG_SECRET}}"  # Sourced from SEARXNG_SECRET env var
+  limiter: false    # Disable rate limiting for internal Docker network
+  image_proxy: true
+
+engines:
+  # Disable Tor-dependent engines (no Tor proxy in Docker)
+  - name: ahmia
+    engine: ahmia
+    disabled: true
+
+  - name: torch
+    engine: xpath
+    disabled: true
+
+  - name: arxiv
+    engine: arxiv
+    shortcut: arxiv
+    disabled: false
+  
+  - name: bing
+    engine: bing
+    shortcut: bi
+    disabled: false
+
+  - name: bing news
+    engine: bing
+    shortcut: bin
+    disabled: false
+  
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    disabled: false
+
+  - name: google
+    engine: google
+    shortcut: go
+    disabled: false
+  
+  - name: google news
+    engine: google_news
+    shortcut: gon
+    disabled: false
+  
+  - name: yandex
+    engine: yandex
+    shortcut: yd
+    disabled: false
+  
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    disabled: false

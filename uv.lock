@@ -1106,6 +1106,12 @@ dev = [
     { name = "isort" },
     { name = "pytest" },
 ]
+web = [
+    { name = "fastapi" },
+    { name = "jinja2" },
+    { name = "python-dotenv" },
+    { name = "uvicorn" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -1129,6 +1135,12 @@ dev = [
     { name = "black" },
     { name = "isort" },
     { name = "pytest" },
+]
+web = [
+    { name = "fastapi" },
+    { name = "jinja2" },
+    { name = "python-dotenv" },
+    { name = "uvicorn" },
 ]
 
 [[package]]

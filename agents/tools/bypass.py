@@ -7,7 +7,11 @@ from html_to_markdown import convert
 
 from agents.tools._helpers import _safe_json
 from config import Services
-from helpers.bypass import fetch_url_content, get_byparr_solution, strip_html_noise
+from helpers.bypass import (
+    fetch_url_content,
+    get_byparr_solution,
+    strip_html_noise,
+)
 from helpers.url import get_base_url
 from models import ByparrSolution
 
@@ -64,7 +68,7 @@ async def fetch_webpage_content(
             if domain not in solutions:
                 solutions[domain] = await get_byparr_solution(
                     target_url=f"https://{domain}/",
-                    bypass_api_url=Services.byparr,
+                    bypass_api_url=Services.byparr(),
                 )
             return solutions[domain]
 
@@ -102,7 +106,11 @@ async def fetch_webpage_content(
             )
 
     success = len(results) > 0
-    error = "" if success else f"Failed to fetch {len(errors)} of {len(urls)} URL(s)"
+    error = (
+        ""
+        if success
+        else f"Failed to fetch {len(errors)} of {len(urls)} URL(s)"
+    )
 
     return _safe_json(
         {

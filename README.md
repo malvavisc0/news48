@@ -23,6 +23,10 @@ news48 collects feed entries, downloads article pages, parses structured content
 - [Usage](#-usage)
   - [Manual Pipeline](#manual-pipeline)
   - [Agent Operations](#agent-operations)
+- [Docker](#-docker)
+  - [Seeding the Database](#seeding-the-database)
+  - [Development](#docker-development)
+  - [Production](#docker-production)
 - [Schedule Defaults](#-schedule-defaults)
 - [Documentation](#-documentation)
 - [Development](#-development)
@@ -186,6 +190,126 @@ uv run news48 agents status --json  # check running agents
 uv run news48 agents dashboard      # live dashboard
 uv run news48 agents stop           # graceful shutdown
 ```
+
+## 🐳 Docker
+
+news48 can run entirely in Docker with separate containers for the web interface, orchestrator, SearXNG, and Byparr.
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
+- An OpenAI-compatible LLM endpoint
+- API keys configured in `.env`
+
+### Setup
+
+```bash
+# One-time setup
+cp .env.example .env
+# Edit .env with your API keys
+```
+
+### Seeding the Database
+
+Before the pipeline can fetch articles, the database needs feed URLs. Create a `seed.txt` file in the project root with one RSS/Atom URL per line:
+
+```bash
+# seed.txt
+https://feeds.arstechnica.com/arstechnica/index
+https://feeds.bbci.co.uk/news/rss.xml
+https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
+```
+
+When the orchestrator starts (`news48 agents start`), the sentinel agent automatically detects an empty database and creates a seed plan for the executor. The executor then runs `news48 seed seed.txt` — so seeding happens automatically as long as `seed.txt` is accessible inside the container.
+
+**Development** — the project root is mounted at `/app`, so `seed.txt` is automatically available at `/app/seed.txt`.
+
+**Production** — the project root is not mounted. Either:
+
+- Build the image with `seed.txt` present in the project root (it is not excluded by `.dockerignore` and gets copied via `COPY . .`), or
+- Mount it at runtime:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm \
+  -v ./seed.txt:/app/seed.txt:ro \
+  orchestrator news48 seed /app/seed.txt
+```
+
+You can also seed manually at any time:
+
+```bash
+# Development
+docker compose exec orchestrator news48 seed /app/seed.txt
+
+# Production
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec \
+  orchestrator news48 seed /app/seed.txt
+```
+
+Verify feeds were added:
+
+```bash
+docker compose exec orchestrator news48 feeds list
+```
+
+### Docker Development
+
+```bash
+# Start all services with live reload
+docker compose up
+
+# Web UI available at http://localhost:8765
+# Code changes auto-reload via volume mount
+
+# Run CLI commands
+docker compose exec orchestrator news48 stats
+docker compose exec orchestrator news48 feeds list
+
+# Run one-off commands
+docker compose run --rm orchestrator news48 seed /app/seed.txt
+
+# View logs
+docker compose logs -f orchestrator
+docker compose logs -f web
+
+# Stop everything
+docker compose down
+
+# Fresh start (removes data)
+docker compose down -v
+```
+
+### Docker Production
+
+```bash
+# Start production stack
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+# Web UI available at http://localhost:8000
+
+# Check status
+docker compose ps
+docker compose logs -f web
+
+# Backup database
+docker compose exec web sqlite3 /app/data/news48.db ".backup /app/data/backup.db"
+
+# Update to new version
+docker compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+# Stop production
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+```
+
+### Architecture
+
+| Service | Image | Port | Role |
+|---------|-------|------|------|
+| `web` | news48-web (built) | 8000 | FastAPI web interface |
+| `orchestrator` | news48-orchestrator (built) | none | Agent scheduler + LLM stack |
+| `searxng` | searxng/searxng:latest | 8080 (internal) | Meta-search engine |
+| `byparr` | ghcr.io/thephaseless/byparr:main | 8191 (internal) | Anti-bot bypass |
 
 ## 🧬 Development
 

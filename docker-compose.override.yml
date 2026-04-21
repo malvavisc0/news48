@@ -1,0 +1,38 @@
+# Development overrides — auto-loaded by `docker compose up`
+# Override ports or settings via environment variables or .env file
+
+services:
+  web:
+    build:
+      target: web-dev
+    volumes:
+      - .:/app
+      - /app/.venv # preserve image's venv, don't shadow with host's
+      - ./data:/data
+    environment:
+      - WEB_RELOAD=1
+      - WEB_LOG_LEVEL=debug
+      - WEB_WORKERS=1
+    ports:
+      # Override the base port mapping for dev (avoids conflicts with local services)
+      - "8765:8000"
+    stdin_open: true
+    tty: true
+
+  llamacpp:
+    ports:
+      - "9090:8080"
+
+  orchestrator:
+    build:
+      target: orchestrator-dev
+    volumes:
+      - .:/app
+      - /app/.venv # preserve image's venv, don't shadow with host's
+      - ./data:/data
+    stdin_open: true
+    tty: true
+
+  dozzle:
+    ports:
+      - "9999:8080"

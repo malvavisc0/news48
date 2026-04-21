@@ -1,0 +1,59 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+*.egg-info
+*.egg
+
+# Virtual environments
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Runtime data
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Environment files
+.env
+
+# Build artifacts
+build/
+dist/
+wheels/
+
+# Docker files (not needed inside images)
+Dockerfile
+docker-compose*.yml
+.dockerignore
+searxng/
+
+# Plans (instance-specific, runtime plans go to data/plans/)
+plans/
+
+# Non-runtime files
+mockups/
+docs/
+tests/
+.scoring/
+.pytest_cache/
+htmlcov/
+.coverage
+run.website.sh
+LICENSE
+README.md
+.python-version
+
+# OS files
+.DS_Store
+Thumbs.db

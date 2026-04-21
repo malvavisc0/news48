@@ -31,4 +31,5 @@ py-modules = ["config", "models", "main"]
 package = true
 
 [dependency-groups]
+web = ["fastapi", "uvicorn", "Jinja2", "python-dotenv"]
 dev = ["black", "isort", "pytest"]

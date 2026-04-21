@@ -44,7 +44,11 @@ class Database:
 
 
 class Services:
-    byparr: str = _get_required_env("BYPARR_API_URL", str)
+    @classmethod
+    def byparr(cls) -> str:
+        """Lazy access to BYPARR_API_URL so web container
+        doesn't crash on import."""
+        return _get_required_env("BYPARR_API_URL", str)
 
 
 class Web:

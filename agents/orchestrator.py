@@ -103,7 +103,9 @@ class Orchestrator:
         for name, sched_data in data.get("schedules", {}).items():
             if name in self.schedules:
                 self.schedules[name].last_run = sched_data.get("last_run")
-                self.schedules[name].last_result = sched_data.get("last_result")
+                self.schedules[name].last_result = sched_data.get(
+                    "last_result"
+                )
                 self.schedules[name].last_error = sched_data.get("last_error")
 
         # Restore running agent records — list format only.
@@ -114,7 +116,9 @@ class Orchestrator:
                 continue  # skip malformed entries
             for entry in entries:
                 if not isinstance(entry, dict):
-                    logger.warning("Skipping malformed running entry for %s", name)
+                    logger.warning(
+                        "Skipping malformed running entry for %s", name
+                    )
                     continue
                 pid = entry.get("pid", 0)
                 if not _is_process_alive(pid):
@@ -147,10 +151,14 @@ class Orchestrator:
             from agents.tools.planner import recover_stale_plans
 
             payload = json.loads(
-                recover_stale_plans("Orchestrator startup recovery after restart")
+                recover_stale_plans(
+                    "Orchestrator startup recovery after restart"
+                )
             )
             if payload.get("error"):
-                logger.warning("Plan recovery pass failed: %s", payload["error"])
+                logger.warning(
+                    "Plan recovery pass failed: %s", payload["error"]
+                )
             else:
                 result = payload.get("result", {})
                 logger.info(
@@ -271,6 +279,12 @@ class Orchestrator:
 
         Returns the PID if the file exists and the process is alive,
         otherwise cleans up the stale file and returns ``None``.
+
+        Handles the Docker edge-case where the orchestrator runs as
+        PID 1: a stale PID file containing ``1`` will always appear
+        alive because PID 1 is the init process in a container.  If
+        the stored PID equals our own PID, the file is stale (we
+        haven't started the daemon loop yet).
         """
         if not config.PID_FILE.exists():
             return None
@@ -278,6 +292,18 @@ class Orchestrator:
             pid = int(config.PID_FILE.read_text(encoding="utf-8").strip())
         except (ValueError, OSError):
             return None
+
+        # If the PID is our own process, the file is stale from a
+        # previous container lifecycle (especially PID 1 in Docker).
+        # We haven't entered the daemon loop yet, so this can't be a
+        # running daemon.
+        if pid == os.getpid():
+            try:
+                config.PID_FILE.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return None
+
         if _is_process_alive(pid):
             return pid
         # Stale PID file — process is dead
@@ -429,11 +455,15 @@ class Orchestrator:
 
             family = peek_next_plan()
             if family is None:
-                logger.debug("Executor precondition not met: no claimable plans")
+                logger.debug(
+                    "Executor precondition not met: no claimable plans"
+                )
                 return False
             return True
         except Exception as exc:
-            logger.warning("Executor precondition check failed (allowing run): %s", exc)
+            logger.warning(
+                "Executor precondition check failed (allowing run): %s", exc
+            )
             return True
 
     def _update_schedule(
@@ -491,7 +521,9 @@ class Orchestrator:
                     > 200
                 )
             except Exception as exc:
-                logger.warning("Failed to build sentinel task context: %s", exc)
+                logger.warning(
+                    "Failed to build sentinel task context: %s", exc
+                )
 
         elif name == "fact_checker":
             # Fact-checker uses default skills; no special context needed.
@@ -590,7 +622,9 @@ class Orchestrator:
         # Add instance index to log filename for concurrent agents
         instance_idx = len(instances)
         if max_concurrent > 1:
-            log_file = str(config.LOGS_DIR / f"{name}-{timestamp}-{instance_idx}.log")
+            log_file = str(
+                config.LOGS_DIR / f"{name}-{timestamp}-{instance_idx}.log"
+            )
         else:
             log_file = str(config.LOGS_DIR / f"{name}-{timestamp}.log")
 
@@ -696,7 +730,8 @@ class Orchestrator:
                             "exit_code": None,
                             "result": "timeout",
                             "error": (
-                                f"Killed after {elapsed} " f"(limit {max_runtime})"
+                                f"Killed after {elapsed} "
+                                f"(limit {max_runtime})"
                             ),
                             "log_file": running.log_file,
                             "duration": _duration_since(running.started_at),
@@ -758,7 +793,8 @@ class Orchestrator:
                             "exit_code": proc.poll(),
                             "result": "timeout",
                             "error": (
-                                f"Killed after {elapsed} " f"(limit {max_runtime})"
+                                f"Killed after {elapsed} "
+                                f"(limit {max_runtime})"
                             ),
                             "log_file": running.log_file,
                             "duration": _duration_since(running.started_at),
@@ -810,7 +846,9 @@ class Orchestrator:
         # 3. Fork due agents (one-per-agent per tick to avoid burst-forking)
         forked: list[str] = []
         for name, schedule in self.schedules.items():
-            if self._should_run(schedule) and self._agent_precondition_met(name):
+            if self._should_run(schedule) and self._agent_precondition_met(
+                name
+            ):
                 if self.fork_agent(name):
                     forked.append(name)
 
@@ -821,7 +859,9 @@ class Orchestrator:
         self._write_heartbeat()
 
         # Count total running instances
-        total_running = sum(len(instances) for instances in self.running.values())
+        total_running = sum(
+            len(instances) for instances in self.running.values()
+        )
 
         return {
             "completed": completed,
@@ -847,7 +887,9 @@ class Orchestrator:
                 feeds = get_all_feeds(Database.path)
                 urls = [f["url"] for f in feeds]
                 if not urls:
-                    logger.warning("No feeds in database, skipping fetch cycle")
+                    logger.warning(
+                        "No feeds in database, skipping fetch cycle"
+                    )
                     await asyncio.sleep(interval)
                     continue
 
@@ -939,7 +981,8 @@ class Orchestrator:
 
                         if n_c or n_f:
                             parts = [
-                                "Tick: forked=%d completed=%d running=%d" % (n_f, n_c, n_r)
+                                "Tick: forked=%d completed=%d running=%d"
+                                % (n_f, n_c, n_r)
                             ]
                             for comp_key, info in result["completed"].items():
                                 parts.append(
@@ -955,7 +998,8 @@ class Orchestrator:
                                 instances = self.running.get(name, [])
                                 if instances:
                                     parts.append(
-                                        "%s=forked/pid=%d" % (name, instances[-1].pid)
+                                        "%s=forked/pid=%d"
+                                        % (name, instances[-1].pid)
                                     )
                             logger.info(" ".join(parts))
                     except Exception:
@@ -1038,7 +1082,9 @@ class Orchestrator:
                     "pid": running.pid,
                     "started_at": running.started_at,
                     "log_file": running.log_file,
-                    "signal": ("SIGKILL" if running.pid in force_killed else "SIGTERM"),
+                    "signal": (
+                        "SIGKILL" if running.pid in force_killed else "SIGTERM"
+                    ),
                     "released_plan_count": released["count"],
                     "released_plan_ids": released["released"],
                 }
