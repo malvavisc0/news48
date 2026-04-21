@@ -57,6 +57,49 @@ body {
     text-rendering: optimizeLegibility;
 }
 
+.site-footer {
+    margin-top: 12px;
+    padding: 0 16px 40px;
+}
+
+.site-footer__inner {
+    max-width: 720px;
+    margin: 0 auto;
+    padding-top: 18px;
+    border-top: 1px solid var(--rule);
+}
+
+.site-footer__content {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: var(--text-xs);
+    line-height: var(--leading-meta);
+    color: var(--ink-faint);
+    text-align: center;
+}
+
+.site-footer a {
+    color: var(--action);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--ink-faint);
+    padding-bottom: 1px;
+}
+
+.site-footer a:hover {
+    border-bottom-style: solid;
+    border-bottom-color: var(--action);
+    text-decoration: none;
+}
+
+.site-footer a:focus-visible {
+    outline-offset: 3px;
+}
+
 a {
     color: var(--action);
     text-decoration: none;
