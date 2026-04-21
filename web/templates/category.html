@@ -8,8 +8,8 @@
 <a class="back-link" href="/">← back to all stories</a>
 
 <header>
-    <h1 class="masthead">{{ category_name }}</h1>
-    <div class="tagline">{{ total }} stories in this category</div>
+    <h1 class="page-title">{{ category_name }}</h1>
+    <div class="tagline">{{ total }} stories in this category · latest reporting in the 48h window</div>
 </header>
 
 <nav class="category-nav" aria-label="Categories">
@@ -47,11 +47,14 @@
                     {% endfor %}
                 </div>
                 <div class="story-links">
-                    <a href="/article/{{ story.id }}">read article →</a>
-                    <a href="{{ story.url }}" target="_blank" rel="noopener">original source</a>
+                    <a href="/article/{{ story.id }}">Read rewritten article →</a>
+                    <a href="{{ story.url }}" target="_blank" rel="noopener"
+                        title="Opens the original source in a new tab">Open original source ↗</a>
                 </div>
             </div>
         </article>
+        {% else %}
+        <p class="empty-state">No stories are available in this category right now.</p>
         {% endfor %}
     </div>
 </section>

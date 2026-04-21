@@ -24,17 +24,9 @@
 {% block content %}
 <a class="back-link" href="/">← back to live feed</a>
 <header>
-    <h1 class="masthead"><a href="/">news48</a></h1>
+    <h1 class="site-mark"><a href="/">news48</a></h1>
     <div class="tagline">rewritten article · original source visible · expires inside 48 hours</div>
 </header>
-
-<nav class="category-nav" aria-label="Categories">
-    <a href="/" class="category-pill{% if not active_category %} active{% endif %}">all</a>
-    {% for cat in categories %}
-    <a href="/category/{{ cat.slug }}" class="category-pill{% if active_category == cat.slug %} active{% endif %}">{{
-        cat.name | format_category_name }}</a>
-    {% endfor %}
-</nav>
 
 <article class="article-shell">
     <h2 class="headline">{{ article.title }}</h2>
@@ -55,7 +47,8 @@
             {{ article.sentiment }}
         </span>
         {% endif %}
-        <span class="freshness">
+        <span class="freshness" title="Available for 48 hours from ingestion"
+            aria-label="{{ article.created_at | hours_remaining }} hours remaining. Available for 48 hours from ingestion.">
             {{ article.created_at | hours_remaining }}h left
             <span class="freshness-bar {{ article.created_at | hours_remaining | freshness_bar }}"></span>
         </span>
@@ -65,7 +58,8 @@
         <span><strong>source</strong> {{ article.source_name or "Unknown" }}</span>
         <span><strong>published</strong> {{ article.published_at | relative_time if article.published_at else
             article.created_at | relative_time }}</span>
-        <a href="{{ article.url }}" target="_blank" rel="noopener">original article ↗</a>
+        <a href="{{ article.url }}" target="_blank" rel="noopener" title="Opens the original source in a new tab">Open
+            original source ↗</a>
         {% if article.fact_check_status == "verified" %}
         <span class="badge verified">Verified</span>
         {% endif %}
@@ -110,6 +104,7 @@
 {% if claims %}
 <section class="claims-section" aria-labelledby="claims-label">
     <h2 class="section-label" id="claims-label">fact-check breakdown</h2>
+    <p class="section-hint">Each claim shows its verdict and supporting evidence.</p>
     <div class="claims-rollup" role="status" aria-live="polite">
         <span><strong>{{ claims_summary.total }}</strong> claims checked</span>
         {% if claims_summary.verified > 0 %}
@@ -147,8 +142,13 @@
             <div class="claim-sources">
                 <span class="sources-label">sources</span>
                 {% for source in claim.sources | parse_tags %}
-                <a href="#">{{ source }}</a>
+                <span class="claim-source">{{ source }}</span>
                 {% endfor %}
+            </div>
+            {% else %}
+            <div class="claim-sources">
+                <span class="sources-label">sources</span>
+                <span class="claim-source-empty">No claim sources available yet</span>
             </div>
             {% endif %}
         </div>
@@ -157,9 +157,9 @@
 </section>
 {% endif %}
 
-{% if related %}
 <section class="section" aria-labelledby="related-label">
     <h2 class="section-label" id="related-label">related stories</h2>
+    {% if related %}
     <div class="related-list">
         {% for item in related %}
         <article class="related-item">
@@ -176,6 +176,20 @@
         </article>
         {% endfor %}
     </div>
+    {% else %}
+    <p class="empty-state">No related stories are available in the current 48-hour window.</p>
+    {% endif %}
 </section>
-{% endif %}
+
+<section class="section" aria-labelledby="article-categories-label">
+    <h2 class="section-label" id="article-categories-label">browse by category</h2>
+    <nav class="category-nav" aria-label="Categories">
+        <a href="/" class="category-pill{% if not active_category %} active{% endif %}">all</a>
+        {% for cat in categories %}
+        <a href="/category/{{ cat.slug }}"
+            class="category-pill{% if active_category == cat.slug %} active{% endif %}">{{
+            cat.name | format_category_name }}</a>
+        {% endfor %}
+    </nav>
+</section>
 {% endblock %}

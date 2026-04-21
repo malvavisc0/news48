@@ -20,6 +20,9 @@
 </header>
 
 <nav class="category-nav" aria-label="Categories">
+    <div style="width: 100%;">
+        <h2 class="section-label" id="homepage-categories-label">browse by category</h2>
+    </div>
     <a href="/" class="category-pill{% if not active_category %} active{% endif %}">all</a>
     {% for cat in categories %}
     <a href="/category/{{ cat.slug }}" class="category-pill{% if active_category == cat.slug %} active{% endif %}">{{
@@ -65,24 +68,28 @@
                     {% endif %}
                 </div>
                 <div class="meta">
-                    <span class="freshness">
+                    <span class="freshness" title="Available for 48 hours from ingestion"
+                        aria-label="{{ story.created_at | hours_remaining }} hours remaining. Available for 48 hours from ingestion.">
                         {{ story.created_at | hours_remaining }}h left
                         <span class="freshness-bar {{ story.created_at | hours_remaining | freshness_bar }}"></span>
                     </span>
                 </div>
                 <div class="story-links">
-                    <a href="/article/{{ story.id }}">read article →</a>
-                    <a href="{{ story.url }}" target="_blank" rel="noopener">original source</a>
+                    <a href="/article/{{ story.id }}">Read rewritten article →</a>
+                    <a href="{{ story.url }}" target="_blank" rel="noopener"
+                        title="Opens the original source in a new tab">Open original source ↗</a>
                 </div>
             </div>
         </article>
+        {% else %}
+        <p class="empty-state">No live stories are available in the current 48-hour window.</p>
         {% endfor %}
     </div>
 </section>
 
-{% if clusters %}
 <section class="section" aria-labelledby="clusters-label">
     <h2 class="section-label" id="clusters-label">topic clusters</h2>
+    {% if clusters %}
     <div class="cluster-list">
         {% for cluster in clusters %}
         <a class="cluster" href="/cluster/{{ cluster.slug }}">
@@ -104,12 +111,15 @@
         </a>
         {% endfor %}
     </div>
+    {% else %}
+    <p class="empty-state">No topic clusters are available in the current 48-hour window.</p>
+    {% endif %}
 </section>
-{% endif %}
 
-{% if expiring %}
 <section class="section expiring" aria-labelledby="expiring-label">
     <h2 class="section-label" id="expiring-label">expiring soon</h2>
+    <p class="section-hint">Stories disappear from public view after the 48-hour window.</p>
+    {% if expiring %}
     <div class="expiring-list">
         {% for item in expiring %}
         <div class="expiring-item">
@@ -118,8 +128,10 @@
         </div>
         {% endfor %}
     </div>
+    {% else %}
+    <p class="empty-state">No stories are close to expiry right now.</p>
+    {% endif %}
 </section>
-{% endif %}
 
 <p class="footnote">Only stories inside the last 48 hours are visible. Older stories expire automatically.</p>
 {% endblock %}
