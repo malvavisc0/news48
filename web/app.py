@@ -164,7 +164,7 @@ async def category_detail(request: Request, category_slug: str):
     )
 
     articles, total = get_articles_by_category(
-        category_slug, hours=48, limit=50, parsed=True
+        category_slug, hours=48, limit=None, parsed=True
     )
     if not articles:
         raise HTTPException(status_code=404, detail="Category not found")

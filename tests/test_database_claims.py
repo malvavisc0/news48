@@ -13,7 +13,7 @@ from database import (
     insert_claims,
     update_article_fact_check,
 )
-from database.articles import release_stale_article_claims
+from database.articles import get_articles_by_category, release_stale_article_claims
 from database.models import Article, Feed, Fetch
 
 
@@ -117,6 +117,26 @@ def test_get_web_stats_uses_latest_parsed_timestamp_for_parsed_view(
 
     stats = get_web_stats(hours=999999, parsed=True)
     assert stats["last_updated"] == "2024-01-01T00:30:00+00:00"
+
+
+def test_get_articles_by_category_without_limit_returns_all_matches(
+    db_session,
+):
+    first_id = _create_article(db_session, url="https://example.com/cat-1")
+    second_id = _create_article(db_session, url="https://example.com/cat-2")
+
+    first = db_session.get(Article, first_id)
+    second = db_session.get(Article, second_id)
+    assert first is not None
+    assert second is not None
+
+    first.categories = "world"
+    second.categories = "world"
+    db_session.commit()
+
+    articles, total = get_articles_by_category("world", hours=999999, limit=None)
+    assert total == 2
+    assert len(articles) == 2
 
 
 def test_update_article_fact_check_requires_force_to_overwrite(db_session):

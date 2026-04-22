@@ -990,13 +990,14 @@ def get_topic_clusters(
 def get_articles_by_category(
     category: str,
     hours: int = 48,
-    limit: int = 20,
+    limit: int | None = 20,
     offset: int = 0,
     parsed: bool = False,
 ) -> tuple[list[dict], int]:
     """Get articles matching a category within the time window."""
     threshold = _hours_ago_iso(hours)
     parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
+    limit_clause = "LIMIT :limit OFFSET :offset" if limit is not None else ""
 
     with SessionLocal() as session:
         total = session.execute(
@@ -1020,13 +1021,12 @@ def get_articles_by_category(
               AND a.created_at >= :threshold
               {parsed_filter}
             ORDER BY a.created_at DESC
-            LIMIT :limit OFFSET :offset
+            {limit_clause}
         """),
             {
                 "category": f"%{category}%",
                 "threshold": threshold,
-                "limit": limit,
-                "offset": offset,
+                **({"limit": limit, "offset": offset} if limit is not None else {}),
             },
         ).fetchall()
 
