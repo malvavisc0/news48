@@ -23,15 +23,23 @@ services:
     ports:
       - "9090:8080"
 
-  orchestrator:
+  dramatiq-worker:
     build:
-      target: orchestrator-dev
+      target: worker-dev
     volumes:
       - .:/app
       - /app/.venv # preserve image's venv, don't shadow with host's
       - ./data:/data
     stdin_open: true
     tty: true
+
+  periodiq-scheduler:
+    build:
+      target: worker-dev
+    volumes:
+      - .:/app
+      - /app/.venv # preserve image's venv, don't shadow with host's
+      - ./data:/data
 
   dozzle:
     ports:

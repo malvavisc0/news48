@@ -1,12 +1,18 @@
-"""Agents command - manage autonomous agents."""
+"""Agents command - manage autonomous agents.
+
+After the Dramatiq migration, agents are run via:
+- `periodiq agents.actors` — scheduler that enqueues tasks on cron
+- `dramatiq agents.actors` — worker that executes tasks from queues
+
+This module provides CLI commands for manual interaction:
+- `agents run` — enqueue a one-shot agent task to Dramatiq (or run inline)
+- `agents status` — show Redis queue depths and Periodiq schedule info
+"""
 
 import asyncio
+import json
 
 import typer
-
-import config
-from agents.orchestrator import Orchestrator
-from agents.schedules import DEFAULT_SCHEDULES
 
 from ._common import emit_error, emit_json
 
@@ -15,53 +21,93 @@ agents_app = typer.Typer(help="Manage autonomous agents.")
 VALID_AGENTS = ["sentinel", "executor", "parser", "fact_checker"]
 
 DEFAULT_TASKS = {
-    name: schedule.task_prompt for name, schedule in DEFAULT_SCHEDULES.items()
+    "sentinel": (
+        "Run one sentinel cycle. Gather system health metrics, "
+        "evaluate thresholds, create fix plans for detected issues, "
+        "and delete feeds that are consistently problematic."
+    ),
+    "executor": (
+        "Run one execution cycle. Claim one eligible plan, execute its "
+        "steps, verify the success conditions, and set the final plan "
+        "status. Do not create plans."
+    ),
+    "parser": (
+        "Run one parser cycle. Claim eligible downloaded articles from "
+        "the database, parse one claimed article at a time, update the "
+        "article, and release the claim when finished."
+    ),
+    "fact_checker": (
+        "Run one fact-check cycle. Claim eligible fact-unchecked "
+        "articles, search for evidence, and record verdicts."
+    ),
 }
+
+# Periodiq cron schedules from agents.actors
+CRON_SCHEDULES = {
+    "sentinel": "*/5 * * * *",
+    "executor": "* * * * *",
+    "parser": "* * * * *",
+    "fact_checker": "*/5 * * * *",
+}
+
+QUEUE_NAMES = {
+    "sentinel": "sentinel",
+    "executor": "executor",
+    "parser": "parser",
+    "fact_checker": "fact_checker",
+}
+
+
+def _get_redis_connection():
+    """Get a Redis connection, or return None if unavailable."""
+    try:
+        import redis
+
+        from config import Redis
+
+        return redis.from_url(Redis.url)
+    except Exception:
+        return None
 
 
 @agents_app.command(name="status")
 def agents_status(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Show status of all agents (loads persisted state)."""
-    orchestrator = Orchestrator()
-    orchestrator.load_state()
-    status = orchestrator.get_status()
+    """Show status of all agents (Redis queue depths + cron schedules)."""
+    r = _get_redis_connection()
+
+    status_data = {}
+    for agent_name in VALID_AGENTS:
+        queue_name = QUEUE_NAMES[agent_name]
+        queue_depth = 0
+        if r:
+            try:
+                queue_depth = r.llen(f"dramatiq:{queue_name}")
+            except Exception:
+                queue_depth = -1  # indicates Redis unavailable
+
+        status_data[agent_name] = {
+            "queue": queue_name,
+            "queue_depth": queue_depth,
+            "cron_schedule": CRON_SCHEDULES[agent_name],
+        }
 
     if output_json:
-        emit_json(status)
+        emit_json(status_data)
     else:
         print("Agent Status")
         print("=" * 50)
 
-        for agent_name, agent_status in status.items():
+        for agent_name, info in status_data.items():
             print(f"\n{agent_name.upper()}")
-            last = agent_status.get("last_run") or "Never"
-            print(f"  Last run:    {last}")
-            result = agent_status.get("last_result")
-            if result:
-                print(f"  Last result: {result}")
-            error = agent_status.get("last_error")
-            if error:
-                print(f"  Last error:  {error[:80]}")
-            print(
-                f"  Enabled:     "
-                f"{'Yes' if agent_status.get('enabled', True) else 'No'}"
-            )
-            print(
-                f"  Interval:    " f"{agent_status.get('interval_minutes', 0)} minutes"
-            )
-            print(f"  Next run:    " f"{agent_status.get('next_run', 'immediate')}")
-            max_c = agent_status.get("max_concurrent", 1)
-            if max_c > 1:
-                print(f"  Concurrency: {max_c}")
-            if agent_status.get("running"):
-                count = agent_status.get("running_count", 0)
-                infos = agent_status.get("running_info", [])
-                label = f"{count} instance{'s' if count != 1 else ''}"
-                print(f"  RUNNING:     {label}")
-                for info in infos:
-                    print(f"    PID {info['pid']} " f"since {info['started_at']}")
+            print(f"  Queue:       {info['queue']}")
+            depth = info["queue_depth"]
+            if depth < 0:
+                print("  Queue depth: (Redis unavailable)")
+            else:
+                print(f"  Queue depth: {depth}")
+            print(f"  Cron:        {info['cron_schedule']}")
 
 
 @agents_app.command(name="run")
@@ -78,9 +124,17 @@ def agents_run(
         "-t",
         help="Custom task prompt for the agent",
     ),
+    inline: bool = typer.Option(
+        False,
+        "--inline",
+        help="Run agent inline (no Redis/Dramatiq needed, for debugging)",
+    ),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Run agent(s) inline (one-shot mode)."""
+    """Run agent(s).
+
+    Enqueue to Dramatiq by default, or run inline with --inline.
+    """
     if agent:
         if agent not in VALID_AGENTS:
             emit_error(
@@ -90,270 +144,72 @@ def agents_run(
             return
 
         task_prompt = task or DEFAULT_TASKS[agent]
-        asyncio.run(_run_single_agent(agent, task_prompt))
-    else:
-        # Run all due agents (loads persisted state for scheduling)
-        orchestrator = Orchestrator()
-        orchestrator.load_state()
-        asyncio.run(orchestrator.run_due_agents())
 
-
-async def _run_single_agent(agent_name: str, task: str):
-    """Run a single agent."""
-    await Orchestrator().run_agent(agent_name, task)
-
-
-@agents_app.command(name="start")
-def agents_start(
-    tick: int = typer.Option(
-        60,
-        "--tick",
-        "-t",
-        help="Seconds between each scheduling tick (default: 60)",
-    ),
-) -> None:
-    """Start the orchestrator daemon (continuous scheduling loop).
-
-    Runs agents on their configured schedules, forking each as an
-    independent subprocess. Press Ctrl+C to stop.
-    """
-    import logging
-
-    from rich.console import Console
-    from rich.table import Table
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(name)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
-    console = Console()
-
-    # Refuse to start a second daemon
-    existing_pid = Orchestrator.read_daemon_pid()
-    if existing_pid is not None:
-        console.print(
-            f"\n  [red]Orchestrator daemon already running "
-            f"(PID {existing_pid}).[/red]\n"
-            f"  Run [cyan]news48 agents stop[/cyan] first, "
-            f"or Ctrl+C the existing process.\n"
-        )
-        raise typer.Exit(1)
-
-    orchestrator = Orchestrator()
-    orchestrator.load_state()
-    status = orchestrator.get_status()
-
-    console.print()
-    console.print(" news48 orchestrator", style="bold white")
-    console.print("─" * 57, style="dim")
-    console.print(f"  Tick interval: [cyan]{tick}s[/cyan]")
-    console.print(
-        "  Dashboard:     [dim]run [cyan]news48 agents dashboard[/cyan] "
-        "in another terminal[/dim]"
-    )
-    console.print()
-
-    table = Table(show_header=True, header_style="bold dim", border_style="dim")
-    table.add_column("Agent", style="bold", min_width=10)
-    table.add_column("Interval", justify="right", min_width=10)
-    table.add_column("Slots", justify="right", min_width=6)
-    table.add_column("Last Run", min_width=22)
-    table.add_column("Status", min_width=10)
-
-    for name, s in status.items():
-        last = s.get("last_run") or "never"
-        interval = f"{s['interval_minutes']}min"
-        max_c = s.get("max_concurrent", 1)
-        slots = str(max_c) if max_c > 1 else ""
-        is_running = s.get("running", False)
-        running_count = s.get("running_count", 0)
-        if is_running:
-            if running_count > 1:
-                status_str = f"[green]running ({running_count})[/green]"
-            else:
-                status_str = "[green]running[/green]"
-        elif last == "never":
-            status_str = "[cyan]due[/cyan]"
+        if inline:
+            # Run inline for debugging without Docker/Redis
+            asyncio.run(_run_single_agent_inline(agent, task_prompt))
         else:
-            status_str = "[dim]waiting[/dim]"
-        table.add_row(name, interval, slots, last, status_str)
+            # Enqueue to Dramatiq
+            _enqueue_agent(agent, task_prompt)
+    else:
+        # Run all agents — enqueue each to Dramatiq
+        for agent_name in VALID_AGENTS:
+            task_prompt = DEFAULT_TASKS[agent_name]
+            _enqueue_agent(agent_name, task_prompt)
 
-    console.print(table)
-    console.print()
 
-    orchestrator.start(tick_seconds=tick)
-
-
-@agents_app.command(name="dashboard")
-def agents_dashboard(
-    tick: int = typer.Option(
-        60,
-        "--tick",
-        "-t",
-        help="Tick interval to display (cosmetic, matches orchestrator)",
-    ),
-    refresh: float = typer.Option(
-        0.5,
-        "--refresh",
-        "-r",
-        help="Dashboard refresh interval in seconds",
-    ),
-) -> None:
-    """Live dashboard showing agent output (read-only).
-
-    Fixed 4-panel layout: planner, executor, monitor, stats.
-    Connects to a running orchestrator by reading data/orchestrator.json
-    and tailing agent log files. Press Ctrl+C to exit.
-    """
-    import json
-    import threading
-    import time
-
-    from rich.live import Live
-
-    from agents.dashboard import (
-        Dashboard,
-        EventBuffer,
-        _get_article_stats,
-        tail_file_stream,
-    )
-
-    dashboard = Dashboard(tick_seconds=tick)
-    tailers: dict[str, tuple[threading.Thread, threading.Event]] = {}
-
-    def sync_state() -> None:
-        """Read data/orchestrator.json and start/stop tailers as needed."""
-        if not config.STATE_FILE.exists():
-            return
-        try:
-            data = json.loads(config.STATE_FILE.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            return
-
-        current_running = data.get("running", {})
-
-        # Collect all active tailer keys from current state
-        active_tailer_keys: set[str] = set()
-
-        # Start tailers for new agent instances
-        for name, run_data in current_running.items():
-            # Support both list (current) and dict (legacy) formats
-            instances = run_data if isinstance(run_data, list) else [run_data]
-            for i, info in enumerate(instances):
-                pid = info.get("pid")
-                if pid:
-                    tailer_key = f"{name}:{pid}"
-                elif len(instances) > 1:
-                    # Fallback for malformed legacy entries without pid
-                    tailer_key = f"{name}:{i}"
-                else:
-                    tailer_key = name
-                active_tailer_keys.add(tailer_key)
-                log_file = info.get("log_file", "")
-                if tailer_key not in tailers and log_file:
-                    # Keep per-instance buffer keyed by tailer_key
-                    if tailer_key not in dashboard.buffers:
-                        dashboard.buffers[tailer_key] = EventBuffer(max_lines=100)
-                    buffer = dashboard.buffers[tailer_key]
-                    stop_event = threading.Event()
-                    thread = threading.Thread(
-                        target=tail_file_stream,
-                        args=(log_file, buffer, stop_event),
-                        daemon=True,
-                    )
-                    thread.start()
-                    tailers[tailer_key] = (thread, stop_event)
-                    dashboard.agent_status[name] = "running"
-
-        # Mark completed agents and clean up stale buffers
-        for tailer_key in list(tailers.keys()):
-            if tailer_key not in active_tailer_keys:
-                thread, stop_event = tailers.pop(tailer_key)
-                stop_event.set()
-                thread.join(timeout=2)
-                # Remove stale buffer so instance count stays accurate
-                dashboard.buffers.pop(tailer_key, None)
-                # Extract agent name from tailer_key
-                agent_name = tailer_key.split(":")[0]
-                # Only mark completed if no other instances running
-                if not any(
-                    k.startswith(agent_name + ":") or k == agent_name
-                    for k in active_tailer_keys
-                ):
-                    dashboard.agent_status[agent_name] = "completed"
-
-        # Refresh article stats
-        dashboard.stats_data = _get_article_stats()
-
+def _enqueue_agent(agent_name: str, task_prompt: str) -> None:
+    """Enqueue an agent task to Dramatiq."""
     try:
-        with Live(
-            dashboard.render(),
-            refresh_per_second=4,
-            console=dashboard.console,
-        ) as live:
-            last_sync = 0.0
-            while True:
-                now = time.monotonic()
-                if now - last_sync >= 3.0:
-                    sync_state()
-                    last_sync = now
-                live.update(dashboard.render())
-                time.sleep(refresh)
-    except KeyboardInterrupt:
-        dashboard.console.print("\n  [dim]Dashboard closed.[/dim]")
-    finally:
-        # Stop all tailer threads (handles any exception, not just Ctrl+C)
-        for thread, stop_event in tailers.values():
-            stop_event.set()
-        for thread, stop_event in tailers.values():
-            thread.join(timeout=2)
+        import agents.broker  # noqa: F401
+        from agents.actors import (
+            executor_cycle,
+            fact_check_cycle,
+            parser_cycle,
+            sentinel_cycle,
+        )
+
+        actor_map = {
+            "sentinel": sentinel_cycle,
+            "executor": executor_cycle,
+            "parser": parser_cycle,
+            "fact_checker": fact_check_cycle,
+        }
+
+        actor = actor_map.get(agent_name)
+        if actor:
+            msg = actor.send()
+            print(f"  Enqueued {agent_name} task (message_id={msg.message_id})")
+        else:
+            emit_error(f"No Dramatiq actor for agent: {agent_name}")
+    except Exception as exc:
+        emit_error(f"Failed to enqueue {agent_name}: {exc}")
 
 
-@agents_app.command(name="stop")
-def agents_stop(
-    agent: str = typer.Option(None, "--agent", "-a", help="Specific agent to stop"),
-    output_json: bool = typer.Option(False, "--json"),
-) -> None:
-    """Stop running agent(s) and the orchestrator daemon.
+async def _run_single_agent_inline(agent_name: str, task: str):
+    """Run a single agent inline (for debugging without Dramatiq)."""
+    from agents.workers import build_task_context
 
-    Without ``--agent``, stops the daemon first (so it cannot re-fork
-    agents), then stops all tracked agent subprocesses.
-    """
-    from rich.console import Console
+    task_context = build_task_context(agent_name)
 
-    console = Console()
-    orchestrator = Orchestrator()
-    orchestrator.load_state()
+    if agent_name == "sentinel":
+        from agents.sentinel import run
 
-    if agent:
-        if agent not in VALID_AGENTS:
-            emit_error(f"Unknown agent: {agent}", as_json=output_json)
-            return
-        result = orchestrator.stop_agent(agent)
+        result = await run(task, task_context)
+    elif agent_name == "executor":
+        from agents.executor import run
+
+        result = await run(task, task_context)
+    elif agent_name == "parser":
+        from agents.parser import run_autonomous
+
+        result = await run_autonomous()
+    elif agent_name == "fact_checker":
+        from agents.fact_checker import run_cycle
+
+        result = await run_cycle(limit=10)
     else:
-        result = orchestrator.stop_all()
+        emit_error(f"Unknown agent: {agent_name}")
+        return
 
-    if output_json:
-        emit_json(result)
-    else:
-        daemon = result.get("daemon")
-        if daemon and daemon.get("stopped"):
-            console.print(
-                f"  Daemon stopped (PID {daemon['daemon_pid']}, "
-                f"{daemon['signal']})",
-                style="green",
-            )
-        elif daemon and daemon.get("daemon_pid") is None:
-            console.print("  Daemon not running", style="dim")
-
-        stopped = result.get("stopped", [])
-        already = result.get("already_stopped", [])
-        if stopped:
-            console.print(f"  Stopped: {', '.join(stopped)}", style="green")
-        if already:
-            console.print(f"  Not running: {', '.join(already)}", style="dim")
-
-        if not stopped and not (daemon and daemon.get("stopped")):
-            console.print("  Nothing to stop", style="dim")
+    print(f"  {agent_name} completed: {json.dumps(result, default=str)[:200]}")

@@ -15,7 +15,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import config
-from agents.schedules import _is_process_alive as _is_pid_alive
 from agents.tools._helpers import _safe_json
 
 _STALE_PLAN_TIMEOUT_MINUTES = 60
@@ -270,8 +269,41 @@ def _normalize_plan_for_consistency(plan: dict) -> bool:
     return changed
 
 
+def _is_pid_alive(pid: int) -> bool:
+    """Check if a process with the given PID is still running.
+
+    On Linux, treats zombie processes as not alive for orchestration
+    purposes so stale PIDs do not block scheduling or shutdown logic.
+    """
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)  # Signal 0 = check existence
+    except (ProcessLookupError, PermissionError):
+        return False
+
+    stat_path = f"/proc/{pid}/stat"
+    try:
+        stat = open(stat_path, "r", encoding="utf-8").read()
+    except OSError:
+        return True
+
+    try:
+        _pid, remainder = stat.split("(", 1)
+        _comm, remainder = remainder.rsplit(")", 1)
+        parts = remainder.strip().split()
+        state = parts[0]
+    except (IndexError, ValueError):
+        return True
+
+    return state != "Z"
+
+
 def _parse_claimed_pid(claimed_by: str | None) -> int | None:
-    """Parse claimed_by value in format ``pid:<number>``."""
+    """Parse claimed_by value in format ``pid:<number>``.
+
+    Returns None for non-PID formats like ``executor:dramatiq-<id>``.
+    """
     if not claimed_by or not isinstance(claimed_by, str):
         return None
     if not claimed_by.startswith("pid:"):
@@ -843,9 +875,15 @@ def update_plan(
 
             if requested_status == "executing":
                 # Ensure executing plans always have ownership metadata
-                # so _is_plan_stale can verify the owner process.
+                # so _is_plan_stale can verify the owner.
+                # Preserve existing claimed_by (set by claim_plan) rather
+                # than overwriting with a new PID.
                 if not plan.get("claimed_by"):
                     plan["claimed_by"] = f"pid:{os.getpid()}"
+                    plan["claimed_at"] = timestamp
+                    changed = True
+                elif plan.get("claimed_at") is None:
+                    # Owner exists but claimed_at was cleared — restore it
                     plan["claimed_at"] = timestamp
                     changed = True
             else:
@@ -927,6 +965,10 @@ def _serialize_plan(plan: dict) -> dict:
 def _is_plan_stale(plan: dict) -> bool:
     """Check if an executing plan is stale (timed out).
 
+    Handles both legacy PID-based ownership (``pid:<number>``) and
+    modern Dramatiq message-based ownership
+    (``executor:dramatiq-<message_id>``).
+
     Args:
         plan: The plan dict.
 
@@ -937,15 +979,19 @@ def _is_plan_stale(plan: dict) -> bool:
     if plan.get("status") != "executing":
         return False
 
-    claimed_pid = _parse_claimed_pid(plan.get("claimed_by"))
+    claimed_by = plan.get("claimed_by")
+    claimed_pid = _parse_claimed_pid(claimed_by)
 
-    # No valid PID claim — ownership is unverifiable, treat as stale so
-    # the plan can be requeued and reclaimed by a live executor.
-    if claimed_pid is None:
-        return True
-
-    # Claimed PID is dead — the executor that owned this plan is gone.
-    if not _is_pid_alive(claimed_pid):
+    if claimed_pid is not None:
+        # Legacy PID-based ownership: check if the process is alive
+        if not _is_pid_alive(claimed_pid):
+            # PID is dead — the executor that owned this plan is gone
+            return True
+    elif claimed_by and claimed_by.startswith("executor:dramatiq-"):
+        # Modern Dramatiq ownership: no PID to check, rely on timeout
+        pass
+    elif claimed_by is None:
+        # No ownership metadata — treat as stale so it can be requeued
         return True
 
     updated_at = plan.get("updated_at", "")
@@ -1000,14 +1046,14 @@ def _requeue_stale_plan(plan: dict) -> None:
     )
 
 
-def release_plans_for_pid(pid: int) -> dict:
-    """Release all plans claimed by a specific PID back to pending.
+def release_plans_for_owner(owner: str) -> dict:
+    """Release all plans claimed by a specific owner back to pending.
 
-    Used when an executor process is stopped to immediately free
-    its claimed plans instead of waiting for stale timeout.
+    Used when a Dramatiq worker fails after claiming a plan,
+    so another worker can pick it up.
 
     Args:
-        pid: The process ID whose claimed plans should be released.
+        owner: The owner string (e.g., "executor:dramatiq-<message_id>").
 
     Returns:
         Dict with released plan IDs and count.
@@ -1022,8 +1068,7 @@ def release_plans_for_pid(pid: int) -> dict:
         except (json.JSONDecodeError, OSError):
             continue
 
-        claimed_pid = _parse_claimed_pid(plan.get("claimed_by"))
-        if claimed_pid != pid:
+        if plan.get("claimed_by") != owner:
             continue
 
         if plan.get("status") != "executing":
@@ -1044,9 +1089,9 @@ def release_plans_for_pid(pid: int) -> dict:
         _write_plan(plan)
         released.append(plan["id"])
         logger.info(
-            "Released plan %s (was claimed by pid:%d)",
+            "Released plan %s (was claimed by %s)",
             plan["id"],
-            pid,
+            owner,
         )
 
     return {"released": released, "count": len(released)}
@@ -1055,7 +1100,7 @@ def release_plans_for_pid(pid: int) -> dict:
 def recover_stale_plans(reason: str) -> str:
     """Heal inconsistent plans and requeue stale executing plans.
 
-    This is used for autonomous recovery on orchestrator startup.
+    This is used for autonomous recovery on worker startup.
     """
     try:
         plans_dir = _ensure_plans_dir()
@@ -1093,7 +1138,7 @@ def recover_stale_plans(reason: str) -> str:
         return _safe_json({"result": "", "error": str(exc)})
 
 
-def claim_plan(reason: str) -> str:
+def claim_plan(reason: str, owner: str | None = None) -> str:
     """Find and claim the oldest eligible pending plan.
 
     ## When to Use
@@ -1115,6 +1160,9 @@ def claim_plan(reason: str) -> str:
 
     ## Parameters
     - ``reason`` (str): Why you are claiming a plan
+    - ``owner`` (str | None): Optional owner identifier for Dramatiq
+      (e.g., ``executor:dramatiq-<message_id>``). If not provided,
+      falls back to legacy ``pid:<pid>`` format.
 
     ## Returns
     JSON with:
@@ -1176,7 +1224,10 @@ def claim_plan(reason: str) -> str:
 
             plan["status"] = "executing"
             plan["updated_at"] = _now()
-            plan["claimed_by"] = f"pid:{os.getpid()}"
+            if owner:
+                plan["claimed_by"] = owner
+            else:
+                plan["claimed_by"] = f"pid:{os.getpid()}"
             plan["claimed_at"] = _now()
             _write_plan(plan)
             return _safe_json({"result": _serialize_plan(plan), "error": ""})
@@ -1249,7 +1300,7 @@ def peek_next_plan() -> str | None:
     """Return the task family of the oldest eligible pending plan, or None.
 
     This is a lightweight read-only function that peeks at plans without
-    claiming them. Used by the orchestrator to determine which conditional
+    claiming them. Used by the executor actor to determine which conditional
     skills to load for the executor agent.
     """
     plans_dir = _ensure_plans_dir()

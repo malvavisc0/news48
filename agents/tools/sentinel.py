@@ -19,8 +19,8 @@ def write_sentinel_report(
 
     ## When to Use
     Call this tool at the end of every sentinel cycle to persist your
-    findings.  The report is consumed by the dashboard, the executor
-    (to decide plan priority), and future sentinel cycles.
+    findings.  The report is consumed by the executor
+    (to decide plan priority) and future sentinel cycles.
 
     ## Parameters
     - `status` (str): Overall status — one of HEALTHY, WARNING, CRITICAL

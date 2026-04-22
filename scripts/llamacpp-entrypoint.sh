@@ -110,7 +110,7 @@ download_model() {
         exit 1
     fi
 
-    # Verify download succeeded (non-zero file size)
+    # Verify download succeeds (non-zero file size)
     if [ ! -s "$MODEL_PATH" ]; then
         echo "[$(date -Iseconds)] ERROR: Downloaded model file is empty."
         rm -f "$MODEL_PATH"

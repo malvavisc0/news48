@@ -6,7 +6,6 @@ from database import (
     check_database_health,
     get_articles_older_than_hours,
     get_retention_policy_stats,
-    init_database,
     purge_articles_older_than_hours,
 )
 
@@ -20,11 +19,10 @@ def cleanup_status(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Show 48-hour retention policy status."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     try:
-        stats = get_retention_policy_stats(db_path)
+        stats = get_retention_policy_stats()
     except Exception as e:
         emit_error(str(e), as_json=output_json)
 
@@ -42,23 +40,22 @@ def cleanup_status(
 
 @cleanup_app.command(name="purge")
 def cleanup_purge(
-    hours: int = typer.Option(48, "--hours", "-h", help="Hours threshold for purge"),
+    hours: int = typer.Option(48, "--hours", "-h", help="Hours threshold"),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
         "-n",
         help="Show what would be deleted without deleting",
     ),
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Purge articles older than specified hours (default: 48)."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     # Get articles that would be purged
     try:
-        old_articles = get_articles_older_than_hours(db_path, hours)
+        old_articles = get_articles_older_than_hours(hours)
     except Exception as e:
         emit_error(str(e), as_json=output_json)
 
@@ -79,8 +76,9 @@ def cleanup_purge(
     # Show preview
     if not output_json and not dry_run:
         print(f"Found {len(old_articles)} articles older than {hours} hours:")
-        for article in old_articles[:10]:  # Show first 10
-            print(f"  - [{article['id']}] {article['title'] or 'Untitled'}")
+        for article in old_articles[:10]:
+            title = article.get("title") or "Untitled"
+            print(f"  - [{article['id']}] {title}")
             print(f"    Created: {article['created_at']}")
         if len(old_articles) > 10:
             print(f"  ... and {len(old_articles) - 10} more")
@@ -97,7 +95,7 @@ def cleanup_purge(
 
     # Execute purge
     try:
-        result = purge_articles_older_than_hours(db_path, hours, dry_run)
+        result = purge_articles_older_than_hours(hours, dry_run)
     except Exception as e:
         emit_error(str(e), as_json=output_json)
 
@@ -116,10 +114,10 @@ def cleanup_health(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Check database health and connectivity."""
-    db_path = require_db()
+    require_db()
 
     try:
-        health = check_database_health(db_path)
+        health = check_database_health()
     except Exception as e:
         emit_error(str(e), as_json=output_json)
 
@@ -129,7 +127,6 @@ def cleanup_health(
         print("Database Health Check")
         print(f"  Connected: {'✓' if health['is_connected'] else '✗'}")
         print(f"  Size: {health['db_size_mb']} MB")
-        print(f"  WAL mode: {'✓' if health['wal_mode'] else '✗'}")
         print(f"  Integrity: {'✓' if health['integrity_ok'] else '✗'}")
         print("  Table counts:")
         for table, count in health["table_counts"].items():

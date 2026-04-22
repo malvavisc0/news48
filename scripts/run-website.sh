@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# run.website.sh – Start the news48 web server in production or development mode.
+# run-website.sh – Start the news48 web server in production or development mode.
 #
 # Usage:
-#   ./run.website.sh --production   Production: multi-worker, localhost-only, proxy headers
-#   ./run.website.sh --development  Development: single-worker, auto-reload, open bind
+#   ./run-website.sh --production   Production: multi-worker, localhost-only, proxy headers
+#   ./run-website.sh --development  Development: single-worker, auto-reload, open bind
 #
 # All settings can be overridden via environment variables (see below) or the
 # corresponding .env file loaded by the application at startup.

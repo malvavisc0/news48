@@ -9,7 +9,7 @@ The system has two related workflows:
 1. **Setup**: seed feeds into the database when onboarding or changing sources
 2. **Recurring pipeline cycle**: fetch → download → parse → fact-check → cleanup
 
-Scheduled agents and the orchestrator sit above that recurring cycle; they are not a separate pipeline stage.
+Scheduled agents and the worker stack sit above that recurring cycle; they are not a separate pipeline stage.
 
 ```
 Setup: seed feeds
@@ -20,7 +20,7 @@ Recurring cycle:
 │ (metadata)  │    │   (HTML)    │    │ (analysis)  │    │ (verdict)   │    │ (retention) │
 └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
 
-Scheduled agents (orchestrator):
+Scheduled agents (Periodiq + Dramatiq):
 ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
 │ Sentinel │  │ Executor │  │  Parser  │  │Fact-check│
 │(Health)  │  │ (Plans)  │  │(Articles)│  │(Articles)│
@@ -204,7 +204,7 @@ Parsing requires a configured LLM and database. Set these in your `.env` file:
 
 ```bash
 # Required for all commands
-DATABASE_PATH=news48.db
+DATABASE_URL=mysql+mysqlconnector://news48:news48@localhost:3306/news48
 BYPARR_API_URL=http://localhost:8000
 
 # Required for parsing (LLM configuration)
@@ -369,8 +369,9 @@ uv run news48 cleanup health
 Here's a complete end-to-end workflow:
 
 ```bash
-# 1. Start fresh (optional - skip if database already has data)
-rm -f news48.db
+# 1. Start fresh (optional - reset the MySQL schema)
+uv run alembic downgrade base
+uv run alembic upgrade head
 
 # 2. Seed the database with feeds
 uv run news48 seed newsfeeds.seed.txt
@@ -403,6 +404,27 @@ uv run news48 articles list --status parsed
 ---
 
 ## Monitoring and Maintenance
+
+## Autonomous Runtime
+
+The production runtime is split into two long-running processes:
+
+1. `periodiq agents.actors` enqueues scheduled work on cron intervals
+2. `dramatiq agents.actors --processes 1 --threads 8` consumes Redis queues and executes agents plus pipeline actors
+
+That means there is no standalone orchestrator daemon anymore. Queue state lives in Redis, startup recovery lives in `StartupRecoveryMiddleware`, and container lifecycle is handled by Docker.
+
+```bash
+# Inspect autonomous runtime state
+uv run news48 agents status --json
+
+# Docker logs
+docker compose logs -f periodiq-scheduler
+docker compose logs -f dramatiq-worker
+docker compose logs -f redis
+```
+
+Use [`uv run news48 agents run --agent <name>`](docs/workflow-guide.md:1) for one-shot manual enqueues when you want to test the full worker path without waiting for cron.
 
 ### Check System Health
 
@@ -761,22 +783,24 @@ uv run news48 agents run --agent fact_checker --json
 ### Agent Architecture
 
 ```
-                    Orchestrator
-              (Python dispatcher, NOT an LLM agent)
-              Runs agents on a schedule
-                         |
+                   Periodiq scheduler
+                 (cron-based enqueue only)
+                           |
+                           v
+                      Redis broker
+                           |
         ┌────────────┬───────────┬──────────┬──────────────┐
         |            |           |          |              |
         v            v           v          v              v
  ┌──────────┐  ┌──────────┐ ┌──────────┐ ┌─────────────┐
  │ Sentinel │  │ Executor │ │  Parser  │ │Fact-checker │
- │(Health)  │  │ (Plans)  │ │(Articles)│  │ (Articles)  │
+ │(Health)  │  │ (Plans)  │ │(Articles)│ │ (Articles)  │
  └──────────┘  └──────────┘ └──────────┘ └─────────────┘
        |             |           |              |
        v             v           v              v
  ┌──────────────────────────────────────────────────────┐
- │             Shared Tool Library                       │
- │  shell / files / planner / searxng / bypass / system  │
+ │       Dramatiq workers + shared tool library         │
+ │  shell / files / planner / searxng / bypass / system │
  └──────────────────────────────────────────────────────┘
 ```
 
@@ -784,7 +808,7 @@ uv run news48 agents run --agent fact_checker --json
 
 | Operation | Manual CLI Command | Autonomous Agent |
 |-----------|-------------------|------------------|
-| Run recurring pipeline cycle | `uv run news48 fetch && uv run news48 download --limit 10 && uv run news48 parse --limit 10` | Sentinel → Executor → Parser loop |
+| Run recurring pipeline cycle | `uv run news48 fetch && uv run news48 download --limit 10 && uv run news48 parse --limit 10` | Periodiq-scheduled feed/download/parser actors + executor plans |
 | Fact-check articles | `uv run news48 fact-check` | Fact-checker agent on schedule |
 | Check database health | `uv run news48 cleanup health` | Sentinel Agent (every 5m) |
 | View retention status | `uv run news48 cleanup status` | Sentinel Agent (alerts) |
@@ -799,7 +823,8 @@ uv run news48 agents run --agent fact_checker --json
 
 ```bash
 # 1. Start fresh (optional)
-rm -f news48.db
+uv run alembic downgrade base
+uv run alembic upgrade head
 
 # 2. Seed the database with feeds
 uv run news48 seed newsfeeds.seed.txt

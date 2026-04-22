@@ -14,7 +14,6 @@ from database import (
     get_article_by_id,
     get_parse_failed_articles,
     get_unparsed_articles,
-    init_database,
     mark_article_parse_failed,
     reset_article_parse,
 )
@@ -57,12 +56,10 @@ async def _parse(article_id: int, *, force: bool = False) -> dict:
     Returns:
         A dict with the parse result for this article.
     """
-    db_path = require_db()
+    require_db()
     claim_owner = f"parse:{os.getpid()}"
 
-    init_database(db_path)
-
-    article = get_article_by_id(db_path, article_id)
+    article = get_article_by_id(article_id)
     if not article:
         return {
             "id": article_id,
@@ -86,10 +83,9 @@ async def _parse(article_id: int, *, force: bool = False) -> dict:
         }
 
     if force or article.get("parse_failed"):
-        reset_article_parse(db_path, article_id)
+        reset_article_parse(article_id)
 
     claimed = claim_articles_for_processing(
-        db_path,
         [article_id],
         "parse",
         claim_owner,
@@ -124,7 +120,7 @@ async def _parse(article_id: int, *, force: bool = False) -> dict:
         agent_response = await run_parser(task)
 
         # Verify the agent actually updated the article
-        updated_article = get_article_by_id(db_path, article["id"])
+        updated_article = get_article_by_id(article["id"])
         if updated_article and updated_article.get("parsed_at"):
             status_msg(f"  Parsed: {updated_article['title']}")
             return {
@@ -153,7 +149,7 @@ async def _parse(article_id: int, *, force: bool = False) -> dict:
         # Agent truly did nothing — no update, no explicit failure
         error = (agent_response or "").strip() or "Agent did not update article"
         status_msg(f"  Parse failed: {error}")
-        mark_article_parse_failed(db_path, article["id"], error)
+        mark_article_parse_failed(article["id"], error)
         return {
             "id": article_id,
             "title": article["title"],
@@ -164,7 +160,7 @@ async def _parse(article_id: int, *, force: bool = False) -> dict:
 
     except Exception as e:
         status_msg(f"  Failed to parse {article['url']}: {e}")
-        mark_article_parse_failed(db_path, article["id"], str(e))
+        mark_article_parse_failed(article["id"], str(e))
         return {
             "id": article_id,
             "title": article["title"],
@@ -174,7 +170,6 @@ async def _parse(article_id: int, *, force: bool = False) -> dict:
         }
     finally:
         clear_article_processing_claim(
-            db_path,
             article["id"],
             owner=claim_owner,
         )
@@ -260,11 +255,10 @@ def parse(
         return
 
     # Batch mode: find articles and parse each one
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     if retry:
-        candidates = get_parse_failed_articles(db_path, limit, feed_domain=feed)
+        candidates = get_parse_failed_articles(limit, feed_domain=feed)
         if not candidates:
             status_msg("No failed articles found to retry")
             data = {
@@ -282,7 +276,7 @@ def parse(
             return
         status_msg(f"Found {len(candidates)} failed articles to retry")
     else:
-        candidates = get_unparsed_articles(db_path, limit, feed_domain=feed)
+        candidates = get_unparsed_articles(limit, feed_domain=feed)
         if not candidates:
             status_msg("No unparsed articles found")
             data = {

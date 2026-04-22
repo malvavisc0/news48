@@ -1,5 +1,5 @@
 # =============================================================================
-# Stage 1: web-builder — Install web-only dependencies
+# Stage 1: web-builder — Install runtime dependencies for web
 # =============================================================================
 FROM python:3.12-slim AS web-builder
 
@@ -11,13 +11,14 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Copy dependency files for layer caching
 COPY pyproject.toml uv.lock ./
 
-# Install only the web dependency group
-RUN uv sync --frozen --only-group web --no-dev --no-install-project
+# Install all non-dev runtime dependencies so the web image has the same
+# database drivers and shared runtime packages as the worker image.
+RUN uv sync --frozen --no-dev --no-install-project
 
 # =============================================================================
-# Stage 2: orch-builder — Install ALL project dependencies (no dev)
+# Stage 2: worker-builder — Install ALL project dependencies (no dev)
 # =============================================================================
-FROM python:3.12-slim AS orch-builder
+FROM python:3.12-slim AS worker-builder
 
 WORKDIR /app
 
@@ -71,8 +72,8 @@ RUN mkdir -p helpers && \
 COPY helpers/seo.py helpers/
 
 # Copy and make entrypoint executable
-COPY docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh
+COPY scripts/docker-entrypoint.sh /app/scripts/docker-entrypoint.sh
+RUN chmod +x /app/scripts/docker-entrypoint.sh
 
 # Set PATH to include venv bin
 ENV PATH="/app/.venv/bin:$PATH"
@@ -94,9 +95,9 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
 CMD ["uvicorn", "web.app:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # =============================================================================
-# Stage 4: orchestrator — Production orchestrator image (full stack)
+# Stage 4: worker — Production worker image (full stack)
 # =============================================================================
-FROM python:3.12-slim AS orchestrator
+FROM python:3.12-slim AS worker
 
 WORKDIR /app
 
@@ -105,7 +106,7 @@ RUN groupadd -g 1000 news48 && \
     useradd -u 1000 -g news48 -m news48
 
 # Copy installed packages from builder
-COPY --from=orch-builder /app/.venv /app/.venv
+COPY --from=worker-builder /app/.venv /app/.venv
 
 # Copy all application source code
 COPY . .
@@ -115,13 +116,10 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 RUN uv sync --frozen --no-dev
 
 # Ensure entrypoint is executable
-RUN chmod +x /app/docker-entrypoint.sh
+RUN chmod +x /app/scripts/docker-entrypoint.sh
 
 # Set PATH to include venv bin
 ENV PATH="/app/.venv/bin:$PATH"
-
-# Set orchestrator command prefix for Docker
-ENV ORCHESTRATOR_CMD_PREFIX=news48
 
 # Ensure data directory exists
 RUN mkdir -p /data && chown news48:news48 /data
@@ -130,7 +128,7 @@ RUN mkdir -p /data && chown news48:news48 /data
 USER news48
 
 # Default command (overridden by compose)
-CMD ["news48", "agents", "start"]
+CMD ["dramatiq", "agents.actors", "--processes", "1", "--threads", "8"]
 
 # =============================================================================
 # Stage 5: web-dev — Development web image
@@ -144,9 +142,9 @@ COPY --from=dev-builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
 # =============================================================================
-# Stage 6: orchestrator-dev — Development orchestrator image
+# Stage 6: worker-dev — Development worker image
 # =============================================================================
-FROM orchestrator AS orchestrator-dev
+FROM worker AS worker-dev
 
 # Copy venv with ALL deps including dev (black, isort, pytest)
 COPY --from=dev-builder /app/.venv /app/.venv

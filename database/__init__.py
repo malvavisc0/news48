@@ -39,7 +39,6 @@ from .claims import (
     get_claims_for_article,
     insert_claims,
 )
-from .connection import get_connection, init_database
 from .feeds import (
     delete_feed,
     get_all_feeds,

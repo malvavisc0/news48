@@ -4,7 +4,6 @@ import asyncio
 import logging
 import re
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Callable, List
 
 import dateparser
@@ -146,7 +145,7 @@ async def _fetch_with_semaphore(
 async def get_fetch_summary(
     urls: List[str],
     delay: float,
-    db_path: Path | None = None,
+    track_db: bool = False,
     on_feed_done: Callable[[FeedResult], None] | None = None,
 ) -> FeedSummary:
     """Fetch multiple feeds and return a summary of results.
@@ -155,7 +154,7 @@ async def get_fetch_summary(
         urls: List of feed URLs to fetch.
         delay: Delay between requests in seconds
             (deprecated, kept for API compat).
-        db_path: Optional path to SQLite database for tracking.
+        track_db: If True, track fetch and articles in the database.
         on_feed_done: Optional callback invoked after each feed is
             fetched, receiving the FeedResult.
 
@@ -165,8 +164,8 @@ async def get_fetch_summary(
     summary = FeedSummary()
     fetch_id = None
 
-    if db_path:
-        fetch_id = create_fetch(db_path)
+    if track_db:
+        fetch_id = create_fetch()
 
     try:
         # Fetch all feeds concurrently with a semaphore limiting parallelism
@@ -179,12 +178,11 @@ async def get_fetch_summary(
             if on_feed_done:
                 on_feed_done(result)
 
-            if db_path and fetch_id and result.success:
+            if track_db and fetch_id and result.success:
                 url = result.url
-                feed = get_feed_by_url(db_path, url)
+                feed = get_feed_by_url(url)
                 if feed:
                     update_feed_metadata(
-                        db_path,
                         feed["id"],
                         result.title or "Unknown",
                         favicon_url=extract_favicon(url),
@@ -208,23 +206,21 @@ async def get_fetch_summary(
                         )
                     # Each function manages its own connection
                     insert_articles(
-                        db_path,
                         fetch_id,
                         feed["id"],
                         articles,
                         source_name=result.title,
                     )
 
-        if db_path and fetch_id:
+        if track_db and fetch_id:
             complete_fetch(
-                db_path,
                 fetch_id,
                 len(urls),
                 sum(r.valid_articles_count for r in summary.successful),
             )
     except Exception:
-        if db_path and fetch_id:
-            fail_fetch(db_path, fetch_id)
+        if track_db and fetch_id:
+            fail_fetch(fetch_id)
         raise
 
     return summary

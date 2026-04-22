@@ -1,7 +1,6 @@
 """Feeds sub-app - manage feeds in the database (list, add, delete, info)."""
 
 import sys
-from pathlib import Path
 
 import typer
 
@@ -13,7 +12,6 @@ from database import (
     get_feed_by_url,
     get_feed_count,
     get_feeds_paginated,
-    init_database,
     seed_feeds,
     update_feed_metadata,
 )
@@ -33,15 +31,13 @@ def _list_feeds(limit: int, offset: int) -> dict:
     Returns:
         A dict with feed listing results.
     """
-    db_path = require_db()
+    require_db()
 
-    init_database(db_path)
-
-    total = get_feed_count(db_path)
+    total = get_feed_count()
     if total == 0:
         return {"total": 0, "limit": limit, "offset": offset, "feeds": []}
 
-    feed_list = get_feeds_paginated(db_path, limit, offset)
+    feed_list = get_feeds_paginated(limit, offset)
 
     return {
         "total": total,
@@ -86,7 +82,7 @@ def _add_feed(url: str) -> dict:
     Returns:
         A dict with the result.
     """
-    db_path = require_db()
+    require_db()
 
     if not url.startswith(("http://", "https://")):
         return {
@@ -94,10 +90,8 @@ def _add_feed(url: str) -> dict:
             "reason": "Invalid URL: must start with http:// or https://",
         }
 
-    init_database(db_path)
-
     # Check if feed already exists
-    existing = get_feed_by_url(db_path, url)
+    existing = get_feed_by_url(url)
     if existing:
         return {
             "added": False,
@@ -107,9 +101,9 @@ def _add_feed(url: str) -> dict:
         }
 
     # Add the feed
-    count = seed_feeds(db_path, [url])
+    count = seed_feeds([url])
     if count > 0:
-        feed = get_feed_by_url(db_path, url)
+        feed = get_feed_by_url(url)
         return {
             "added": True,
             "id": feed["id"] if feed else None,
@@ -136,44 +130,42 @@ def add_feed(
             raise typer.Exit(code=1)
 
 
-def _resolve_feed(identifier: str) -> tuple[dict | None, int, Path]:
+def _resolve_feed(identifier: str) -> tuple[dict | None, int]:
     """Look up a feed by URL or ID without deleting it.
 
     Args:
         identifier: The feed URL or ID to look up.
 
     Returns:
-        A tuple of (feed dict or None, article_count, db_path).
+        A tuple of (feed dict or None, article_count).
     """
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     feed = None
     try:
         feed_id = int(identifier)
-        feed = get_feed_by_id(db_path, feed_id)
+        feed = get_feed_by_id(feed_id)
     except ValueError:
-        feed = get_feed_by_url(db_path, identifier)
+        feed = get_feed_by_url(identifier)
 
     if not feed:
-        return None, 0, db_path
+        return None, 0
 
-    article_count = get_feed_article_count(db_path, feed["id"])
-    return feed, article_count, db_path
+    article_count = get_feed_article_count(feed["id"])
+    return feed, article_count
 
 
-def _do_delete_feed(feed: dict, article_count: int, db_path: Path) -> dict:
+def _do_delete_feed(feed: dict, article_count: int) -> dict:
     """Actually delete a feed and return result dict.
 
     Args:
         feed: The feed dict to delete.
         article_count: Number of articles that will be removed.
-        db_path: Path to the database.
 
     Returns:
         A dict with the deletion result.
     """
-    deleted = delete_feed(db_path, feed["id"])
+    deleted = delete_feed(feed["id"])
     if deleted:
         return {
             "deleted": True,
@@ -190,7 +182,7 @@ def delete_feed_cmd(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Delete a feed by URL or ID."""
-    feed, article_count, db_path = _resolve_feed(identifier)
+    feed, article_count = _resolve_feed(identifier)
 
     if not feed:
         err = {
@@ -213,7 +205,7 @@ def delete_feed_cmd(
             print("Deletion cancelled")
             return
 
-    data = _do_delete_feed(feed, article_count, db_path)
+    data = _do_delete_feed(feed, article_count)
     if output_json:
         emit_json(data)
     else:
@@ -235,24 +227,22 @@ def _feed_info(identifier: str) -> dict:
     Returns:
         A dict with feed information.
     """
-    db_path = require_db()
-
-    init_database(db_path)
+    require_db()
 
     # Try to interpret as ID first, then as URL
     feed = None
     try:
         feed_id = int(identifier)
-        feed = get_feed_by_id(db_path, feed_id)
+        feed = get_feed_by_id(feed_id)
     except ValueError:
         # Not an integer, treat as URL
-        feed = get_feed_by_url(db_path, identifier)
+        feed = get_feed_by_url(identifier)
 
     if not feed:
         return {"error": f"Feed not found: {identifier}"}
 
     # Get article count
-    article_count = get_feed_article_count(db_path, feed["id"])
+    article_count = get_feed_article_count(feed["id"])
 
     return {
         "id": feed["id"],
@@ -303,8 +293,7 @@ def update_feed_cmd(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Update feed metadata (title and/or description)."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     # Validate that at least one field is specified
     if not title and not description:
@@ -317,9 +306,9 @@ def update_feed_cmd(
     feed = None
     try:
         feed_id = int(identifier)
-        feed = get_feed_by_id(db_path, feed_id)
+        feed = get_feed_by_id(feed_id)
     except ValueError:
-        feed = get_feed_by_url(db_path, identifier)
+        feed = get_feed_by_url(identifier)
 
     if not feed:
         emit_error(
@@ -334,10 +323,10 @@ def update_feed_cmd(
     new_description = description if description else feed["description"]
 
     # Update the feed
-    update_feed_metadata(db_path, feed_id, new_title, new_description)
+    update_feed_metadata(feed_id, new_title, new_description)
 
     # Get updated feed
-    updated_feed = get_feed_by_id(db_path, feed_id)
+    updated_feed = get_feed_by_id(feed_id)
     if not updated_feed:
         emit_error(
             "Failed to retrieve updated feed",
@@ -368,13 +357,11 @@ def generate_rss(
     output: str = typer.Option(None, "--output", "-o", help="Output file path"),
 ) -> None:
     """Generate RSS feed XML for the website."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     from helpers.feed import generate_rss_feed
 
     articles, total = get_articles_paginated(
-        db_path,
         limit=1000,
         hours=hours,
         category=category,

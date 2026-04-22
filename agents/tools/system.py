@@ -72,9 +72,13 @@ def _get_news48_info() -> dict:
     Returns:
         A dict with news48 service status information.
     """
+    from sqlalchemy import text
+
+    from database.connection import SessionLocal
+
     info = {
-        "database_path": None,
-        "database_exists": False,
+        "database_url": None,
+        "database_connected": False,
         "database_size_mb": 0.0,
         "env_configured": False,
         "byparr_configured": False,
@@ -91,17 +95,19 @@ def _get_news48_info() -> dict:
     info["searxng_configured"] = bool(os.getenv("SEARXNG_URL"))
     info["api_base_configured"] = bool(os.getenv("API_BASE"))
 
-    # Check database
+    # Check database connectivity and size
     try:
         from config import Database as DbConfig
 
-        db_path = DbConfig.path
-        if db_path:
-            info["database_path"] = str(db_path)
-            info["database_exists"] = os.path.isfile(db_path)
-            if info["database_exists"]:
-                size = os.path.getsize(db_path)
-                info["database_size_mb"] = round(size / (1024 * 1024), 2)
+        info["database_url"] = DbConfig.url
+        with SessionLocal() as session:
+            session.execute(text("SELECT 1"))
+            info["database_connected"] = True
+
+            # MySQL-specific health: table status for size
+            rows = session.execute(text("SHOW TABLE STATUS")).fetchall()
+            total_size = sum((r.Data_length or 0) + (r.Index_length or 0) for r in rows)
+            info["database_size_mb"] = round(total_size / (1024 * 1024), 2)
     except Exception:
         pass
 

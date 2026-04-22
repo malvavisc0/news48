@@ -2,7 +2,7 @@
 
 import typer
 
-from database import init_database, list_fetches
+from database import list_fetches
 
 from ._common import _fmt_date, emit_json, require_db
 
@@ -15,10 +15,9 @@ def list_fetches_cmd(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """List recent fetch runs with details."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
-    fetches = list_fetches(db_path, limit=limit)
+    fetches = list_fetches(limit=limit)
 
     data = {
         "total": len(fetches),

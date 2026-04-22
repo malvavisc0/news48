@@ -1,9 +1,6 @@
 """Tests for strip_html_noise(), extract_og_image() ordering,
 and _strip_html_tags()."""
 
-import sqlite3
-from pathlib import Path
-
 import pytest
 
 from helpers.bypass import strip_html_noise
@@ -131,89 +128,73 @@ class TestStripHtmlTagsInUpdateArticle:
     """Verify update_article() strips HTML from summary, title, content."""
 
     @pytest.fixture()
-    def db_path(self, tmp_path: Path) -> Path:
-        """Create a minimal test database with an articles table."""
-        db_file = tmp_path / "test.db"
-        conn = sqlite3.connect(db_file)
-        conn.execute("""
-            CREATE TABLE articles (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                fetch_id INTEGER,
-                feed_id INTEGER,
-                url TEXT UNIQUE,
-                title TEXT,
-                summary TEXT,
-                content TEXT,
-                author TEXT,
-                published_at TEXT,
-                sentiment TEXT,
-                categories TEXT,
-                tags TEXT,
-                countries TEXT,
-                image_url TEXT,
-                language TEXT,
-                parsed_at TEXT,
-                created_at TEXT DEFAULT (datetime('now')),
-                source_name TEXT,
-                processing_claim_owner TEXT,
-                processing_claim_expires TEXT,
-                download_error TEXT,
-                fact_check_status TEXT,
-                fact_check_result TEXT,
-                fact_checked_at TEXT
-            )
-        """)
-        conn.execute(
-            "INSERT INTO articles "
-            "(fetch_id, feed_id, url, title, summary, content) "
-            "VALUES (1, 1, 'https://example.com/test', "
-            "'Test', 'Test summary', 'Test content')"
+    def article_id(self, db_session) -> int:
+        """Create a test article using the SQLAlchemy session fixture."""
+        from database.models import Article, Feed, Fetch
+
+        feed = Feed(
+            url="https://example.com/feed.xml",
+            created_at="2024-01-01T00:00:00+00:00",
         )
-        conn.commit()
-        conn.close()
-        return db_file
+        db_session.add(feed)
+        db_session.flush()
 
-    def test_strips_html_from_summary(self, db_path: Path) -> None:
+        fetch = Fetch(
+            started_at="2024-01-01T00:00:00+00:00",
+            status="running",
+        )
+        db_session.add(fetch)
+        db_session.flush()
+
+        article = Article(
+            fetch_id=fetch.id,
+            feed_id=feed.id,
+            url="https://example.com/test",
+            title="Test",
+            summary="Test summary",
+            content="Test content",
+            created_at="2024-01-01T00:00:00+00:00",
+        )
+        db_session.add(article)
+        db_session.flush()
+        return article.id
+
+    def test_strips_html_from_summary(self, article_id: int) -> None:
         from database.articles import update_article
 
-        update_article(db_path, 1, content="clean", summary="<b>Bold</b> summary")
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        row = conn.execute("SELECT summary FROM articles WHERE id = 1").fetchone()
-        conn.close()
-        assert row["summary"] == "Bold summary"
+        update_article(article_id, content="clean", summary="<b>Bold</b> summary")
+        from database.articles import get_article_by_id
 
-    def test_strips_html_from_title(self, db_path: Path) -> None:
+        article = get_article_by_id(article_id)
+        assert article["summary"] == "Bold summary"
+
+    def test_strips_html_from_title(self, article_id: int) -> None:
         from database.articles import update_article
 
-        update_article(db_path, 1, content="clean", title="<i>Italic</i> Title")
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        row = conn.execute("SELECT title FROM articles WHERE id = 1").fetchone()
-        conn.close()
-        assert row["title"] == "Italic Title"
+        update_article(article_id, content="clean", title="<i>Italic</i> Title")
+        from database.articles import get_article_by_id
 
-    def test_strips_html_from_content(self, db_path: Path) -> None:
+        article = get_article_by_id(article_id)
+        assert article["title"] == "Italic Title"
+
+    def test_strips_html_from_content(self, article_id: int) -> None:
         from database.articles import update_article
 
         update_article(
-            db_path,
-            1,
+            article_id,
             content="<p>Paragraph</p> with <a href='#'>link</a>",
         )
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        row = conn.execute("SELECT content FROM articles WHERE id = 1").fetchone()
-        conn.close()
-        assert row["content"] == "Paragraph with link"
+        from database.articles import get_article_by_id
 
-    def test_none_values_unchanged(self, db_path: Path) -> None:
+        article = get_article_by_id(article_id)
+        assert article["content"] == "Paragraph with link"
+
+    def test_none_values_unchanged(self, article_id: int) -> None:
         from database.articles import update_article
 
         # Should not raise when summary/title are None
-        update_article(db_path, 1, content="clean", summary=None, title=None)
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        row = conn.execute("SELECT content FROM articles WHERE id = 1").fetchone()
-        conn.close()
-        assert row["content"] == "clean"
+        update_article(article_id, content="clean", summary=None, title=None)
+        from database.articles import get_article_by_id
+
+        article = get_article_by_id(article_id)
+        assert article["content"] == "clean"

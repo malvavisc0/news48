@@ -1,4 +1,4 @@
-from pathlib import Path
+"""Tests for claims database operations using SQLAlchemy session fixture."""
 
 from database import (
     claim_articles_for_processing,
@@ -7,49 +7,43 @@ from database import (
     delete_claims_for_article,
     get_article_by_id,
     get_claims_for_article,
-    init_database,
     insert_claims,
-    seed_feeds,
     update_article_fact_check,
 )
+from database.models import Article, Feed, Fetch
 
 
-def _create_article(db_path: Path, url: str = "https://example.com/a") -> int:
-    seed_feeds(db_path, ["https://example.com/feed.xml"])
-    from database import get_connection
+def _create_article(db_session, url: str = "https://example.com/a") -> int:
+    """Create a test article using the session fixture."""
+    feed = Feed(
+        url="https://example.com/feed.xml",
+        created_at="2024-01-01T00:00:00+00:00",
+    )
+    db_session.add(feed)
+    db_session.flush()
 
-    with get_connection(db_path) as db:
-        feed_id = db.execute("SELECT id FROM feeds LIMIT 1").fetchone()[0]
-        fetch_id = db.execute(
-            "INSERT INTO fetches (started_at, status) VALUES (?, ?)",
-            ("2024-01-01T00:00:00+00:00", "running"),
-        ).lastrowid
-        article_id = db.execute(
-            """INSERT INTO articles (
-                   fetch_id, feed_id, url, title, content,
-                   parsed_at, created_at
-               ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (
-                fetch_id,
-                feed_id,
-                url,
-                "Example",
-                "content",
-                "2024-01-01T00:00:00+00:00",
-                "2024-01-01T00:00:00+00:00",
-            ),
-        ).lastrowid
-        db.commit()
-        return int(article_id)
+    fetch = Fetch(started_at="2024-01-01T00:00:00+00:00", status="running")
+    db_session.add(fetch)
+    db_session.flush()
+
+    article = Article(
+        fetch_id=fetch.id,
+        feed_id=feed.id,
+        url=url,
+        title="Example",
+        content="content",
+        parsed_at="2024-01-01T00:00:00+00:00",
+        created_at="2024-01-01T00:00:00+00:00",
+    )
+    db_session.add(article)
+    db_session.flush()
+    return article.id
 
 
-def test_processing_claim_prevents_second_owner(tmp_path):
-    db_path = tmp_path / "claims.db"
-    init_database(db_path)
-    article_id = _create_article(db_path)
+def test_processing_claim_prevents_second_owner(db_session):
+    article_id = _create_article(db_session)
 
     claimed = claim_articles_for_processing(
-        db_path,
         [article_id],
         "fact_check",
         "owner-a",
@@ -57,7 +51,6 @@ def test_processing_claim_prevents_second_owner(tmp_path):
     assert claimed == [article_id]
 
     claimed_again = claim_articles_for_processing(
-        db_path,
         [article_id],
         "fact_check",
         "owner-b",
@@ -65,16 +58,13 @@ def test_processing_claim_prevents_second_owner(tmp_path):
     assert claimed_again == []
 
 
-def test_processing_claim_can_be_released(tmp_path):
-    db_path = tmp_path / "claims.db"
-    init_database(db_path)
-    article_id = _create_article(db_path)
+def test_processing_claim_can_be_released(db_session):
+    article_id = _create_article(db_session)
 
-    claim_articles_for_processing(db_path, [article_id], "parse", "owner-a")
-    clear_article_processing_claim(db_path, article_id, owner="owner-a")
+    claim_articles_for_processing([article_id], "parse", "owner-a")
+    clear_article_processing_claim(article_id, owner="owner-a")
 
     claimed = claim_articles_for_processing(
-        db_path,
         [article_id],
         "parse",
         "owner-b",
@@ -82,13 +72,10 @@ def test_processing_claim_can_be_released(tmp_path):
     assert claimed == [article_id]
 
 
-def test_update_article_fact_check_requires_force_to_overwrite(tmp_path):
-    db_path = tmp_path / "claims.db"
-    init_database(db_path)
-    article_id = _create_article(db_path)
+def test_update_article_fact_check_requires_force_to_overwrite(db_session):
+    article_id = _create_article(db_session)
 
     updated = update_article_fact_check(
-        db_path,
         article_id,
         status="verified",
         result="ok",
@@ -96,7 +83,6 @@ def test_update_article_fact_check_requires_force_to_overwrite(tmp_path):
     assert updated is True
 
     updated_without_force = update_article_fact_check(
-        db_path,
         article_id,
         status="disputed",
         result="changed",
@@ -104,7 +90,6 @@ def test_update_article_fact_check_requires_force_to_overwrite(tmp_path):
     assert updated_without_force is False
 
     updated_with_force = update_article_fact_check(
-        db_path,
         article_id,
         status="disputed",
         result="changed",
@@ -112,15 +97,13 @@ def test_update_article_fact_check_requires_force_to_overwrite(tmp_path):
     )
     assert updated_with_force is True
 
-    article = get_article_by_id(db_path, article_id)
+    article = get_article_by_id(article_id)
     assert article["fact_check_status"] == "disputed"
     assert article["fact_check_result"] == "changed"
 
 
-def test_insert_claims_creates_records(tmp_path):
-    db_path = tmp_path / "claims.db"
-    init_database(db_path)
-    article_id = _create_article(db_path)
+def test_insert_claims_creates_records(db_session):
+    article_id = _create_article(db_session)
 
     claims = [
         {
@@ -137,10 +120,10 @@ def test_insert_claims_creates_records(tmp_path):
         },
     ]
 
-    count = insert_claims(db_path, article_id, claims)
+    count = insert_claims(article_id, claims)
     assert count == 2
 
-    retrieved = get_claims_for_article(db_path, article_id)
+    retrieved = get_claims_for_article(article_id)
     assert len(retrieved) == 2
     assert retrieved[0]["claim_text"] == "The sky is blue"
     assert retrieved[0]["verdict"] == "verified"
@@ -148,10 +131,8 @@ def test_insert_claims_creates_records(tmp_path):
     assert retrieved[1]["verdict"] == "disputed"
 
 
-def test_insert_claims_replaces_on_recheck(tmp_path):
-    db_path = tmp_path / "claims.db"
-    init_database(db_path)
-    article_id = _create_article(db_path)
+def test_insert_claims_replaces_on_recheck(db_session):
+    article_id = _create_article(db_session)
 
     first_claims = [
         {
@@ -167,8 +148,8 @@ def test_insert_claims_replaces_on_recheck(tmp_path):
             "sources": [],
         },
     ]
-    insert_claims(db_path, article_id, first_claims)
-    assert len(get_claims_for_article(db_path, article_id)) == 2
+    insert_claims(article_id, first_claims)
+    assert len(get_claims_for_article(article_id)) == 2
 
     second_claims = [
         {
@@ -178,17 +159,15 @@ def test_insert_claims_replaces_on_recheck(tmp_path):
             "sources": [],
         },
     ]
-    insert_claims(db_path, article_id, second_claims)
+    insert_claims(article_id, second_claims)
 
-    retrieved = get_claims_for_article(db_path, article_id)
+    retrieved = get_claims_for_article(article_id)
     assert len(retrieved) == 1
     assert retrieved[0]["claim_text"] == "New claim"
 
 
-def test_get_claims_for_article_returns_ordered(tmp_path):
-    db_path = tmp_path / "claims.db"
-    init_database(db_path)
-    article_id = _create_article(db_path)
+def test_get_claims_for_article_returns_ordered(db_session):
+    article_id = _create_article(db_session)
 
     claims = [
         {
@@ -199,18 +178,16 @@ def test_get_claims_for_article_returns_ordered(tmp_path):
         }
         for i in range(5)
     ]
-    insert_claims(db_path, article_id, claims)
+    insert_claims(article_id, claims)
 
-    retrieved = get_claims_for_article(db_path, article_id)
+    retrieved = get_claims_for_article(article_id)
     assert len(retrieved) == 5
     for i, c in enumerate(retrieved):
         assert c["claim_text"] == f"Claim {i}"
 
 
-def test_delete_claims_for_article_removes_all(tmp_path):
-    db_path = tmp_path / "claims.db"
-    init_database(db_path)
-    article_id = _create_article(db_path)
+def test_delete_claims_for_article_removes_all(db_session):
+    article_id = _create_article(db_session)
 
     claims = [
         {
@@ -232,12 +209,12 @@ def test_delete_claims_for_article_removes_all(tmp_path):
             "sources": [],
         },
     ]
-    insert_claims(db_path, article_id, claims)
+    insert_claims(article_id, claims)
 
-    deleted = delete_claims_for_article(db_path, article_id)
+    deleted = delete_claims_for_article(article_id)
     assert deleted == 3
 
-    retrieved = get_claims_for_article(db_path, article_id)
+    retrieved = get_claims_for_article(article_id)
     assert len(retrieved) == 0
 
 

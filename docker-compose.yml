@@ -4,12 +4,12 @@ services:
       context: .
       dockerfile: Dockerfile
       target: web
-    entrypoint: [ "/app/docker-entrypoint.sh" ]
+    entrypoint: [ "/app/scripts/docker-entrypoint.sh" ]
     command: [ "uvicorn", "web.app:app", "--host", "0.0.0.0", "--port", "8000" ]
     volumes:
       - news48-data:/data
     environment:
-      - DATABASE_PATH=/data/news48.db
+      - DATABASE_URL=mysql+mysqlconnector://news48:news48@mysql:3306/news48
       - DATA_DIR=/data
       - WEB_HOST=${WEB_HOST:-0.0.0.0}
       - WEB_PORT=${WEB_PORT:-8000}
@@ -17,34 +17,31 @@ services:
       - WEB_LOG_LEVEL=${WEB_LOG_LEVEL:-info}
       - WEB_RELOAD=${WEB_RELOAD:-0}
       - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1}
+    depends_on:
+      mysql:
+        condition: service_healthy
     networks:
       - news48-net
 
-  orchestrator:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: orchestrator
-    entrypoint: [ "/app/docker-entrypoint.sh" ]
-    command: [ "news48", "agents", "start" ]
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
     volumes:
-      - news48-data:/data
+      - mysql-data:/var/lib/mysql
     environment:
-      - DATABASE_PATH=/data/news48.db
-      - DATA_DIR=/data
-      - API_BASE=${API_BASE}
-      - API_KEY=${API_KEY}
-      - MODEL=${MODEL}
-      - CONTEXT_WINDOW=${CONTEXT_WINDOW:-49152}
-      - BYPARR_API_URL=${BYPARR_API_URL:-http://byparr:8191/v1}
-      - SEARXNG_URL=${SEARXNG_URL:-http://searxng:8080}
-      - ORCHESTRATOR_CMD_PREFIX=news48
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASS=${SMTP_PASS}
-      - SMTP_FROM=${SMTP_FROM}
-      - MONITOR_EMAIL_TO=${MONITOR_EMAIL_TO}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-news48}
+      - MYSQL_USER=${MYSQL_USER:-news48}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-news48}
+    command: >
+      --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --innodb-ft-min-token-size=2
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     networks:
       - news48-net
 
@@ -53,7 +50,7 @@ services:
     entrypoint: [ "bash", "/app/llamacpp-entrypoint.sh" ]
     volumes:
       - llamacpp-models:/models
-      - ./llamacpp/entrypoint.sh:/app/llamacpp-entrypoint.sh:ro
+      - ./scripts/llamacpp-entrypoint.sh:/app/llamacpp-entrypoint.sh:ro
     environment:
       - LLAMACPP_MODEL_REPO=${LLAMACPP_MODEL_REPO:-mradermacher/claude-oss-i1-GGUF}
       - LLAMACPP_MODEL_FILE=${LLAMACPP_MODEL_FILE:-claude-oss.i1-Q6_K.gguf}
@@ -108,10 +105,89 @@ services:
     networks:
       - news48-net
 
+  # Redis broker for Dramatiq task queues.
+  # redis-stack includes RedisInsight UI at :8001 — useful during development.
+  # For production, consider switching to redis:7-alpine for lower overhead.
+  redis:
+    image: redis/redis-stack:latest
+    ports:
+      - "6379:6379" # Redis API
+      - "8001:8001" # RedisInsight dashboard
+    volumes:
+      - redis-data:/data
+    environment:
+      - REDIS_ARGS=--save 60 1000 --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - news48-net
+
+  # Dramatiq worker — consumes task queues and executes agents.
+  # Uses the same worker image but overrides the command.
+  dramatiq-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    entrypoint: [ "/app/scripts/docker-entrypoint.sh" ]
+    command: [ "dramatiq", "agents.actors", "--processes", "1", "--threads", "8" ]
+    volumes:
+      - news48-data:/data
+    environment:
+      - DATABASE_URL=mysql+mysqlconnector://news48:news48@mysql:3306/news48
+      - DATA_DIR=/data
+      - REDIS_URL=redis://redis:6379/0
+      - API_BASE=${API_BASE}
+      - API_KEY=${API_KEY}
+      - MODEL=${MODEL}
+      - CONTEXT_WINDOW=${CONTEXT_WINDOW:-49152}
+      - BYPARR_API_URL=${BYPARR_API_URL:-http://byparr:8191/v1}
+      - SEARXNG_URL=${SEARXNG_URL:-http://searxng:8080}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
+      - MONITOR_EMAIL_TO=${MONITOR_EMAIL_TO}
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    networks:
+      - news48-net
+
+  # Periodiq scheduler — enqueues periodic tasks to Redis queues.
+  periodiq-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    entrypoint: [ "/app/scripts/docker-entrypoint.sh" ]
+    command: [ "periodiq", "agents.actors" ]
+    volumes:
+      - news48-data:/data
+    environment:
+      - DATABASE_URL=mysql+mysqlconnector://news48:news48@mysql:3306/news48
+      - DATA_DIR=/data
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    networks:
+      - news48-net
+
 volumes:
   news48-data:
+  mysql-data:
   llamacpp-models:
   dozzle-data:
+  redis-data:
 
 
 networks:

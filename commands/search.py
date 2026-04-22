@@ -2,7 +2,7 @@
 
 import typer
 
-from database import init_database, search_articles
+from database import search_articles
 
 from ._common import emit_error, emit_json, require_db
 
@@ -20,12 +20,10 @@ def search_articles_cmd(
     output_json: bool = typer.Option(False, "--json"),
 ) -> None:
     """Search articles using full-text search."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     try:
         articles, total = search_articles(
-            db_path,
             query=query,
             hours=hours,
             sentiment=sentiment,

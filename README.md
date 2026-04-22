@@ -45,23 +45,25 @@ news48 collects feed entries, downloads article pages, parses structured content
 
 ## 🏗️ Architecture
 
-Four scheduled agents run under a single orchestrator daemon:
+Four scheduled agents run through Periodiq-scheduled Dramatiq actors backed by Redis:
 
 ```
                     ┌─────────────┐
-                    │ Orchestrator │
-                    │ agents start │
+                    │  Periodiq   │
+                    │ cron enqueue│
                     └──────┬──────┘
            ┌───────┬───────┼───────┐
-           ▼       ▼       ▼       ▼
-       ┌────────┐┌────────┐┌─────┐┌────────────┐
-       │Sentinel││Executor││Parser││Fact-checker│
-       │observes││  runs  ││parses││  verifies  │
-       └───┬────┘└───┬────┘└──┬──┘└─────┬──────┘
-           └───────┬───────┘          │
-                   ▼                  ▼
-          news48 CLI & tools    .lessons.md
-                               (shared memory)
+            ▼       ▼       ▼       ▼
+        ┌────────┐┌────────┐┌─────┐┌────────────┐
+        │Sentinel││Executor││Parser││Fact-checker│
+        │observes││  runs  ││parses││  verifies  │
+        └───┬────┘└───┬────┘└──┬──┘└─────┬──────┘
+            └───────┬───────┘          │
+                    ▼                  ▼
+                Redis queues      .lessons.md
+                    │            (shared memory)
+                    ▼
+           Dramatiq workers + news48 CLI & tools
 ```
 
 | Agent | Role |
@@ -71,7 +73,7 @@ Four scheduled agents run under a single orchestrator daemon:
 | **Parser** | Claims downloaded articles and parses them autonomously |
 | **Fact-checker** | Verifies claims by searching evidence and recording verdicts |
 
-> **Source:** orchestration loop in [`agents/orchestrator.py`](agents/orchestrator.py), schedules in [`agents/schedules.py`](agents/schedules.py), CLI entry points in [`commands/agents.py`](commands/agents.py).
+> **Source:** Dramatiq actors in [`agents/actors.py`](agents/actors.py), Periodiq cron schedules in [`agents/actors.py`](agents/actors.py), CLI entry points in [`commands/agents.py`](commands/agents.py).
 
 ## 🧠 Self-Learning Agents
 
@@ -126,7 +128,8 @@ Edit `.env` and set the required variables:
 
 | Variable | Required | Description |
 |----------|:--------:|-------------|
-| `DATABASE_PATH` | ✅ | Path to SQLite database |
+| `DATABASE_URL` | ✅ | SQLAlchemy database URL for MySQL |
+| `REDIS_URL` | | Redis broker URL for Dramatiq + Periodiq |
 | `BYPARR_API_URL` | ✅ | Byparr service URL |
 | `API_BASE` | ✅ | LLM API base URL |
 | `API_KEY` | ✅ | LLM API key |
@@ -185,15 +188,16 @@ uv run news48 agents run --agent fact_checker
 **Continuous autonomous mode:**
 
 ```bash
-uv run news48 agents start          # start the orchestrator daemon
-uv run news48 agents status --json  # check running agents
-uv run news48 agents dashboard      # live dashboard
-uv run news48 agents stop           # graceful shutdown
+dramatiq agents.actors --processes 1 --threads 8  # run workers
+periodiq agents.actors                               # enqueue cron tasks
+uv run news48 agents status --json                  # inspect queues and schedules
 ```
+
+`agents start`, `agents stop`, and `agents dashboard` are no longer part of the operational model. Docker manages worker lifecycle, while Redis stores queue state.
 
 ## 🐳 Docker
 
-news48 can run entirely in Docker with separate containers for the web interface, orchestrator, SearXNG, and Byparr.
+news48 can run entirely in Docker with separate containers for the web interface, MySQL, Redis, Dramatiq workers, Periodiq scheduler, SearXNG, and Byparr.
 
 ### Prerequisites
 
@@ -220,7 +224,7 @@ https://feeds.bbci.co.uk/news/rss.xml
 https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
 ```
 
-When the orchestrator starts (`news48 agents start`), the sentinel agent automatically detects an empty database and creates a seed plan for the executor. The executor then runs `news48 seed seed.txt` — so seeding happens automatically as long as `seed.txt` is accessible inside the container.
+When the worker stack starts, the sentinel agent automatically detects an empty database and creates a seed plan for the executor. The executor then runs `news48 seed seed.txt` — so seeding happens automatically as long as `seed.txt` is accessible inside the worker container.
 
 **Development** — the project root is mounted at `/app`, so `seed.txt` is automatically available at `/app/seed.txt`.
 
@@ -232,24 +236,24 @@ When the orchestrator starts (`news48 agents start`), the sentinel agent automat
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm \
   -v ./seed.txt:/app/seed.txt:ro \
-  orchestrator news48 seed /app/seed.txt
+  dramatiq-worker news48 seed /app/seed.txt
 ```
 
 You can also seed manually at any time:
 
 ```bash
 # Development
-docker compose exec orchestrator news48 seed /app/seed.txt
+docker compose exec dramatiq-worker news48 seed /app/seed.txt
 
 # Production
 docker compose -f docker-compose.yml -f docker-compose.prod.yml exec \
-  orchestrator news48 seed /app/seed.txt
+  dramatiq-worker news48 seed /app/seed.txt
 ```
 
 Verify feeds were added:
 
 ```bash
-docker compose exec orchestrator news48 feeds list
+docker compose exec dramatiq-worker news48 feeds list
 ```
 
 ### Docker Development
@@ -260,17 +264,21 @@ docker compose up
 
 # Web UI available at http://localhost:8765
 # Code changes auto-reload via volume mount
+# RedisInsight available at http://localhost:8001
+# Dozzle logs UI available at http://localhost:9999
 
 # Run CLI commands
-docker compose exec orchestrator news48 stats
-docker compose exec orchestrator news48 feeds list
+docker compose exec dramatiq-worker news48 stats
+docker compose exec dramatiq-worker news48 feeds list
 
 # Run one-off commands
-docker compose run --rm orchestrator news48 seed /app/seed.txt
+docker compose run --rm dramatiq-worker news48 seed /app/seed.txt
 
 # View logs
-docker compose logs -f orchestrator
+docker compose logs -f dramatiq-worker
+docker compose logs -f periodiq-scheduler
 docker compose logs -f web
+docker compose logs -f redis
 
 # Stop everything
 docker compose down
@@ -291,8 +299,8 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 docker compose ps
 docker compose logs -f web
 
-# Backup database
-docker compose exec web sqlite3 /app/data/news48.db ".backup /app/data/backup.db"
+# Backup MySQL database
+docker compose exec mysql mysqldump -unews48 -pnews48 news48 > backup.sql
 
 # Update to new version
 docker compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache
@@ -302,13 +310,27 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.yml -f docker-compose.prod.yml down
 ```
 
+### Worker Observability
+
+There is **no dedicated Dramatiq admin UI** in the current stack. Use the included Docker and Redis tooling instead:
+
+- **RedisInsight** at `http://localhost:8001` — inspect Redis keys, queues, and broker state
+- **Dozzle** at `http://localhost:9999` in development — inspect container logs for [`dramatiq-worker`](docker-compose.yml) and [`periodiq-scheduler`](docker-compose.yml)
+- [`uv run news48 agents status --json`](README.md:193) — inspect queue and schedule state from the CLI
+
+This means Dramatiq execution is currently observed through Redis, logs, and the CLI rather than through a standalone Dramatiq dashboard.
+
 ### Architecture
 
 | Service | Image | Port | Role |
 |---------|-------|------|------|
 | `web` | news48-web (built) | 8000 | FastAPI web interface |
-| `orchestrator` | news48-orchestrator (built) | none | Agent scheduler + LLM stack |
+| `mysql` | mysql:8.0 | 3306 | Primary relational database |
+| `redis` | redis/redis-stack | 6379 / 8001 | Dramatiq broker + RedisInsight |
+| `dramatiq-worker` | news48-worker (built) | none | Executes agents and pipeline actors |
+| `periodiq-scheduler` | news48-worker (built) | none | Enqueues scheduled agent and pipeline work |
 | `searxng` | searxng/searxng:latest | 8080 (internal) | Meta-search engine |
+| `dozzle` | amir20/dozzle:latest | 8080 | Container log viewer |
 | `byparr` | ghcr.io/thephaseless/byparr:main | 8191 (internal) | Anti-bot bypass |
 
 ## 🧬 Development

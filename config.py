@@ -33,14 +33,14 @@ PLANS_DIR = DataDir.root / "plans"
 MONITOR_DIR = DataDir.root / "monitor"
 METRICS_DIR = DataDir.root / "metrics"
 CACHE_DIR = DataDir.root / "cache"
-STATE_FILE = DataDir.root / "orchestrator.json"
-HEARTBEAT_FILE = DataDir.root / "orchestrator.heartbeat"
-PID_FILE = DataDir.root / "orchestrator.pid"
 LESSONS_FILE = DataDir.root / "lessons.json"
 
 
 class Database:
-    path: Path = Path(getenv("DATABASE_PATH", str(DataDir.root / "news48.db")))
+    url: str = getenv(
+        "DATABASE_URL",
+        "mysql+mysqlconnector://news48:news48@localhost:3306/news48",
+    )
 
 
 class Services:
@@ -63,3 +63,9 @@ class Web:
             return int(getenv("WEB_PORT", "8000"))
         except (ValueError, TypeError):
             return 8000
+
+
+class Redis:
+    """Redis configuration for Dramatiq."""
+
+    url: str = getenv("REDIS_URL", "redis://localhost:6379/0")

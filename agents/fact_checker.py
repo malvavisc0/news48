@@ -8,22 +8,15 @@ from llama_index.llms.openai_like import OpenAILike
 
 from agents._run import run_agent
 from agents.skills import compose_agent_instructions
-from database import get_article_by_id, get_articles_paginated, init_database
+from database import get_article_by_id, get_articles_paginated
 
 logger = logging.getLogger(__name__)
 
 
 async def run_cycle(limit: int = 10) -> dict:
     """Run one fact-check cycle."""
-    from commands._common import require_db
-
-    db_path = require_db()
-    init_database(db_path)
-
     # Get fact-unchecked articles
-    articles, total = get_articles_paginated(
-        db_path, limit=limit, status="fact-unchecked"
-    )
+    articles, total = get_articles_paginated(limit=limit, status="fact-unchecked")
     if not articles:
         return {"checked": 0, "results": []}
 
@@ -37,7 +30,7 @@ async def run_cycle(limit: int = 10) -> dict:
             await run_agent(lambda: get_agent({}), task)
 
             # Check if fact_check_status was updated
-            updated = get_article_by_id(db_path, article["id"])
+            updated = get_article_by_id(article["id"])
             if updated and updated.get("fact_check_status"):
                 results.append({"id": article["id"], "success": True})
             else:

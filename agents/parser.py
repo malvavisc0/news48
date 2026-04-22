@@ -16,7 +16,6 @@ from database import (
     clear_article_processing_claim,
     get_article_by_id,
     get_unparsed_articles,
-    init_database,
     mark_article_parse_failed,
 )
 
@@ -46,15 +45,11 @@ def _build_parse_task(article: dict, tmp_path: str) -> str:
 
 async def _parse_claimed_article(article: dict, owner: str) -> dict:
     """Run the parser agent for one article already claimed in the database."""
-    from commands._common import require_db
-
-    db_path = require_db()
-
     # Guard: skip articles with no usable content
     raw_content = article.get("content") or ""
     if not raw_content.strip():
         error = "Article has no content to parse"
-        mark_article_parse_failed(db_path, int(article["id"]), error)
+        mark_article_parse_failed(int(article["id"]), error)
         return {
             "id": int(article["id"]),
             "title": article.get("title"),
@@ -69,7 +64,7 @@ async def _parse_claimed_article(article: dict, owner: str) -> dict:
         task = _build_parse_task(article, tmp_path)
         agent_response = await run_agent(lambda: get_agent({}), task)
 
-        updated = get_article_by_id(db_path, int(article["id"]))
+        updated = get_article_by_id(int(article["id"]))
         if updated and updated.get("parsed_at"):
             return {
                 "id": int(article["id"]),
@@ -91,7 +86,7 @@ async def _parse_claimed_article(article: dict, owner: str) -> dict:
             }
 
         error = (agent_response or "").strip() or "Agent did not update article"
-        mark_article_parse_failed(db_path, int(article["id"]), error)
+        mark_article_parse_failed(int(article["id"]), error)
         return {
             "id": int(article["id"]),
             "title": article.get("title"),
@@ -100,7 +95,7 @@ async def _parse_claimed_article(article: dict, owner: str) -> dict:
             "error": error,
         }
     except Exception as exc:
-        mark_article_parse_failed(db_path, int(article["id"]), str(exc))
+        mark_article_parse_failed(int(article["id"]), str(exc))
         return {
             "id": int(article["id"]),
             "title": article.get("title"),
@@ -109,7 +104,7 @@ async def _parse_claimed_article(article: dict, owner: str) -> dict:
             "error": str(exc),
         }
     finally:
-        clear_article_processing_claim(db_path, int(article["id"]), owner=owner)
+        clear_article_processing_claim(int(article["id"]), owner=owner)
         if tmp_path:
             try:
                 os.unlink(tmp_path)
@@ -119,13 +114,8 @@ async def _parse_claimed_article(article: dict, owner: str) -> dict:
 
 async def run_cycle(limit: int = 1, feed_domain: str | None = None) -> dict:
     """Run one autonomous parser cycle by claiming parseable articles."""
-    from commands._common import require_db
-
-    db_path = require_db()
-    init_database(db_path)
-
     candidates = get_unparsed_articles(
-        db_path, limit=max(limit * 3, limit), feed_domain=feed_domain
+        limit=max(limit * 3, limit), feed_domain=feed_domain
     )
     if not candidates:
         return {"parsed": 0, "failed": 0, "claimed": 0, "results": []}
@@ -135,7 +125,7 @@ async def run_cycle(limit: int = 1, feed_domain: str | None = None) -> dict:
     # Claim up to `limit` articles — slice BEFORE claiming to avoid
     # leaking claims for articles we won't process
     candidate_ids = [int(a["id"]) for a in candidates][:limit]
-    claimed_ids = claim_articles_for_processing(db_path, candidate_ids, "parse", owner)
+    claimed_ids = claim_articles_for_processing(candidate_ids, "parse", owner)
     claimed_articles = [a for a in candidates if int(a["id"]) in claimed_ids]
 
     if not claimed_articles:

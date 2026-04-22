@@ -18,7 +18,7 @@ files before an agent starts running.
     │   ├── cli-reference-evidence.md  # Shared evidence cmds
     │   ├── cli-reference-executor.md
     │   ├── cli-reference-parser.md
-    │   └── handle-orchestrator-restart.md
+    │   └── handle-worker-restart.md
     ├── sentinel/
     │   ├── business-logic.md     # Mermaid diagram + skill reference
     │   └── feed-curation.md
@@ -91,9 +91,9 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
         agents=("executor", "fact_checker", "sentinel"),
         always=True,
     ),
-    "handle-orchestrator-restart": SkillDef(
-        id="handle-orchestrator-restart",
-        file="shared/handle-orchestrator-restart.md",
+    "handle-worker-restart": SkillDef(
+        id="handle-worker-restart",
+        file="shared/handle-worker-restart.md",
         agents=("executor", "parser", "fact_checker", "sentinel"),
         always=True,
     ),

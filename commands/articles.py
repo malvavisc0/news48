@@ -15,7 +15,6 @@ from database import (
     get_article_by_url,
     get_articles_paginated,
     get_claims_for_article,
-    init_database,
     insert_claims,
     mark_article_parse_failed,
     reset_article_download,
@@ -97,8 +96,7 @@ def list_articles(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """List articles with optional filters."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     status_filter = None
     if status:
@@ -106,7 +104,6 @@ def list_articles(
 
     try:
         articles, total = get_articles_paginated(
-            db_path,
             limit=limit,
             offset=offset,
             feed_domain=feed,
@@ -165,17 +162,16 @@ def article_info(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Show article metadata (no content -- use temp files for content)."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     # Try to interpret as ID first, then as URL
     article = None
     try:
         article_id = int(identifier)
-        article = get_article_by_id(db_path, article_id)
+        article = get_article_by_id(article_id)
     except ValueError:
         # Not an integer, treat as URL
-        article = get_article_by_url(db_path, identifier)
+        article = get_article_by_url(identifier)
 
     if not article:
         emit_error(
@@ -198,7 +194,7 @@ def article_info(
     # Get feed URL
     from database import get_feed_by_id
 
-    feed = get_feed_by_id(db_path, article["feed_id"])
+    feed = get_feed_by_id(article["feed_id"])
     feed_url = feed["url"] if feed else None
 
     data = {
@@ -274,16 +270,15 @@ def delete_article_cmd(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Delete an article by ID or URL."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     # Try to interpret as ID first, then as URL
     article = None
     try:
         article_id = int(identifier)
-        article = get_article_by_id(db_path, article_id)
+        article = get_article_by_id(article_id)
     except ValueError:
-        article = get_article_by_url(db_path, identifier)
+        article = get_article_by_url(identifier)
 
     if not article:
         err = {"deleted": False, "reason": f"Article not found: {identifier}"}
@@ -303,7 +298,7 @@ def delete_article_cmd(
             print("Deletion cancelled")
             return
 
-    deleted = delete_article(db_path, article_id)
+    deleted = delete_article(article_id)
     data = {
         "deleted": deleted,
         "id": article_id,
@@ -336,8 +331,7 @@ def reset_article_cmd(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Reset article failure flags for retry."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     # Validate that at least one flag is specified
     if not download and not parse and not all_flags:
@@ -350,9 +344,9 @@ def reset_article_cmd(
     article = None
     try:
         article_id = int(identifier)
-        article = get_article_by_id(db_path, article_id)
+        article = get_article_by_id(article_id)
     except ValueError:
-        article = get_article_by_url(db_path, identifier)
+        article = get_article_by_url(identifier)
 
     if not article:
         emit_error(
@@ -366,9 +360,9 @@ def reset_article_cmd(
 
     # Perform resets
     if reset_download:
-        reset_article_download(db_path, article_id)
+        reset_article_download(article_id)
     if reset_parse:
-        reset_article_parse(db_path, article_id)
+        reset_article_parse(article_id)
 
     data = {
         "reset": True,
@@ -399,16 +393,15 @@ def article_content(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Show article content."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     # Try to interpret as ID first, then as URL
     article = None
     try:
         article_id = int(identifier)
-        article = get_article_by_id(db_path, article_id)
+        article = get_article_by_id(article_id)
     except ValueError:
-        article = get_article_by_url(db_path, identifier)
+        article = get_article_by_url(identifier)
 
     if not article:
         emit_error(
@@ -471,8 +464,7 @@ def check_article(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Set the fact-check status and result for an article."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     # Parse claims if provided
     claims = None
@@ -504,9 +496,9 @@ def check_article(
     article = None
     try:
         article_id = int(identifier)
-        article = get_article_by_id(db_path, article_id)
+        article = get_article_by_id(article_id)
     except ValueError:
-        article = get_article_by_url(db_path, identifier)
+        article = get_article_by_url(identifier)
 
     if not article:
         emit_error(
@@ -531,7 +523,6 @@ def check_article(
 
     claim_owner = f"fact_check:{os.getpid()}"
     claimed = claim_articles_for_processing(
-        db_path,
         [article["id"]],
         "fact_check",
         claim_owner,
@@ -557,7 +548,7 @@ def check_article(
             }
             normalized_claims.append(normalized)
 
-        insert_claims(db_path, article["id"], normalized_claims)
+        insert_claims(article["id"], normalized_claims)
         final_status = (
             status.lower() if status else compute_overall_verdict(normalized_claims)
         )
@@ -566,7 +557,6 @@ def check_article(
 
     try:
         updated = update_article_fact_check(
-            db_path,
             article["id"],
             status=final_status,
             result=result,
@@ -574,7 +564,6 @@ def check_article(
         )
     finally:
         clear_article_processing_claim(
-            db_path,
             article["id"],
             owner=claim_owner,
         )
@@ -617,15 +606,14 @@ def feature_article(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Mark an article as featured."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     article = None
     try:
         article_id = int(identifier)
-        article = get_article_by_id(db_path, article_id)
+        article = get_article_by_id(article_id)
     except ValueError:
-        article = get_article_by_url(db_path, identifier)
+        article = get_article_by_url(identifier)
 
     if not article:
         emit_error(
@@ -634,7 +622,7 @@ def feature_article(
         )
 
     featured = not remove
-    set_article_featured(db_path, article["id"], featured=featured)
+    set_article_featured(article["id"], featured=featured)
 
     data = {
         "id": article["id"],
@@ -657,15 +645,14 @@ def breaking_article(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Mark an article as breaking news."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     article = None
     try:
         article_id = int(identifier)
-        article = get_article_by_id(db_path, article_id)
+        article = get_article_by_id(article_id)
     except ValueError:
-        article = get_article_by_url(db_path, identifier)
+        article = get_article_by_url(identifier)
 
     if not article:
         emit_error(
@@ -674,7 +661,7 @@ def breaking_article(
         )
 
     breaking = not remove
-    set_article_breaking(db_path, article["id"], breaking=breaking)
+    set_article_breaking(article["id"], breaking=breaking)
 
     data = {
         "id": article["id"],
@@ -696,16 +683,15 @@ def article_claims(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Show per-claim fact-check results for an article."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     # Resolve article
     article = None
     try:
         article_id = int(identifier)
-        article = get_article_by_id(db_path, article_id)
+        article = get_article_by_id(article_id)
     except ValueError:
-        article = get_article_by_url(db_path, identifier)
+        article = get_article_by_url(identifier)
 
     if not article:
         emit_error(
@@ -713,7 +699,7 @@ def article_claims(
             as_json=output_json,
         )
 
-    claims = get_claims_for_article(db_path, article["id"])
+    claims = get_claims_for_article(article["id"])
 
     # Count verdicts
     verdict_counts = {}
@@ -778,10 +764,9 @@ def update_article_cmd(
     Content MUST be provided via --content-file (no inline content).
     Sets parsed_at automatically when content-file is provided.
     """
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
-    article = get_article_by_id(db_path, article_id)
+    article = get_article_by_id(article_id)
     if not article:
         emit_error(f"Article not found: {article_id}", as_json=output_json)
 
@@ -806,7 +791,6 @@ def update_article_cmd(
         normalized_published_at = normalize_published_date(published_at)
 
     update_article(
-        db_path=db_path,
         article_id=article_id,
         content=actual_content or article.get("content", ""),
         title=title,
@@ -841,14 +825,13 @@ def fail_article_cmd(
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Mark an article as parse-failed with an error message."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
-    article = get_article_by_id(db_path, article_id)
+    article = get_article_by_id(article_id)
     if not article:
         emit_error(f"Article not found: {article_id}", as_json=output_json)
 
-    mark_article_parse_failed(db_path, article_id, error)
+    mark_article_parse_failed(article_id, error)
 
     data = {"failed": True, "id": article_id, "error": error}
 

@@ -4,7 +4,7 @@ import asyncio
 
 import typer
 
-from database import get_all_feeds, init_database
+from database import get_all_feeds
 from helpers import get_fetch_summary
 
 from ._common import DEFAULT_DELAY, emit_error, emit_json, require_db, status_msg
@@ -20,10 +20,9 @@ async def _fetch(delay: float, feed_domain: str | None = None) -> dict:
     Returns:
         A dict with fetch results.
     """
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
-    feeds = get_all_feeds(db_path, feed_domain=feed_domain)
+    feeds = get_all_feeds(feed_domain=feed_domain)
     if not feeds:
         return {
             "feed_filter": feed_domain,
@@ -41,7 +40,7 @@ async def _fetch(delay: float, feed_domain: str | None = None) -> dict:
     summary = await get_fetch_summary(
         urls,
         delay,
-        db_path,
+        track_db=True,
         on_feed_done=lambda _: None,
     )
 

@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import os
-from pathlib import Path
 
 import typer
 from html_to_markdown import convert as html_to_markdown
@@ -63,9 +62,7 @@ async def _ensure_solution(
     """Get or refresh the bypass solution for *domain*."""
     async with domain_sem:
         cached = solutions.get(domain)
-        need_refresh = cached is None or (
-            stale is not None and cached is stale
-        )
+        need_refresh = cached is None or (stale is not None and cached is stale)
         if need_refresh:
             solutions[domain] = await get_byparr_solution(
                 target_url=f"https://{domain}/",
@@ -80,7 +77,6 @@ async def _download_article(
     domain_sems: dict[str, asyncio.Semaphore],
     meta_lock: asyncio.Lock,
     semaphore: asyncio.Semaphore,
-    db_path: Path,
     claim_owner: str,
 ) -> bool:
     """Download a single article with retry logic."""
@@ -102,7 +98,7 @@ async def _download_article(
                 )
             except Exception as e:
                 logger.exception("Failed to get solution for %s", domain)
-                mark_article_download_failed(db_path, article["id"], str(e))
+                mark_article_download_failed(article["id"], str(e))
                 return False
 
             last_error = None
@@ -116,7 +112,6 @@ async def _download_article(
                     cleaned_html = strip_html_noise(raw_html)
                     content = html_to_markdown(cleaned_html)["content"] or ""
                     update_article(
-                        db_path,
                         article["id"],
                         content=content,
                         image_url=image_url,
@@ -145,13 +140,10 @@ async def _download_article(
                 MAX_RETRIES + 1,
             )
             logger.info(f"Failed: {url} - {last_error}")
-            mark_article_download_failed(
-                db_path, article["id"], str(last_error)
-            )
+            mark_article_download_failed(article["id"], str(last_error))
             return False
         finally:
             clear_article_processing_claim(
-                db_path,
                 article["id"],
                 owner=claim_owner,
             )
@@ -177,11 +169,11 @@ async def _download(
     Returns:
         A dict with download results.
     """
-    db_path = require_db()
+    require_db()
     claim_owner = f"download:{os.getpid()}"
 
     if article_id is not None:
-        article = get_article_by_id(db_path, article_id)
+        article = get_article_by_id(article_id)
         if not article:
             return {"error": f"Article not found: {article_id}"}
         if article.get("content") and not force:
@@ -192,9 +184,8 @@ async def _download(
                 )
             }
         if force or retry or article.get("download_failed"):
-            reset_article_download(db_path, article_id)
+            reset_article_download(article_id)
         claimed = claim_articles_for_processing(
-            db_path,
             [article_id],
             "download",
             claim_owner,
@@ -210,9 +201,7 @@ async def _download(
         articles = [article]
         logger.info(f"Downloading article {article_id}")
     elif retry:
-        candidates = get_download_failed_articles(
-            db_path, limit, feed_domain=feed_domain
-        )
+        candidates = get_download_failed_articles(limit, feed_domain=feed_domain)
         if not candidates:
             logger.info("No failed downloads found to retry")
             return {
@@ -224,16 +213,13 @@ async def _download(
             }
         claimed = set(
             claim_articles_for_processing(
-                db_path,
                 [article["id"] for article in candidates],
                 "download",
                 claim_owner,
                 force=force,
             )
         )
-        articles = [
-            article for article in candidates if article["id"] in claimed
-        ]
+        articles = [article for article in candidates if article["id"] in claimed]
         if not articles:
             logger.info("All failed downloads are already being processed")
             return {
@@ -245,9 +231,7 @@ async def _download(
             }
         logger.info(f"Found {len(articles)} failed downloads to retry")
     else:
-        candidates = get_empty_articles(
-            db_path, limit, feed_domain=feed_domain
-        )
+        candidates = get_empty_articles(limit, feed_domain=feed_domain)
         if not candidates:
             logger.info("No articles need downloading")
             return {
@@ -259,16 +243,13 @@ async def _download(
             }
         claimed = set(
             claim_articles_for_processing(
-                db_path,
                 [article["id"] for article in candidates],
                 "download",
                 claim_owner,
                 force=force,
             )
         )
-        articles = [
-            article for article in candidates if article["id"] in claimed
-        ]
+        articles = [article for article in candidates if article["id"] in claimed]
         if not articles:
             logger.info("All candidate downloads are already being processed")
             return {
@@ -292,7 +273,6 @@ async def _download(
             domain_sems=domain_sems,
             meta_lock=meta_lock,
             semaphore=semaphore,
-            db_path=db_path,
             claim_owner=claim_owner,
         )
 
@@ -324,9 +304,7 @@ def download(
         help="Delay between download starts in seconds",
     ),
     feed: str = typer.Option(None, "--feed", help="Filter by feed domain"),
-    retry: bool = typer.Option(
-        False, "--retry", "-r", help="Retry failed downloads"
-    ),
+    retry: bool = typer.Option(False, "--retry", "-r", help="Retry failed downloads"),
     article: int = typer.Option(
         None, "--article", help="Download a specific article by ID"
     ),

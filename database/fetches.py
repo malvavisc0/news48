@@ -1,80 +1,70 @@
-"""Fetch tracking operations."""
+"""Fetch tracking operations using SQLAlchemy ORM."""
 
-from database.connection import _utcnow, get_connection
+from database.connection import SessionLocal, _utcnow
+from database.models import Fetch
 
 
-def create_fetch(db_path) -> int:
+def create_fetch() -> int:
     """Create a new fetch and return the fetch ID.
-
-    Args:
-        db_path: Path to the SQLite database file.
 
     Returns:
         The ID of the newly created fetch.
     """
     now = _utcnow()
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            "INSERT INTO fetches (started_at, status) VALUES (?, ?)",
-            (now, "running"),
-        )
-        db.commit()
-        assert cursor.lastrowid is not None
-        return cursor.lastrowid
+    with SessionLocal() as session:
+        fetch = Fetch(started_at=now, status="running")
+        session.add(fetch)
+        session.flush()
+        fetch_id = fetch.id
+        session.commit()
+        return fetch_id
 
 
-def complete_fetch(
-    db_path, fetch_id: int, feeds_fetched: int, articles_found: int
-) -> None:
+def complete_fetch(fetch_id: int, feeds_fetched: int, articles_found: int) -> None:
     """Mark a fetch as completed.
 
     Args:
-        db_path: Path to the SQLite database file.
         fetch_id: The ID of the fetch to complete.
         feeds_fetched: Number of feeds that were fetched.
         articles_found: Total number of articles found.
     """
     now = _utcnow()
-    with get_connection(db_path) as db:
-        db.execute(
-            """UPDATE fetches
-               SET completed_at = ?, status = ?, feeds_fetched = ?,
-                   articles_found = ?
-               WHERE id = ?""",
-            (now, "completed", feeds_fetched, articles_found, fetch_id),
-        )
-        db.commit()
+    with SessionLocal() as session:
+        fetch = session.get(Fetch, fetch_id)
+        if fetch:
+            fetch.completed_at = now
+            fetch.status = "completed"
+            fetch.feeds_fetched = feeds_fetched
+            fetch.articles_found = articles_found
+            session.commit()
 
 
-def fail_fetch(db_path, fetch_id: int) -> None:
+def fail_fetch(fetch_id: int) -> None:
     """Mark a fetch as failed.
 
     Args:
-        db_path: Path to the SQLite database file.
         fetch_id: The ID of the fetch to mark as failed.
     """
     now = _utcnow()
-    with get_connection(db_path) as db:
-        db.execute(
-            "UPDATE fetches SET completed_at = ?, status = ? WHERE id = ?",
-            (now, "failed", fetch_id),
-        )
-        db.commit()
+    with SessionLocal() as session:
+        fetch = session.get(Fetch, fetch_id)
+        if fetch:
+            fetch.completed_at = now
+            fetch.status = "failed"
+            session.commit()
 
 
-def list_fetches(db_path, limit: int = 20) -> list[dict]:
+def list_fetches(limit: int = 20) -> list[dict]:
     """List recent fetches ordered by most recent first.
 
     Args:
-        db_path: Path to the SQLite database file.
         limit: Maximum number of fetches to return.
 
     Returns:
         A list of dicts with fetch data.
     """
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            "SELECT * FROM fetches ORDER BY started_at DESC LIMIT ?", (limit,)
+    with SessionLocal() as session:
+        fetches = (
+            session.query(Fetch).order_by(Fetch.started_at.desc()).limit(limit).all()
         )
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows]
+        return [fetch.to_dict() for fetch in fetches]

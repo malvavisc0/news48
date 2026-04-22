@@ -1,19 +1,17 @@
 """Purge, retention policy, and database health operations."""
 
-import sqlite3
+from sqlalchemy import text
 
-from database.connection import _hours_ago_iso, get_connection
+from database.connection import SessionLocal, _hours_ago_iso
 
 
 def purge_articles_older_than_hours(
-    db_path,
     hours: int = 48,
     dry_run: bool = False,
 ) -> dict:
     """Purge articles older than specified hours.
 
     Args:
-        db_path: Path to the SQLite database file.
         hours: Number of hours to use as threshold (default: 48).
         dry_run: If True, only count articles without deleting.
 
@@ -24,25 +22,24 @@ def purge_articles_older_than_hours(
         - threshold_hours: The hours threshold used
         - cutoff_time: The ISO 8601 cutoff time
     """
-    with get_connection(db_path) as db:
+    with SessionLocal() as session:
         threshold = _hours_ago_iso(hours)
 
         # Count articles to purge
-        cursor = db.execute(
-            "SELECT COUNT(*) as cnt FROM articles WHERE created_at < ?",
-            (threshold,),
-        )
-        articles_found = cursor.fetchone()["cnt"]
+        articles_found = session.execute(
+            text("SELECT COUNT(*) FROM articles WHERE created_at < :threshold"),
+            {"threshold": threshold},
+        ).scalar()
 
         articles_deleted = 0
         if not dry_run and articles_found > 0:
             # Delete articles (cascade will handle related records)
-            cursor = db.execute(
-                "DELETE FROM articles WHERE created_at < ?",
-                (threshold,),
+            result = session.execute(
+                text("DELETE FROM articles WHERE created_at < :threshold"),
+                {"threshold": threshold},
             )
-            articles_deleted = cursor.rowcount
-            db.commit()
+            articles_deleted = result.rowcount
+            session.commit()
 
         return {
             "articles_found": articles_found,
@@ -53,11 +50,8 @@ def purge_articles_older_than_hours(
         }
 
 
-def get_retention_policy_stats(db_path) -> dict:
+def get_retention_policy_stats() -> dict:
     """Get statistics about the 48-hour retention policy.
-
-    Args:
-        db_path: Path to the SQLite database file.
 
     Returns:
         A dict with retention policy statistics:
@@ -68,32 +62,31 @@ def get_retention_policy_stats(db_path) -> dict:
         - oldest_article: Creation date of oldest article
         - newest_article: Creation date of newest article
     """
-    with get_connection(db_path) as db:
+    with SessionLocal() as session:
         threshold_48h = _hours_ago_iso(48)
 
         # Total articles
-        cursor = db.execute("SELECT COUNT(*) as cnt FROM articles")
-        total = cursor.fetchone()["cnt"]
+        total = session.execute(text("SELECT COUNT(*) FROM articles")).scalar()
 
         # Articles within 48 hours
-        cursor = db.execute(
-            "SELECT COUNT(*) as cnt FROM articles WHERE created_at >= ?",
-            (threshold_48h,),
-        )
-        within_48h = cursor.fetchone()["cnt"]
+        within_48h = session.execute(
+            text("SELECT COUNT(*) FROM articles WHERE created_at >= :threshold"),
+            {"threshold": threshold_48h},
+        ).scalar()
 
         # Articles expired (older than 48 hours)
-        cursor = db.execute(
-            "SELECT COUNT(*) as cnt FROM articles WHERE created_at < ?",
-            (threshold_48h,),
-        )
-        expired = cursor.fetchone()["cnt"]
+        expired = session.execute(
+            text("SELECT COUNT(*) FROM articles WHERE created_at < :threshold"),
+            {"threshold": threshold_48h},
+        ).scalar()
 
         # Oldest and newest articles
-        cursor = db.execute("""SELECT MIN(created_at) as oldest,
-                      MAX(created_at) as newest
-               FROM articles""")
-        dates = cursor.fetchone()
+        row = session.execute(
+            text(
+                "SELECT MIN(created_at) as oldest, MAX(created_at) as newest "
+                "FROM articles"
+            )
+        ).fetchone()
 
         retention_rate = (within_48h / total * 100) if total > 0 else 0
 
@@ -102,17 +95,14 @@ def get_retention_policy_stats(db_path) -> dict:
             "articles_within_48h": within_48h,
             "articles_expired": expired,
             "retention_rate": round(retention_rate, 2),
-            "oldest_article": dates["oldest"],
-            "newest_article": dates["newest"],
+            "oldest_article": row[0] if row else None,
+            "newest_article": row[1] if row else None,
             "threshold_hours": 48,
         }
 
 
-def check_database_health(db_path) -> dict:
+def check_database_health() -> dict:
     """Check database health and connectivity.
-
-    Args:
-        db_path: Path to the SQLite database file.
 
     Returns:
         A dict with health check results:
@@ -120,46 +110,37 @@ def check_database_health(db_path) -> dict:
         - db_size_mb: Database size in megabytes
         - table_counts: Number of rows in each table
         - integrity_ok: Whether database integrity check passed
-        - wal_mode: Whether WAL mode is enabled
     """
     health = {
         "is_connected": False,
         "db_size_mb": 0,
         "table_counts": {},
         "integrity_ok": False,
-        "wal_mode": False,
     }
 
     try:
-        # Check if database file exists and is accessible
-        if not db_path.exists():
-            return health
-
-        health["db_size_mb"] = round(db_path.stat().st_size / (1024 * 1024), 2)
-
-        with get_connection(db_path) as db:
+        with SessionLocal() as session:
+            # Check connectivity
+            session.execute(text("SELECT 1"))
             health["is_connected"] = True
 
-            # Check WAL mode
-            cursor = db.execute("PRAGMA journal_mode")
-            health["wal_mode"] = cursor.fetchone()[0] == "wal"
-
             # Get table counts
-            for table in ["feeds", "fetches", "articles"]:
-                cursor = db.execute(f"SELECT COUNT(*) as cnt FROM {table}")
-                health["table_counts"][table] = cursor.fetchone()["cnt"]
+            for table in ["feeds", "fetches", "articles", "claims"]:
+                count = session.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
+                health["table_counts"][table] = count
 
-            # Check FTS health
-            try:
-                cursor = db.execute("SELECT COUNT(*) FROM articles_fts")
-                health["table_counts"]["articles_fts"] = cursor.fetchone()[0]
-            except sqlite3.OperationalError:
-                health["table_counts"]["articles_fts"] = None
+            # MySQL-specific health: table status for size
+            rows = session.execute(text("SHOW TABLE STATUS")).fetchall()
+            total_size = sum((r.Data_length or 0) + (r.Index_length or 0) for r in rows)
+            health["db_size_mb"] = round(total_size / (1024 * 1024), 2)
 
-            # Check integrity
-            cursor = db.execute("PRAGMA integrity_check")
-            result = cursor.fetchone()[0]
-            health["integrity_ok"] = result == "ok"
+            # Integrity check via CHECK TABLE
+            check = session.execute(
+                text("CHECK TABLE articles, feeds, fetches, claims")
+            ).fetchall()
+            health["integrity_ok"] = all(
+                row[3] != "error" for row in check  # Msg_type column
+            )
 
     except Exception as e:
         health["error"] = str(e)

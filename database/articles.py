@@ -1,106 +1,23 @@
-"""Article CRUD, search, stats, and query operations."""
+"""Article CRUD, search, stats, and query operations using SQLAlchemy ORM."""
 
 import logging
 import re
-import sqlite3
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
-from database.connection import (
-    _CLAIM_TIMEOUT_MINUTES,
-    _VALID_PROCESSING_ACTIONS,
-    _claim_cutoff,
-    _hours_ago_iso,
-    _utcnow,
-    get_connection,
-)
+from sqlalchemy import or_, text
+from sqlalchemy.exc import IntegrityError
+
+from database.connection import SessionLocal, _hours_ago_iso, _utcnow
+from database.models import Article, Feed
+
+# Constants from original connection.py
+_VALID_PROCESSING_ACTIONS = {"download", "parse", "fact_check"}
+_CLAIM_TIMEOUT_MINUTES = 30
 
 
-def insert_articles(
-    db_path: Path | None,
-    fetch_id: int,
-    feed_id: int,
-    entries: list[dict],
-    db: sqlite3.Connection | None = None,
-    source_name: str | None = None,
-) -> int:
-    """Batch insert articles from feed entries, ignoring duplicates by URL.
-
-    Args:
-        db_path: Path to the SQLite database file.
-            Required if db is not provided.
-        fetch_id: The current fetch ID.
-        feed_id: The feed ID these articles belong to.
-        entries: List of dicts with keys: url, title, summary, author,
-            published_at, image_url.
-        db: Optional existing database connection. If provided, uses this
-            connection instead of creating a new one. Caller is responsible
-            for committing after all inserts.
-        source_name: Optional denormalized feed/source name.
-
-    Returns:
-        Number of new articles inserted.
-    """
-    now = _utcnow()
-    count = 0
-    should_close = False
-
-    if db is None:
-        if db_path is None:
-            raise ValueError("Either db_path or db must be provided")
-        db = sqlite3.connect(db_path)
-        db.row_factory = sqlite3.Row
-        db.execute("PRAGMA foreign_keys = ON")
-        db.execute("PRAGMA journal_mode = WAL")
-        should_close = True
-
-    _log = logging.getLogger(__name__)
-    skipped_no_url = 0
-    duplicates = 0
-    try:
-        for entry in entries:
-            if not entry.get("url"):
-                skipped_no_url += 1
-                continue  # Skip entries without URLs
-            try:
-                db.execute(
-                    """INSERT INTO articles
-                       (fetch_id, feed_id, url, title, summary, author,
-                        published_at, created_at, source_name, image_url)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        fetch_id,
-                        feed_id,
-                        entry["url"],
-                        _strip_html_tags(entry.get("title")),
-                        _strip_html_tags(entry.get("summary")),
-                        entry.get("author"),
-                        entry.get("published_at"),
-                        now,
-                        source_name or entry.get("source_name"),
-                        entry.get("image_url"),
-                    ),
-                )
-                count += 1
-            except sqlite3.IntegrityError:
-                duplicates += 1
-        if entries:
-            _log.info(
-                "insert_articles: %d entries, %d new, "
-                "%d duplicates, %d no-url",
-                len(entries),
-                count,
-                duplicates,
-                skipped_no_url,
-            )
-        # Only commit if we own the connection; caller commits otherwise
-        if should_close:
-            db.commit()
-    finally:
-        if should_close:
-            db.close()
-
-    return count
+def _claim_cutoff(minutes: int = _CLAIM_TIMEOUT_MINUTES) -> str:
+    """Return the cutoff timestamp for stale processing claims."""
+    return (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
 
 
 def _strip_html_tags(text: str | None) -> str | None:
@@ -110,8 +27,69 @@ def _strip_html_tags(text: str | None) -> str | None:
     return re.sub(r"<[^>]+>", "", text).strip()
 
 
+def insert_articles(
+    fetch_id: int,
+    feed_id: int,
+    entries: list[dict],
+    source_name: str | None = None,
+) -> int:
+    """Batch insert articles from feed entries, ignoring duplicates by URL.
+
+    Args:
+        fetch_id: The current fetch ID.
+        feed_id: The feed ID these articles belong to.
+        entries: List of dicts with keys: url, title, summary, author,
+            published_at, image_url.
+        source_name: Optional denormalized feed/source name.
+
+    Returns:
+        Number of new articles inserted.
+    """
+    now = _utcnow()
+    count = 0
+    _log = logging.getLogger(__name__)
+    skipped_no_url = 0
+    duplicates = 0
+
+    with SessionLocal() as session:
+        for entry in entries:
+            if not entry.get("url"):
+                skipped_no_url += 1
+                continue
+            try:
+                article = Article(
+                    fetch_id=fetch_id,
+                    feed_id=feed_id,
+                    url=entry["url"],
+                    title=_strip_html_tags(entry.get("title")),
+                    summary=_strip_html_tags(entry.get("summary")),
+                    author=entry.get("author"),
+                    published_at=entry.get("published_at"),
+                    created_at=now,
+                    source_name=source_name or entry.get("source_name"),
+                    image_url=entry.get("image_url"),
+                )
+                session.add(article)
+                session.flush()
+                count += 1
+            except IntegrityError:
+                session.rollback()
+                duplicates += 1
+
+        if entries:
+            _log.info(
+                "insert_articles: %d entries, %d new, " "%d duplicates, %d no-url",
+                len(entries),
+                count,
+                duplicates,
+                skipped_no_url,
+            )
+        session.commit()
+
+    return count
+
+
 def update_article(
-    db_path: Path,
     article_id: int,
     content: str,
     author: str | None = None,
@@ -126,30 +104,10 @@ def update_article(
     image_url: str | None = None,
     language: str | None = None,
 ) -> None:
-    """Update an article with parsed content from the parser agent.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        article_id: The article ID to update.
-        content: The parsed article content/summary.
-        author: Optionally update the author if parser found a better value.
-        published_at: Optionally update published_at if parser found a better
-            value.
-        sentiment: Optionally update sentiment (positive/negative/neutral).
-        categories: Comma-separated categories (e.g., "politics, sports")
-        tags: Comma-separated tags (e.g., "pakistan, afghanistan")
-        summary: Optionally update the brief summary (max 3 sentences).
-        countries: Comma-separated countries (e.g., "Pakistan, Afghanistan")
-        title: Optionally update the title with improved version.
-        image_url: Optionally update the primary image URL.
-        language: Optionally update the ISO 639-1 language code.
-    """
-    # Defensively strip any HTML tags that may have leaked through
+    """Update an article with parsed content from the parser agent."""
     summary = _strip_html_tags(summary)
     title = _strip_html_tags(title)
-    # content is a required str parameter; _strip_html_tags returns str | None
-    # but will always return str when given a non-None input
-    content = _strip_html_tags(content) or ""  # type: ignore[assignment]
+    content = _strip_html_tags(content) or ""
 
     if sentiment:
         sentiment = sentiment.lower()
@@ -159,58 +117,43 @@ def update_article(
         tags = tags.lower()
     if countries:
         countries = countries.lower()
-    with get_connection(db_path) as db:
-        db.execute(
-            """UPDATE articles
-               SET content = ?, author = COALESCE(?, author),
-                   published_at = COALESCE(?, published_at),
-                   sentiment = COALESCE(?, sentiment),
-                   categories = COALESCE(?, categories),
-                   tags = COALESCE(?, tags), summary = COALESCE(?, summary),
-                   parsed_at = COALESCE(?, parsed_at),
-                   countries = COALESCE(?, countries),
-                   title = COALESCE(?, title),
-                   image_url = COALESCE(?, image_url),
-                   language = COALESCE(?, language)
-               WHERE id = ?""",
-            (
-                content,
-                author,
-                published_at,
-                sentiment,
-                categories,
-                tags,
-                summary,
-                parsed_at,
-                countries,
-                title,
-                image_url,
-                language,
-                article_id,
-            ),
-        )
-        db.commit()
+
+    with SessionLocal() as session:
+        article = session.get(Article, article_id)
+        if article:
+            article.content = content
+            if author:
+                article.author = author
+            if published_at:
+                article.published_at = published_at
+            if sentiment:
+                article.sentiment = sentiment
+            if categories:
+                article.categories = categories
+            if tags:
+                article.tags = tags
+            if summary:
+                article.summary = summary
+            if parsed_at:
+                article.parsed_at = parsed_at
+            if countries:
+                article.countries = countries
+            if title:
+                article.title = title
+            if image_url:
+                article.image_url = image_url
+            if language:
+                article.language = language
+            session.commit()
 
 
 def update_article_fact_check(
-    db_path: Path,
     article_id: int,
     status: str,
     result: str | None = None,
     force: bool = False,
 ) -> bool:
-    """Update the fact-check fields of an article.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        article_id: The article ID to update.
-        status: Fact-check verdict. One of: verified, disputed,
-            unverifiable, mixed.
-        result: Optional free-text summary of the fact-check assessment.
-
-    Returns:
-        True if the article was found and updated, False otherwise.
-    """
+    """Update the fact-check fields of an article."""
     valid_statuses = {"verified", "disputed", "unverifiable", "mixed"}
     if status.lower() not in valid_statuses:
         raise ValueError(
@@ -218,32 +161,18 @@ def update_article_fact_check(
             f"Valid: {', '.join(sorted(valid_statuses))}"
         )
     now = _utcnow()
-    with get_connection(db_path) as db:
-        if force:
-            cursor = db.execute(
-                """UPDATE articles
-                   SET fact_check_status = ?,
-                       fact_check_result = ?,
-                       fact_checked_at = ?
-                   WHERE id = ?""",
-                (status.lower(), result, now, article_id),
-            )
-        else:
-            cursor = db.execute(
-                """UPDATE articles
-                   SET fact_check_status = ?,
-                       fact_check_result = ?,
-                       fact_checked_at = ?
-                   WHERE id = ?
-                     AND fact_check_status IS NULL""",
-                (status.lower(), result, now, article_id),
-            )
-        db.commit()
-        return cursor.rowcount > 0
+    with SessionLocal() as session:
+        article = session.get(Article, article_id)
+        if article and (force or article.fact_check_status is None):
+            article.fact_check_status = status.lower()
+            article.fact_check_result = result
+            article.fact_checked_at = now
+            session.commit()
+            return True
+        return False
 
 
 def claim_articles_for_processing(
-    db_path: Path,
     article_ids: list[int],
     action: str,
     owner: str,
@@ -251,21 +180,7 @@ def claim_articles_for_processing(
     force: bool = False,
     stale_after_minutes: int = _CLAIM_TIMEOUT_MINUTES,
 ) -> list[int]:
-    """Claim articles for a processing action.
-
-    Claims are used to reduce duplicate work across concurrent processes.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        article_ids: Candidate article IDs to claim.
-        action: One of download, parse, or fact_check.
-        owner: Identifier for the claiming process.
-        force: If True, overwrite existing claims.
-        stale_after_minutes: Minutes after which a claim is considered stale.
-
-    Returns:
-        The subset of article IDs successfully claimed for the owner.
-    """
+    """Claim articles for a processing action."""
     if not article_ids:
         return []
     if action not in _VALID_PROCESSING_ACTIONS:
@@ -274,267 +189,157 @@ def claim_articles_for_processing(
             f"Valid: {', '.join(sorted(_VALID_PROCESSING_ACTIONS))}"
         )
 
-    placeholders = ", ".join("?" for _ in article_ids)
     now = _utcnow()
     cutoff = _claim_cutoff(stale_after_minutes)
 
-    with get_connection(db_path) as db:
-        db.execute("BEGIN IMMEDIATE")
-        params: list = [action, owner, now, *article_ids]
-        sql = f"""UPDATE articles
-                  SET processing_status = ?,
-                      processing_owner = ?,
-                      processing_started_at = ?
-                  WHERE id IN ({placeholders})"""
+    with SessionLocal() as session:
+        query = session.query(Article).filter(Article.id.in_(article_ids))
         if not force:
-            sql += """
-                    AND (
-                        processing_status IS NULL
-                        OR processing_started_at IS NULL
-                        OR processing_started_at < ?
-                        OR processing_owner = ?
-                    )"""
-            params.extend([cutoff, owner])
-        db.execute(sql, params)
+            query = query.filter(
+                or_(
+                    Article.processing_status.is_(None),
+                    Article.processing_started_at.is_(None),
+                    Article.processing_started_at < cutoff,
+                    Article.processing_owner == owner,
+                )
+            )
 
-        cursor = db.execute(
-            f"""SELECT id FROM articles
-                   WHERE id IN ({placeholders})
-                     AND processing_status = ?
-                     AND processing_owner = ?""",
-            [*article_ids, action, owner],
+        articles = query.with_for_update().all()
+        for article in articles:
+            article.processing_status = action
+            article.processing_owner = owner
+            article.processing_started_at = now
+        session.commit()
+
+        # Re-query to get the actually claimed IDs
+        claimed = (
+            session.query(Article.id)
+            .filter(
+                Article.id.in_(article_ids),
+                Article.processing_status == action,
+                Article.processing_owner == owner,
+            )
+            .all()
         )
-        claimed = [int(row[0]) for row in cursor.fetchall()]
-        db.commit()
-        return claimed
+        return [int(row[0]) for row in claimed]
 
 
 def clear_article_processing_claim(
-    db_path: Path,
     article_id: int,
     owner: str | None = None,
 ) -> None:
-    """Clear the processing claim for an article.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        article_id: Article ID to release.
-        owner: Optional owner restriction. If provided, only release claims
-            currently held by that owner.
-    """
-    with get_connection(db_path) as db:
-        if owner is None:
-            db.execute(
-                """UPDATE articles
-                   SET processing_status = NULL,
-                       processing_owner = NULL,
-                       processing_started_at = NULL
-                   WHERE id = ?""",
-                (article_id,),
-            )
-        else:
-            db.execute(
-                """UPDATE articles
-                   SET processing_status = NULL,
-                       processing_owner = NULL,
-                       processing_started_at = NULL
-                   WHERE id = ? AND processing_owner = ?""",
-                (article_id, owner),
-            )
-        db.commit()
+    """Clear the processing claim for an article."""
+    with SessionLocal() as session:
+        article = session.get(Article, article_id)
+        if article:
+            if owner is None or article.processing_owner == owner:
+                article.processing_status = None
+                article.processing_owner = None
+                article.processing_started_at = None
+                session.commit()
 
 
 def get_unparsed_articles(
-    db_path: Path, limit: int = 50, feed_domain: str | None = None
+    limit: int = 50, feed_domain: str | None = None
 ) -> list[dict]:
-    """Get articles that have not been parsed yet.
-
-    Returns articles ordered by creation date, oldest first.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        limit: Maximum number of articles to return.
-        feed_domain: Optional domain to filter by feed URL.
-
-    Returns:
-        A list of dicts with article data, including feed_url.
-    """
-    with get_connection(db_path) as db:
+    """Get articles that have not been parsed yet."""
+    with SessionLocal() as session:
+        query = (
+            session.query(Article, Feed.url.label("feed_url"))
+            .join(Feed, Article.feed_id == Feed.id)
+            .filter(
+                Article.content.isnot(None),
+                Article.content != "",
+                Article.parsed_at.is_(None),
+                Article.parse_failed.is_(False),
+            )
+            .order_by(Article.created_at.asc())
+            .limit(limit)
+        )
         if feed_domain:
-            cursor = db.execute(
-                """SELECT a.*, f.url as feed_url
-                   FROM articles a
-                   JOIN feeds f ON a.feed_id = f.id
-                   WHERE a.content IS NOT NULL
-                     AND a.content != ''
-                     AND parsed_at IS NULL
-                     AND a.parse_failed = 0
-                     AND f.url LIKE '%' || ? || '%'
-                   ORDER BY a.created_at ASC
-                   LIMIT ?""",
-                (feed_domain, limit),
-            )
-        else:
-            cursor = db.execute(
-                """SELECT a.*, f.url as feed_url
-                   FROM articles a
-                   JOIN feeds f ON a.feed_id = f.id
-                   WHERE a.content IS NOT NULL
-                     AND a.content != ''
-                     AND parsed_at IS NULL
-                     AND a.parse_failed = 0
-                   ORDER BY a.created_at ASC
-                   LIMIT ?""",
-                (limit,),
-            )
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows]
+            query = query.filter(Feed.url.like(f"%{feed_domain}%"))
+
+        rows = query.all()
+        return [
+            {**article.to_dict(), "feed_url": feed_url} for article, feed_url in rows
+        ]
 
 
 def get_parse_failed_articles(
-    db_path: Path, limit: int = 50, feed_domain: str | None = None
+    limit: int = 50, feed_domain: str | None = None
 ) -> list[dict]:
-    """Get articles that have failed parsing.
-
-    Returns articles ordered by creation date, oldest first.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        limit: Maximum number of articles to return.
-        feed_domain: Optional domain to filter by feed URL.
-
-    Returns:
-        A list of dicts with article data, including feed_url.
-    """
-    with get_connection(db_path) as db:
+    """Get articles that have failed parsing."""
+    with SessionLocal() as session:
+        query = (
+            session.query(Article, Feed.url.label("feed_url"))
+            .join(Feed, Article.feed_id == Feed.id)
+            .filter(Article.parse_failed.is_(True))
+            .order_by(Article.created_at.asc())
+            .limit(limit)
+        )
         if feed_domain:
-            cursor = db.execute(
-                """SELECT a.*, f.url as feed_url
-                   FROM articles a
-                   JOIN feeds f ON a.feed_id = f.id
-                   WHERE a.parse_failed = 1
-                     AND f.url LIKE '%' || ? || '%'
-                   ORDER BY a.created_at ASC
-                   LIMIT ?""",
-                (feed_domain, limit),
+            query = query.filter(Feed.url.like(f"%{feed_domain}%"))
+
+        rows = query.all()
+        return [
+            {**article.to_dict(), "feed_url": feed_url} for article, feed_url in rows
+        ]
+
+
+def get_empty_articles(limit: int = 50, feed_domain: str | None = None) -> list[dict]:
+    """Get articles that have no content."""
+    with SessionLocal() as session:
+        query = (
+            session.query(Article, Feed.url.label("feed_url"))
+            .join(Feed, Article.feed_id == Feed.id)
+            .filter(
+                Article.content.is_(None),
+                Article.download_failed.is_(False),
             )
-        else:
-            cursor = db.execute(
-                """SELECT a.*, f.url as feed_url
-                   FROM articles a
-                   JOIN feeds f ON a.feed_id = f.id
-                   WHERE a.parse_failed = 1
-                   ORDER BY a.created_at ASC
-                   LIMIT ?""",
-                (limit,),
-            )
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows]
-
-
-def get_empty_articles(
-    db_path: Path, limit: int = 50, feed_domain: str | None = None
-) -> list[dict]:
-    """Get articles that have no content.
-
-    Returns articles ordered by creation date, oldest first.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        limit: Maximum number of articles to return.
-        feed_domain: Optional domain to filter by feed URL.
-
-    Returns:
-        A list of dicts with article data, including feed_url.
-    """
-    with get_connection(db_path) as db:
+            .order_by(Article.created_at.asc())
+            .limit(limit)
+        )
         if feed_domain:
-            cursor = db.execute(
-                """SELECT a.*, f.url as feed_url
-                   FROM articles a
-                   JOIN feeds f ON a.feed_id = f.id
-                   WHERE a.content IS NULL
-                     AND a.download_failed = 0
-                     AND f.url LIKE '%' || ? || '%'
-                   ORDER BY a.created_at ASC
-                   LIMIT ?""",
-                (feed_domain, limit),
-            )
-        else:
-            cursor = db.execute(
-                """SELECT a.*, f.url as feed_url
-                   FROM articles a
-                   JOIN feeds f ON a.feed_id = f.id
-                   WHERE a.content IS NULL
-                     AND a.download_failed = 0
-                   ORDER BY a.created_at ASC
-                   LIMIT ?""",
-                (limit,),
-            )
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows]
+            query = query.filter(Feed.url.like(f"%{feed_domain}%"))
+
+        rows = query.all()
+        return [
+            {**article.to_dict(), "feed_url": feed_url} for article, feed_url in rows
+        ]
 
 
 def get_download_failed_articles(
-    db_path: Path, limit: int = 50, feed_domain: str | None = None
+    limit: int = 50, feed_domain: str | None = None
 ) -> list[dict]:
-    """Get articles where download_failed = 1.
-
-    Returns articles ordered by creation date, oldest first.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        limit: Maximum number of articles to return.
-        feed_domain: Optional domain to filter by feed URL.
-
-    Returns:
-        A list of dicts with article data, including feed_url.
-    """
-    with get_connection(db_path) as db:
-        if feed_domain:
-            cursor = db.execute(
-                """SELECT a.*, f.url as feed_url
-                   FROM articles a
-                   JOIN feeds f ON a.feed_id = f.id
-                   WHERE a.download_failed = 1
-                     AND f.url LIKE '%' || ? || '%'
-                   ORDER BY a.created_at ASC
-                   LIMIT ?""",
-                (feed_domain, limit),
-            )
-        else:
-            cursor = db.execute(
-                """SELECT a.*, f.url as feed_url
-                   FROM articles a
-                   JOIN feeds f ON a.feed_id = f.id
-                   WHERE a.download_failed = 1
-                   ORDER BY a.created_at ASC
-                   LIMIT ?""",
-                (limit,),
-            )
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows]
-
-
-def reset_article_download(db_path: Path, article_id: int) -> None:
-    """Reset download_failed flag and clear download_error for an article.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        article_id: The ID of the article to reset.
-    """
-    with get_connection(db_path) as db:
-        db.execute(
-            """UPDATE articles
-               SET download_failed = 0, download_error = NULL
-               WHERE id = ?""",
-            (article_id,),
+    """Get articles where download_failed = 1."""
+    with SessionLocal() as session:
+        query = (
+            session.query(Article, Feed.url.label("feed_url"))
+            .join(Feed, Article.feed_id == Feed.id)
+            .filter(Article.download_failed.is_(True))
+            .order_by(Article.created_at.asc())
+            .limit(limit)
         )
-        db.commit()
+        if feed_domain:
+            query = query.filter(Feed.url.like(f"%{feed_domain}%"))
+
+        rows = query.all()
+        return [
+            {**article.to_dict(), "feed_url": feed_url} for article, feed_url in rows
+        ]
+
+
+def reset_article_download(article_id: int) -> None:
+    """Reset download_failed flag and clear download_error for an article."""
+    with SessionLocal() as session:
+        article = session.get(Article, article_id)
+        if article:
+            article.download_failed = False
+            article.download_error = None
+            session.commit()
 
 
 def get_articles_paginated(
-    db_path: Path,
     limit: int = 20,
     offset: int = 0,
     feed_domain: str | None = None,
@@ -546,248 +351,171 @@ def get_articles_paginated(
     include_source: bool = False,
     parsed: bool = False,
 ) -> tuple[list[dict], int]:
-    """Return filtered, paginated articles and total count.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        limit: Maximum number of articles to return.
-        offset: Number of articles to skip.
-        feed_domain: Optional domain to filter by feed URL.
-        status: Optional status filter. One of: empty, downloaded,
-            parsed, download-failed, parse-failed.
-        language: Optional ISO 639-1 language code filter.
-        category: Optional category filter (LIKE match).
-        sentiment: Optional sentiment filter.
-        hours: Optional time window filter in hours.
-        include_source: If True, join feed data for source info.
-        parsed: If True, only include articles that have been parsed
-            (parsed_at IS NOT NULL).
-
-    Returns:
-        A tuple of (articles list, total count).
-    """
+    """Return filtered, paginated articles and total count."""
     status_conditions = {
-        "empty": "a.content IS NULL AND a.download_failed = 0",
+        "empty": "articles.content IS NULL AND articles.download_failed = 0",
         "downloaded": (
-            "a.content IS NOT NULL AND a.parsed_at IS NULL "
-            "AND a.parse_failed = 0"
+            "articles.content IS NOT NULL AND articles.parsed_at IS NULL "
+            "AND articles.parse_failed = 0"
         ),
-        "parsed": "a.parsed_at IS NOT NULL",
-        "download-failed": "a.download_failed = 1",
-        "parse-failed": "a.parse_failed = 1",
-        "fact-checked": "a.fact_check_status IS NOT NULL",
+        "parsed": "articles.parsed_at IS NOT NULL",
+        "download-failed": "articles.download_failed = 1",
+        "parse-failed": "articles.parse_failed = 1",
+        "fact-checked": "articles.fact_check_status IS NOT NULL",
         "fact-unchecked": (
-            "a.parsed_at IS NOT NULL " "AND a.fact_check_status IS NULL"
+            "articles.parsed_at IS NOT NULL " "AND articles.fact_check_status IS NULL"
         ),
     }
 
     where_clauses = []
-    params: list = []
+    params: dict = {}
 
     if feed_domain:
-        where_clauses.append("f.url LIKE '%' || ? || '%'")
-        params.append(feed_domain)
+        where_clauses.append("feeds.url LIKE :feed_domain")
+        params["feed_domain"] = f"%{feed_domain}%"
 
     if status and status in status_conditions:
         where_clauses.append(status_conditions[status])
 
     if language:
-        where_clauses.append("a.language = ?")
-        params.append(language)
+        where_clauses.append("articles.language = :language")
+        params["language"] = language
 
     if category:
-        where_clauses.append("a.categories LIKE '%' || ? || '%'")
-        params.append(category)
+        where_clauses.append("articles.categories LIKE :category")
+        params["category"] = f"%{category}%"
 
     if sentiment:
-        where_clauses.append("a.sentiment = ?")
-        params.append(sentiment)
+        where_clauses.append("articles.sentiment = :sentiment")
+        params["sentiment"] = sentiment
 
     if hours is not None:
-        where_clauses.append("a.created_at >= ?")
-        params.append(_hours_ago_iso(hours))
+        where_clauses.append("articles.created_at >= :hours_ago")
+        params["hours_ago"] = _hours_ago_iso(hours)
 
     if parsed:
-        where_clauses.append("a.parsed_at IS NOT NULL")
+        where_clauses.append("articles.parsed_at IS NOT NULL")
 
     where_sql = ""
     if where_clauses:
         where_sql = "WHERE " + " AND ".join(where_clauses)
 
-    # Build select columns based on include_source
-    if include_source:
-        select_cols = (
-            "a.*, f.title as source_name, "
-            "f.icon_url as feed_icon_url, "
-            "f.favicon_url as feed_favicon_url"
-        )
-    else:
-        select_cols = (
-            "a.id, a.url, a.title, f.url as feed_url, "
-            "a.content IS NOT NULL as has_content, "
-            "a.parsed_at IS NOT NULL as is_parsed, "
-            "a.download_failed, a.parse_failed, "
-            "a.fact_check_status, "
-            "a.processing_status, "
-            "a.processing_owner, "
-            "a.processing_started_at, "
-            "a.created_at, a.published_at"
-        )
-
-    with get_connection(db_path) as db:
+    with SessionLocal() as session:
         # Get total count
-        count_cursor = db.execute(
-            f"""SELECT COUNT(*) FROM articles a
-                JOIN feeds f ON a.feed_id = f.id
-                {where_sql}""",
-            params,
+        count_sql = (
+            f"SELECT COUNT(*) FROM articles "
+            f"JOIN feeds ON articles.feed_id = feeds.id {where_sql}"
         )
-        total = count_cursor.fetchone()[0]
+        total = session.execute(text(count_sql), params).scalar()
+
+        # Build select columns
+        if include_source:
+            select_cols = (
+                "articles.*, feeds.title as source_name, "
+                "feeds.icon_url as feed_icon_url, "
+                "feeds.favicon_url as feed_favicon_url"
+            )
+        else:
+            select_cols = (
+                "articles.id, articles.url, articles.title, "
+                "feeds.url as feed_url, "
+                "articles.content IS NOT NULL as has_content, "
+                "articles.parsed_at IS NOT NULL as is_parsed, "
+                "articles.download_failed, articles.parse_failed, "
+                "articles.fact_check_status, "
+                "articles.processing_status, "
+                "articles.processing_owner, "
+                "articles.processing_started_at, "
+                "articles.created_at, articles.published_at"
+            )
 
         # Get paginated results
-        cursor = db.execute(
-            f"""SELECT {select_cols}
-                FROM articles a
-                JOIN feeds f ON a.feed_id = f.id
-                {where_sql}
-                ORDER BY a.created_at DESC
-                LIMIT ? OFFSET ?""",
-            [*params, limit, offset],
+        results_sql = (
+            f"SELECT {select_cols} FROM articles "
+            f"JOIN feeds ON articles.feed_id = feeds.id "
+            f"{where_sql} "
+            f"ORDER BY articles.created_at DESC "
+            f"LIMIT :limit OFFSET :offset"
         )
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows], total
+        query_params = {**params, "limit": limit, "offset": offset}
+        rows = session.execute(text(results_sql), query_params).fetchall()
+
+        result = []
+        for row in rows:
+            row_dict = dict(row._mapping)
+            result.append(row_dict)
+
+        return result, total
 
 
-def get_article_by_id(db_path: Path, article_id: int) -> dict | None:
-    """Look up an article by its ID.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        article_id: The article ID to look up.
-
-    Returns:
-        A dict with article data, or None if not found.
-    """
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            "SELECT * FROM articles WHERE id = ?", (article_id,)
-        )
-        row = cursor.fetchone()
-        return dict(row) if row else None
+def get_article_by_id(article_id: int) -> dict | None:
+    """Look up an article by its ID."""
+    with SessionLocal() as session:
+        article = session.get(Article, article_id)
+        return article.to_dict() if article else None
 
 
-def get_article_by_url(db_path: Path, url: str) -> dict | None:
-    """Look up an article by its URL.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        url: The article URL to look up.
-
-    Returns:
-        A dict with article data, or None if not found.
-    """
-    with get_connection(db_path) as db:
-        cursor = db.execute("SELECT * FROM articles WHERE url = ?", (url,))
-        row = cursor.fetchone()
-        return dict(row) if row else None
+def get_article_by_url(url: str) -> dict | None:
+    """Look up an article by its URL."""
+    with SessionLocal() as session:
+        article = session.query(Article).filter(Article.url == url).first()
+        return article.to_dict() if article else None
 
 
-def mark_article_download_failed(
-    db_path: Path, article_id: int, error: str
-) -> None:
-    """Mark an article as having a failed download.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        article_id: The ID of the article to mark.
-        error: The error message describing the failure.
-    """
-    with get_connection(db_path) as db:
-        db.execute(
-            """UPDATE articles
-               SET download_failed = 1, download_error = ?
-               WHERE id = ?""",
-            (error, article_id),
-        )
-        db.commit()
+def mark_article_download_failed(article_id: int, error: str) -> None:
+    """Mark an article as having a failed download."""
+    with SessionLocal() as session:
+        article = session.get(Article, article_id)
+        if article:
+            article.download_failed = True
+            article.download_error = error
+            session.commit()
 
 
-def mark_article_parse_failed(
-    db_path: Path, article_id: int, error: str
-) -> None:
-    """Mark an article as having a failed parse.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        article_id: The ID of the article to mark.
-        error: The error message describing the failure.
-    """
-    with get_connection(db_path) as db:
-        db.execute(
-            """UPDATE articles
-               SET parse_failed = 1, parse_error = ?
-               WHERE id = ? AND parse_failed = 0""",
-            (error, article_id),
-        )
-        db.commit()
+def mark_article_parse_failed(article_id: int, error: str) -> None:
+    """Mark an article as having a failed parse."""
+    with SessionLocal() as session:
+        article = session.get(Article, article_id)
+        if article and article.parse_failed is False:
+            article.parse_failed = True
+            article.parse_error = error
+            session.commit()
 
 
-def reset_article_parse(db_path: Path, article_id: int) -> None:
-    """Reset parse_failed flag and clear parse_error for an article.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        article_id: The ID of the article to reset.
-    """
-    with get_connection(db_path) as db:
-        db.execute(
-            """UPDATE articles
-               SET parse_failed = 0, parse_error = NULL, parsed_at = NULL
-               WHERE id = ?""",
-            (article_id,),
-        )
-        db.commit()
+def reset_article_parse(article_id: int) -> None:
+    """Reset parse_failed flag and clear parse_error for an article."""
+    with SessionLocal() as session:
+        article = session.get(Article, article_id)
+        if article:
+            article.parse_failed = False
+            article.parse_error = None
+            article.parsed_at = None
+            session.commit()
 
 
-def delete_article(db_path: Path, article_id: int) -> bool:
-    """Delete an article by ID.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        article_id: The ID of the article to delete.
-
-    Returns:
-        True if the article was deleted, False if not found.
-    """
-    with get_connection(db_path) as db:
-        cursor = db.execute("DELETE FROM articles WHERE id = ?", (article_id,))
-        db.commit()
-        return cursor.rowcount > 0
+def delete_article(article_id: int) -> bool:
+    """Delete an article by ID."""
+    with SessionLocal() as session:
+        article = session.get(Article, article_id)
+        if article:
+            session.delete(article)
+            session.commit()
+            return True
+        return False
 
 
-def get_article_stats(db_path: Path) -> dict:
-    """Get consolidated article statistics in a single query.
-
-    Args:
-        db_path: Path to the SQLite database file.
-
-    Returns:
-        A dict with keys: total, parsed, unparsed, no_content,
-        download_failed, parse_failed, download_backlog, parse_backlog,
-        sentiment_positive, sentiment_negative, sentiment_neutral,
-        malformed, oldest_unparsed_at, articles_today, articles_this_week.
-    """
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            """SELECT
+def get_article_stats() -> dict:
+    """Get consolidated article statistics in a single query."""
+    with SessionLocal() as session:
+        row = session.execute(text("""
+            SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN parsed_at IS NOT NULL THEN 1 ELSE 0 END)
                     AS parsed,
                 SUM(CASE WHEN parsed_at IS NULL THEN 1 ELSE 0 END)
                     AS unparsed,
                 SUM(CASE WHEN content IS NULL OR content = ''
-                    THEN 1 ELSE 0 END)
-                    AS no_content,
+                    THEN 1 ELSE 0 END) AS no_content,
                 SUM(CASE WHEN download_failed = 1 THEN 1 ELSE 0 END)
                     AS download_failed,
                 SUM(CASE WHEN parse_failed = 1 THEN 1 ELSE 0 END)
@@ -807,146 +535,140 @@ def get_article_stats(db_path: Path) -> dict:
                 SUM(CASE WHEN parsed_at IS NOT NULL
                     AND (summary LIKE '%<%>%'
                          OR title LIKE '%<%>%')
-                    THEN 1 ELSE 0 END)
-                    AS malformed
-            FROM articles"""
-        )
-        row = dict(cursor.fetchone())
+                    THEN 1 ELSE 0 END) AS malformed
+            FROM articles
+        """)).fetchone()
+
+        result = {
+            "total": row[0] or 0,
+            "parsed": row[1] or 0,
+            "unparsed": row[2] or 0,
+            "no_content": row[3] or 0,
+            "download_failed": row[4] or 0,
+            "parse_failed": row[5] or 0,
+            "download_backlog": row[6] or 0,
+            "parse_backlog": row[7] or 0,
+            "sentiment_positive": row[8] or 0,
+            "sentiment_negative": row[9] or 0,
+            "sentiment_neutral": row[10] or 0,
+            "malformed": row[11] or 0,
+        }
 
         # Oldest unparsed article
-        cursor = db.execute(
-            """SELECT MIN(created_at) AS oldest_unparsed_at
-               FROM articles
-               WHERE content IS NOT NULL
-                 AND parsed_at IS NULL
-                 AND parse_failed = 0"""
-        )
-        oldest = cursor.fetchone()
-        row["oldest_unparsed_at"] = (
-            oldest["oldest_unparsed_at"] if oldest else None
-        )
+        oldest = session.execute(text("""
+            SELECT MIN(created_at) AS oldest_unparsed_at
+            FROM articles
+            WHERE content IS NOT NULL
+              AND parsed_at IS NULL
+              AND parse_failed = 0
+        """)).fetchone()
+        result["oldest_unparsed_at"] = oldest[0] if oldest else None
 
         # Articles created today (UTC)
-        cursor = db.execute(
-            """SELECT COUNT(*) AS cnt FROM articles
-               WHERE created_at >= date('now')"""
-        )
-        row["articles_today"] = cursor.fetchone()["cnt"]
+        today = session.execute(text("""
+            SELECT COUNT(*) FROM articles
+            WHERE DATE(created_at) = CURDATE()
+        """)).scalar()
+        result["articles_today"] = today or 0
 
         # Articles created this week (UTC, Monday-based)
-        cursor = db.execute(
-            """SELECT COUNT(*) AS cnt FROM articles
-               WHERE created_at >= date('now', 'weekday 1', '-7 days')"""
-        )
-        row["articles_this_week"] = cursor.fetchone()["cnt"]
+        week = session.execute(text("""
+            SELECT COUNT(*) FROM articles
+            WHERE YEARWEEK(created_at, 1) = YEARWEEK(CURDATE(), 1)
+        """)).scalar()
+        result["articles_this_week"] = week or 0
 
-        return row
-
-
-def get_malformed_articles(db_path: Path, limit: int = 50) -> list[dict]:
-    """Get parsed articles with HTML tags in summary or title.
-
-    These articles passed the parser but contain residual HTML that
-    should have been stripped. Useful for the sentinel to create fix
-    plans.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        limit: Maximum number of articles to return.
-
-    Returns:
-        A list of dicts with id, title, summary, url for each
-        malformed article.
-    """
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            """SELECT id, title, summary, url
-               FROM articles
-               WHERE parsed_at IS NOT NULL
-                 AND (summary LIKE '%<%>%' OR title LIKE '%<%>%')
-               ORDER BY parsed_at DESC
-               LIMIT ?""",
-            (limit,),
-        )
-        return [dict(row) for row in cursor.fetchall()]
+        return result
 
 
-def get_feed_stats(db_path: Path, stale_days: int = 7) -> dict:
-    """Get consolidated feed statistics in a single query.
+def get_malformed_articles(limit: int = 50) -> list[dict]:
+    """Get parsed articles with HTML tags in summary or title."""
+    with SessionLocal() as session:
+        rows = session.execute(
+            text("""
+            SELECT id, title, summary, url
+            FROM articles
+            WHERE parsed_at IS NOT NULL
+              AND (summary LIKE '%<%>%' OR title LIKE '%<%>%')
+            ORDER BY parsed_at DESC
+            LIMIT :limit
+        """),
+            {"limit": limit},
+        ).fetchall()
 
-    Args:
-        db_path: Path to the SQLite database file.
-        stale_days: Number of days after which a feed is considered stale.
+        return [dict(row._mapping) for row in rows]
 
-    Returns:
-        A dict with keys: total, never_fetched, stale, top_feeds.
-        top_feeds is a list of dicts with title, url, article_count.
-    """
-    with get_connection(db_path) as db:
-        stale_threshold = (
-            datetime.now(timezone.utc) - timedelta(days=stale_days)
-        ).isoformat()
 
-        cursor = db.execute(
-            """SELECT
+def get_feed_stats(stale_days: int = 7) -> dict:
+    """Get consolidated feed statistics in a single query."""
+    stale_threshold = (
+        datetime.now(timezone.utc) - timedelta(days=stale_days)
+    ).isoformat()
+
+    with SessionLocal() as session:
+        row = session.execute(
+            text("""
+            SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN last_fetched_at IS NULL THEN 1 ELSE 0 END)
                     AS never_fetched,
-                SUM(CASE WHEN last_fetched_at < ? THEN 1 ELSE 0 END)
+                SUM(CASE WHEN last_fetched_at < :threshold THEN 1 ELSE 0 END)
                     AS stale
-            FROM feeds""",
-            (stale_threshold,),
-        )
-        row = dict(cursor.fetchone())
+            FROM feeds
+        """),
+            {"threshold": stale_threshold},
+        ).fetchone()
+
+        result = {
+            "total": row[0] or 0,
+            "never_fetched": row[1] or 0,
+            "stale": row[2] or 0,
+        }
 
         # Top feeds by article count
-        cursor = db.execute(
-            """SELECT f.title, f.url, COUNT(a.id) AS article_count
-               FROM feeds f
-               LEFT JOIN articles a ON f.id = a.feed_id
-               GROUP BY f.id
-               ORDER BY article_count DESC
-               LIMIT 10"""
-        )
-        row["top_feeds"] = [dict(r) for r in cursor.fetchall()]
+        top_rows = session.execute(text("""
+            SELECT f.title, f.url, COUNT(a.id) AS article_count
+            FROM feeds f
+            LEFT JOIN articles a ON f.id = a.feed_id
+            GROUP BY f.id
+            ORDER BY article_count DESC
+            LIMIT 10
+        """)).fetchall()
 
-        return row
+        result["top_feeds"] = [dict(r._mapping) for r in top_rows]
+        return result
 
 
-def get_fetch_stats(db_path: Path) -> dict:
-    """Get fetch statistics and recent fetch history.
-
-    Args:
-        db_path: Path to the SQLite database file.
-
-    Returns:
-        A dict with keys: total_runs, last_run_at, avg_articles_per_run,
-        recent_runs (list of dicts).
-    """
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            """SELECT
+def get_fetch_stats() -> dict:
+    """Get fetch statistics and recent fetch history."""
+    with SessionLocal() as session:
+        row = session.execute(text("""
+            SELECT
                 COUNT(*) AS total_runs,
                 MAX(started_at) AS last_run_at,
                 ROUND(AVG(articles_found), 1) AS avg_articles_per_run
-            FROM fetches"""
-        )
-        row = dict(cursor.fetchone())
+            FROM fetches
+        """)).fetchone()
 
-        cursor = db.execute(
-            """SELECT id, started_at, completed_at, status,
-                      feeds_fetched, articles_found
-               FROM fetches
-               ORDER BY started_at DESC
-               LIMIT 5"""
-        )
-        row["recent_runs"] = [dict(r) for r in cursor.fetchall()]
+        result = {
+            "total_runs": row[0] or 0,
+            "last_run_at": row[1],
+            "avg_articles_per_run": row[2],
+        }
 
-        return row
+        recent_rows = session.execute(text("""
+            SELECT id, started_at, completed_at, status,
+                   feeds_fetched, articles_found
+            FROM fetches
+            ORDER BY started_at DESC
+            LIMIT 5
+        """)).fetchall()
+
+        result["recent_runs"] = [dict(r._mapping) for r in recent_rows]
+        return result
 
 
 def search_articles(
-    db_path: Path,
     query: str,
     limit: int = 20,
     offset: int = 0,
@@ -954,179 +676,173 @@ def search_articles(
     sentiment: str | None = None,
     category: str | None = None,
 ) -> tuple[list[dict], int]:
-    """Full-text search articles with optional filters.
-
-    Returns (articles, total_count).
-    """
-    where_clauses = ["a.created_at >= ?"]
-    params: list = [_hours_ago_iso(hours)]
+    """Full-text search articles with optional filters."""
+    where_clauses = ["a.created_at >= :hours_ago"]
+    params: dict = {"hours_ago": _hours_ago_iso(hours)}
 
     if sentiment:
-        where_clauses.append("a.sentiment = ?")
-        params.append(sentiment)
+        where_clauses.append("a.sentiment = :sentiment")
+        params["sentiment"] = sentiment
 
     if category:
-        where_clauses.append("a.categories LIKE '%' || ? || '%'")
-        params.append(category)
+        where_clauses.append("a.categories LIKE :category")
+        params["category"] = f"%{category}%"
 
     where_sql = " AND ".join(where_clauses)
 
-    with get_connection(db_path) as db:
+    with SessionLocal() as session:
         # Count total matches
-        count_cursor = db.execute(
-            f"""SELECT COUNT(*)
-                FROM articles_fts fts
-                JOIN articles a ON a.id = fts.rowid
-                WHERE articles_fts MATCH ? AND {where_sql}""",
-            [query, *params],
-        )
-        total = count_cursor.fetchone()[0]
+        count = session.execute(
+            text(
+                f"SELECT COUNT(*) FROM articles a "
+                f"WHERE MATCH(a.title, a.summary, a.content, a.tags, "
+                f"a.categories) AGAINST(:query IN BOOLEAN MODE) "
+                f"AND {where_sql}"
+            ),
+            {"query": query, **params},
+        ).scalar()
 
-        # Get paginated results with BM25 rank
-        cursor = db.execute(
-            f"""SELECT a.*, f.title as source_name,
-                       f.icon_url as feed_icon_url,
-                       f.favicon_url as feed_favicon_url,
-                       bm25(articles_fts) as rank
-                FROM articles_fts fts
-                JOIN articles a ON a.id = fts.rowid
-                JOIN feeds f ON a.feed_id = f.id
-                WHERE articles_fts MATCH ? AND {where_sql}
-                ORDER BY rank
-                LIMIT ? OFFSET ?""",
-            [query, *params, limit, offset],
-        )
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows], total
+        # Get paginated results
+        rows = session.execute(
+            text(
+                f"SELECT a.*, f.title as source_name, "
+                f"f.icon_url as feed_icon_url, "
+                f"f.favicon_url as feed_favicon_url, "
+                f"MATCH(a.title, a.summary, a.content, a.tags, a.categories) "
+                f"AGAINST(:query IN BOOLEAN MODE) as rank "
+                f"FROM articles a "
+                f"JOIN feeds f ON a.feed_id = f.id "
+                f"WHERE MATCH(a.title, a.summary, a.content, a.tags, "
+                f"a.categories) AGAINST(:query IN BOOLEAN MODE) "
+                f"AND {where_sql} "
+                f"ORDER BY rank DESC "
+                f"LIMIT :limit OFFSET :offset"
+            ),
+            {"query": query, **params, "limit": limit, "offset": offset},
+        ).fetchall()
+
+        return [dict(row._mapping) for row in rows], count or 0
 
 
-def set_article_featured(
-    db_path: Path, article_id: int, featured: bool = True
-) -> None:
+def set_article_featured(article_id: int, featured: bool = True) -> None:
     """Mark/unmark an article as featured."""
-    with get_connection(db_path) as db:
-        db.execute(
-            "UPDATE articles SET is_featured = ? WHERE id = ?",
-            (int(featured), article_id),
-        )
-        db.commit()
+    with SessionLocal() as session:
+        article = session.get(Article, article_id)
+        if article:
+            article.is_featured = featured
+            session.commit()
 
 
-def set_article_breaking(
-    db_path: Path, article_id: int, breaking: bool = True
-) -> None:
+def set_article_breaking(article_id: int, breaking: bool = True) -> None:
     """Mark/unmark an article as breaking news."""
-    with get_connection(db_path) as db:
-        db.execute(
-            "UPDATE articles SET is_breaking = ? WHERE id = ?",
-            (int(breaking), article_id),
-        )
-        db.commit()
+    with SessionLocal() as session:
+        article = session.get(Article, article_id)
+        if article:
+            article.is_breaking = breaking
+            session.commit()
 
 
-def get_featured_articles(db_path: Path, limit: int = 10) -> list[dict]:
+def get_featured_articles(limit: int = 10) -> list[dict]:
     """Get all currently featured articles within 48h window."""
     threshold = _hours_ago_iso(48)
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            """SELECT a.*, f.title as source_name,
-                       f.icon_url as feed_icon_url,
-                       f.favicon_url as feed_favicon_url
-                FROM articles a
-                JOIN feeds f ON a.feed_id = f.id
-                WHERE a.is_featured = 1 AND a.created_at >= ?
-                ORDER BY a.created_at DESC
-                LIMIT ?""",
-            (threshold, limit),
-        )
-        return [dict(row) for row in cursor.fetchall()]
+    with SessionLocal() as session:
+        rows = session.execute(
+            text("""
+            SELECT a.*, f.title as source_name,
+                   f.icon_url as feed_icon_url,
+                   f.favicon_url as feed_favicon_url
+            FROM articles a
+            JOIN feeds f ON a.feed_id = f.id
+            WHERE a.is_featured = 1 AND a.created_at >= :threshold
+            ORDER BY a.created_at DESC
+            LIMIT :limit
+        """),
+            {"threshold": threshold, "limit": limit},
+        ).fetchall()
+
+        return [dict(row._mapping) for row in rows]
 
 
-def get_breaking_articles(db_path: Path, limit: int = 5) -> list[dict]:
+def get_breaking_articles(limit: int = 5) -> list[dict]:
     """Get all currently breaking news articles within 48h window."""
     threshold = _hours_ago_iso(48)
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            """SELECT a.*, f.title as source_name,
-                       f.icon_url as feed_icon_url,
-                       f.favicon_url as feed_favicon_url
-                FROM articles a
-                JOIN feeds f ON a.feed_id = f.id
-                WHERE a.is_breaking = 1 AND a.created_at >= ?
-                ORDER BY a.created_at DESC
-                LIMIT ?""",
-            (threshold, limit),
+    with SessionLocal() as session:
+        rows = session.execute(
+            text("""
+            SELECT a.*, f.title as source_name,
+                   f.icon_url as feed_icon_url,
+                   f.favicon_url as feed_favicon_url
+            FROM articles a
+            JOIN feeds f ON a.feed_id = f.id
+            WHERE a.is_breaking = 1 AND a.created_at >= :threshold
+            ORDER BY a.created_at DESC
+            LIMIT :limit
+        """),
+            {"threshold": threshold, "limit": limit},
+        ).fetchall()
+
+        return [dict(row._mapping) for row in rows]
+
+
+def increment_view_count(article_id: int) -> None:
+    """Atomically increment the view count for an article."""
+    with SessionLocal() as session:
+        session.execute(
+            text("UPDATE articles SET view_count = view_count + 1 " "WHERE id = :id"),
+            {"id": article_id},
         )
-        return [dict(row) for row in cursor.fetchall()]
-
-
-def increment_view_count(db_path: Path, article_id: int) -> None:
-    """Atomically increment the view count for an article.
-
-    Uses UPDATE ... SET view_count = view_count + 1 for atomicity.
-    NOTE: The web API layer should implement rate limiting per
-    IP/session to prevent abuse of this endpoint.
-    """
-    with get_connection(db_path) as db:
-        db.execute(
-            "UPDATE articles SET view_count = view_count + 1 " "WHERE id = ?",
-            (article_id,),
-        )
-        db.commit()
+        session.commit()
 
 
 def get_trending_articles(
-    db_path: Path,
     hours: int = 24,
     limit: int = 10,
 ) -> list[dict]:
     """Get most-viewed articles within the given time window."""
     threshold = _hours_ago_iso(hours)
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            """SELECT a.*, f.title as source_name,
-                       f.icon_url as feed_icon_url,
-                       f.favicon_url as feed_favicon_url
-                FROM articles a
-                JOIN feeds f ON a.feed_id = f.id
-                WHERE a.created_at >= ?
-                ORDER BY a.view_count DESC
-                LIMIT ?""",
-            (threshold, limit),
-        )
-        return [dict(row) for row in cursor.fetchall()]
+    with SessionLocal() as session:
+        rows = session.execute(
+            text("""
+            SELECT a.*, f.title as source_name,
+                   f.icon_url as feed_icon_url,
+                   f.favicon_url as feed_favicon_url
+            FROM articles a
+            JOIN feeds f ON a.feed_id = f.id
+            WHERE a.created_at >= :threshold
+            ORDER BY a.view_count DESC
+            LIMIT :limit
+        """),
+            {"threshold": threshold, "limit": limit},
+        ).fetchall()
+
+        return [dict(row._mapping) for row in rows]
 
 
-def get_all_categories(
-    db_path: Path, hours: int = 48, parsed: bool = False
-) -> list[dict]:
-    """Get distinct categories with article counts within time window.
-
-    Parses the comma-separated categories column.
-    Returns list of dicts: [{name, slug, article_count}]
-
-    Args:
-        db_path: Path to the SQLite database file.
-        hours: Time window in hours.
-        parsed: If True, only include articles that have been parsed
-            (parsed_at IS NOT NULL).
-    """
+def get_all_categories(hours: int = 48, parsed: bool = False) -> list[dict]:
+    """Get distinct categories with article counts within time window."""
     threshold = _hours_ago_iso(hours)
     parsed_filter = "AND parsed_at IS NOT NULL" if parsed else ""
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            f"""SELECT categories FROM articles
-                WHERE created_at >= ? AND categories IS NOT NULL
-                  AND categories != ''
-                  {parsed_filter}""",
-            (threshold,),
-        )
+
+    with SessionLocal() as session:
+        rows = session.execute(
+            text(f"""
+            SELECT categories FROM articles
+            WHERE created_at >= :threshold AND categories IS NOT NULL
+              AND categories != ''
+              {parsed_filter}
+        """),
+            {"threshold": threshold},
+        ).fetchall()
+
         counts: dict[str, int] = {}
-        for row in cursor.fetchall():
-            for cat in row["categories"].split(","):
-                cat = cat.strip().lower()
-                if cat:
-                    counts[cat] = counts.get(cat, 0) + 1
+        for row in rows:
+            cats = row[0]
+            if cats:
+                for cat in cats.split(","):
+                    cat = cat.strip().lower()
+                    if cat:
+                        counts[cat] = counts.get(cat, 0) + 1
+
         return [
             {
                 "name": name,
@@ -1137,41 +853,40 @@ def get_all_categories(
         ]
 
 
-def get_all_tags(
-    db_path: Path, hours: int = 48, limit: int = 50
-) -> list[dict]:
-    """Get most common tags with article counts within time window.
-
-    Returns list of dicts: [{name, slug, article_count}]
-    """
+def get_all_tags(hours: int = 48, limit: int = 50) -> list[dict]:
+    """Get most common tags with article counts within time window."""
     threshold = _hours_ago_iso(hours)
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            """SELECT tags FROM articles
-                WHERE created_at >= ? AND tags IS NOT NULL
-                  AND tags != ''""",
-            (threshold,),
-        )
+
+    with SessionLocal() as session:
+        rows = session.execute(
+            text("""
+            SELECT tags FROM articles
+            WHERE created_at >= :threshold AND tags IS NOT NULL
+              AND tags != ''
+        """),
+            {"threshold": threshold},
+        ).fetchall()
+
         counts: dict[str, int] = {}
-        for row in cursor.fetchall():
-            for tag in row["tags"].split(","):
-                tag = tag.strip().lower()
-                if tag:
-                    counts[tag] = counts.get(tag, 0) + 1
+        for row in rows:
+            tags = row[0]
+            if tags:
+                for tag in tags.split(","):
+                    tag = tag.strip().lower()
+                    if tag:
+                        counts[tag] = counts.get(tag, 0) + 1
+
         return [
             {
                 "name": name,
                 "slug": name.replace(" ", "-"),
                 "article_count": count,
             }
-            for name, count in sorted(counts.items(), key=lambda x: -x[1])[
-                :limit
-            ]
+            for name, count in sorted(counts.items(), key=lambda x: -x[1])[:limit]
         ]
 
 
 def get_topic_clusters(
-    db_path: Path,
     hours: int = 48,
     limit: int = 8,
     min_articles: int = 3,
@@ -1179,35 +894,7 @@ def get_topic_clusters(
     excluded_tags: set[str] | None = None,
     parsed: bool = False,
 ) -> list[dict]:
-    """Build lightweight topic clusters from recent article tags.
-
-    This helper is intentionally simple for the website v1. It:
-
-    - looks only at recent articles within the provided time window
-    - uses recurring tags as temporary cluster labels
-    - filters weak/generic tags with a small deny-list
-    - includes a few recent article previews per cluster
-
-    Args:
-        db_path: Path to the SQLite database file.
-        hours: Time window in hours.
-        limit: Maximum number of clusters to return.
-        min_articles: Minimum articles per cluster.
-        per_cluster_limit: Maximum article previews per cluster.
-        excluded_tags: Optional set of tags to exclude from cluster labels.
-        parsed: If True, only include articles that have been parsed
-            (parsed_at IS NOT NULL).
-
-    Returns list of dicts shaped like:
-
-    [{
-        "name": "chip exports",
-        "slug": "chip-exports",
-        "article_count": 6,
-        "articles": [{...}, ...],
-    }]
-    """
-
+    """Build lightweight topic clusters from recent article tags."""
     threshold = _hours_ago_iso(hours)
     ignored = {
         "news",
@@ -1220,34 +907,33 @@ def get_topic_clusters(
         "stories",
     }
     if excluded_tags:
-        ignored.update(
-            tag.strip().lower() for tag in excluded_tags if tag.strip()
-        )
+        ignored.update(tag.strip().lower() for tag in excluded_tags if tag.strip())
 
     parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
 
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            f"""SELECT a.id, a.title, a.summary, a.url,
-                       a.published_at, a.created_at,
-                       a.source_name, a.fact_check_status, a.tags,
-                       f.title as feed_source_name
-                FROM articles a
-                JOIN feeds f ON a.feed_id = f.id
-                WHERE a.created_at >= ?
-                  AND a.tags IS NOT NULL
-                  AND a.tags != ''
-                  {parsed_filter}
-                ORDER BY a.created_at DESC""",
-            (threshold,),
-        )
-        rows = cursor.fetchall()
+    with SessionLocal() as session:
+        rows = session.execute(
+            text(f"""
+            SELECT a.id, a.title, a.summary, a.url,
+                   a.published_at, a.created_at,
+                   a.source_name, a.fact_check_status, a.tags,
+                   f.title as feed_source_name
+            FROM articles a
+            JOIN feeds f ON a.feed_id = f.id
+            WHERE a.created_at >= :threshold
+              AND a.tags IS NOT NULL
+              AND a.tags != ''
+              {parsed_filter}
+            ORDER BY a.created_at DESC
+        """),
+            {"threshold": threshold},
+        ).fetchall()
 
     clusters: dict[str, dict] = {}
     for row in rows:
-        article = dict(row)
+        row_dict = dict(row._mapping)
         tokens = []
-        for raw_tag in article["tags"].split(","):
+        for raw_tag in (row_dict.get("tags") or "").split(","):
             tag = raw_tag.strip().lower()
             if not tag or tag in ignored or len(tag) < 3:
                 continue
@@ -1264,23 +950,24 @@ def get_topic_clusters(
                     "article_ids": set(),
                 },
             )
-            if article["id"] in cluster["article_ids"]:
+            article_id = row_dict["id"]
+            if article_id in cluster["article_ids"]:
                 continue
 
-            cluster["article_ids"].add(article["id"])
+            cluster["article_ids"].add(article_id)
             cluster["article_count"] += 1
             if len(cluster["articles"]) < per_cluster_limit:
                 cluster["articles"].append(
                     {
-                        "id": article["id"],
-                        "title": article.get("title"),
-                        "summary": article.get("summary"),
-                        "url": article.get("url"),
-                        "published_at": article.get("published_at"),
-                        "created_at": article.get("created_at"),
-                        "source_name": article.get("source_name")
-                        or article.get("feed_source_name"),
-                        "fact_check_status": article.get("fact_check_status"),
+                        "id": article_id,
+                        "title": row_dict.get("title"),
+                        "summary": row_dict.get("summary"),
+                        "url": row_dict.get("url"),
+                        "published_at": row_dict.get("published_at"),
+                        "created_at": row_dict.get("created_at"),
+                        "source_name": row_dict.get("source_name")
+                        or row_dict.get("feed_source_name"),
+                        "fact_check_status": row_dict.get("fact_check_status"),
                     }
                 )
 
@@ -1301,272 +988,201 @@ def get_topic_clusters(
 
 
 def get_articles_by_category(
-    db_path: Path,
     category: str,
     hours: int = 48,
     limit: int = 20,
     offset: int = 0,
     parsed: bool = False,
 ) -> tuple[list[dict], int]:
-    """Get articles matching a category within the time window.
-
-    Uses LIKE matching on the comma-separated categories column.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        category: The category to search for.
-        hours: Time window in hours.
-        limit: Maximum number of articles to return.
-        offset: Offset for pagination.
-        parsed: If True, only include articles that have been parsed
-            (parsed_at IS NOT NULL).
-    """
+    """Get articles matching a category within the time window."""
     threshold = _hours_ago_iso(hours)
     parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
-    with get_connection(db_path) as db:
-        count_cursor = db.execute(
-            f"""SELECT COUNT(*) FROM articles a
-                WHERE a.categories LIKE '%' || ? || '%'
-                  AND a.created_at >= ?
-                  {parsed_filter}""",
-            (category, threshold),
-        )
-        total = count_cursor.fetchone()[0]
 
-        cursor = db.execute(
-            f"""SELECT a.*, f.title as source_name,
-                       f.icon_url as feed_icon_url,
-                       f.favicon_url as feed_favicon_url
-                FROM articles a
-                JOIN feeds f ON a.feed_id = f.id
-                WHERE a.categories LIKE '%' || ? || '%'
-                  AND a.created_at >= ?
-                  {parsed_filter}
-                ORDER BY a.created_at DESC
-                LIMIT ? OFFSET ?""",
-            (category, threshold, limit, offset),
-        )
-        return [dict(row) for row in cursor.fetchall()], total
+    with SessionLocal() as session:
+        total = session.execute(
+            text(f"""
+            SELECT COUNT(*) FROM articles a
+            WHERE a.categories LIKE :category
+              AND a.created_at >= :threshold
+              {parsed_filter}
+        """),
+            {"category": f"%{category}%", "threshold": threshold},
+        ).scalar()
+
+        rows = session.execute(
+            text(f"""
+            SELECT a.*, f.title as source_name,
+                   f.icon_url as feed_icon_url,
+                   f.favicon_url as feed_favicon_url
+            FROM articles a
+            JOIN feeds f ON a.feed_id = f.id
+            WHERE a.categories LIKE :category
+              AND a.created_at >= :threshold
+              {parsed_filter}
+            ORDER BY a.created_at DESC
+            LIMIT :limit OFFSET :offset
+        """),
+            {
+                "category": f"%{category}%",
+                "threshold": threshold,
+                "limit": limit,
+                "offset": offset,
+            },
+        ).fetchall()
+
+        return [dict(row._mapping) for row in rows], total or 0
 
 
 def get_articles_by_tag(
-    db_path: Path,
     tag: str,
     hours: int = 48,
     limit: int = 20,
     offset: int = 0,
     parsed: bool = False,
 ) -> tuple[list[dict], int]:
-    """Get articles with a specific tag within the time window.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        tag: The tag to search for.
-        hours: Time window in hours.
-        limit: Maximum number of articles to return.
-        offset: Offset for pagination.
-        parsed: If True, only include articles that have been parsed
-            (parsed_at IS NOT NULL).
-    """
-    threshold = _hours_ago_iso(hours)
-    parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
-    with get_connection(db_path) as db:
-        count_cursor = db.execute(
-            f"""SELECT COUNT(*) FROM articles a
-                WHERE a.tags LIKE '%' || ? || '%'
-                  AND a.created_at >= ?
-                  {parsed_filter}""",
-            (tag, threshold),
-        )
-        total = count_cursor.fetchone()[0]
-
-        cursor = db.execute(
-            f"""SELECT a.id, a.title, a.summary, a.url,
-                       a.published_at, a.created_at,
-                       a.source_name, a.fact_check_status, a.tags,
-                       f.title as feed_source_name
-                FROM articles a
-                JOIN feeds f ON a.feed_id = f.id
-                WHERE a.tags LIKE '%' || ? || '%'
-                  AND a.created_at >= ?
-                  {parsed_filter}
-                ORDER BY a.created_at DESC
-                LIMIT ? OFFSET ?""",
-            (tag, threshold, limit, offset),
-        )
-        return [dict(row) for row in cursor.fetchall()], total
-
-
-def _get_articles_by_tag_legacy(
-    db_path: Path,
-    tag: str,
-    hours: int = 48,
-    limit: int = 20,
-    offset: int = 0,
-) -> tuple[list[dict], int]:
     """Get articles with a specific tag within the time window."""
     threshold = _hours_ago_iso(hours)
-    with get_connection(db_path) as db:
-        count_cursor = db.execute(
-            """SELECT COUNT(*) FROM articles
-                WHERE tags LIKE '%' || ? || '%'
-                  AND created_at >= ?""",
-            (tag, threshold),
-        )
-        total = count_cursor.fetchone()[0]
+    parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
 
-        cursor = db.execute(
-            """SELECT a.*, f.title as source_name,
-                       f.icon_url as feed_icon_url,
-                       f.favicon_url as feed_favicon_url
-                FROM articles a
-                JOIN feeds f ON a.feed_id = f.id
-                WHERE a.tags LIKE '%' || ? || '%'
-                  AND a.created_at >= ?
-                ORDER BY a.created_at DESC
-                LIMIT ? OFFSET ?""",
-            (tag, threshold, limit, offset),
-        )
-        return [dict(row) for row in cursor.fetchall()], total
+    with SessionLocal() as session:
+        total = session.execute(
+            text(f"""
+            SELECT COUNT(*) FROM articles a
+            WHERE a.tags LIKE :tag
+              AND a.created_at >= :threshold
+              {parsed_filter}
+        """),
+            {"tag": f"%{tag}%", "threshold": threshold},
+        ).scalar()
+
+        rows = session.execute(
+            text(f"""
+            SELECT a.id, a.title, a.summary, a.url,
+                   a.published_at, a.created_at,
+                   a.source_name, a.fact_check_status, a.tags,
+                   f.title as feed_source_name
+            FROM articles a
+            JOIN feeds f ON a.feed_id = f.id
+            WHERE a.tags LIKE :tag
+              AND a.created_at >= :threshold
+              {parsed_filter}
+            ORDER BY a.created_at DESC
+            LIMIT :limit OFFSET :offset
+        """),
+            {
+                "tag": f"%{tag}%",
+                "threshold": threshold,
+                "limit": limit,
+                "offset": offset,
+            },
+        ).fetchall()
+
+        return [dict(row._mapping) for row in rows], total or 0
 
 
 def get_related_articles(
-    db_path: Path,
     article_id: int,
     limit: int = 5,
     parsed: bool = False,
 ) -> list[dict]:
-    """Get related articles based on shared categories/tags.
-
-    Strategy: find articles that share the most category/tag tokens.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        article_id: The article ID to find related articles for.
-        limit: Maximum number of related articles to return.
-        parsed: If True, only include articles that have been parsed
-            (parsed_at IS NOT NULL).
-    """
-    with get_connection(db_path) as db:
-        # Get the article's categories and tags
-        cursor = db.execute(
-            "SELECT categories, tags FROM articles WHERE id = ?",
-            (article_id,),
-        )
-        row = cursor.fetchone()
-        if not row:
+    """Get related articles based on shared categories/tags."""
+    with SessionLocal() as session:
+        article = session.get(Article, article_id)
+        if not article:
             return []
 
         tokens: list[str] = []
-        if row["categories"]:
+        if article.categories:
             tokens.extend(
-                t.strip().lower()
-                for t in row["categories"].split(",")
-                if t.strip()
+                t.strip().lower() for t in article.categories.split(",") if t.strip()
             )
-        if row["tags"]:
+        if article.tags:
             tokens.extend(
-                t.strip().lower() for t in row["tags"].split(",") if t.strip()
+                t.strip().lower() for t in article.tags.split(",") if t.strip()
             )
 
         if not tokens:
             return []
 
-        # Build OR conditions for each token across categories and tags
+        # Build OR conditions for each token
         conditions = []
-        params: list = []
-        for token in tokens[:10]:  # Limit to avoid huge queries
+        params: dict = {"article_id": article_id}
+        for i, token in enumerate(tokens[:10]):
             conditions.append(
-                "(a.categories LIKE '%' || ? || '%' "
-                "OR a.tags LIKE '%' || ? || '%')"
+                f"(a.categories LIKE :token_{i} OR a.tags LIKE :token_{i})"
             )
-            params.extend([token, token])
+            params[f"token_{i}"] = f"%{token}%"
 
         where_sql = " OR ".join(conditions)
         parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
-        cursor = db.execute(
-            f"""SELECT a.*, f.title as source_name,
-                       f.icon_url as feed_icon_url,
-                       f.favicon_url as feed_favicon_url
-                FROM articles a
-                JOIN feeds f ON a.feed_id = f.id
-                WHERE a.id != ? AND ({where_sql})
-                  {parsed_filter}
-                ORDER BY a.created_at DESC
-                LIMIT ?""",
-            [article_id, *params, limit],
-        )
-        return [dict(row) for row in cursor.fetchall()]
+
+        rows = session.execute(
+            text(f"""
+            SELECT a.*, f.title as source_name,
+                   f.icon_url as feed_icon_url,
+                   f.favicon_url as feed_favicon_url
+            FROM articles a
+            JOIN feeds f ON a.feed_id = f.id
+            WHERE a.id != :article_id AND ({where_sql})
+              {parsed_filter}
+            ORDER BY a.created_at DESC
+            LIMIT :limit
+        """),
+            {**params, "limit": limit},
+        ).fetchall()
+
+        return [dict(row._mapping) for row in rows]
 
 
-def get_article_detail(
-    db_path: Path, article_id: int, parsed: bool = False
-) -> dict | None:
-    """Get full article detail for display page.
-
-    Includes all article fields and feed info via JOIN.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        article_id: The article ID to retrieve.
-        parsed: If True, only return the article if it has been parsed
-            (parsed_at IS NOT NULL). Unparsed articles will return None.
-    """
+def get_article_detail(article_id: int, parsed: bool = False) -> dict | None:
+    """Get full article detail for display page."""
     parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            f"""SELECT a.*, f.title as source_name,
-                       f.url as feed_url,
-                       f.icon_url as feed_icon_url,
-                       f.favicon_url as feed_favicon_url
-                FROM articles a
-                JOIN feeds f ON a.feed_id = f.id
-                WHERE a.id = ?
-                  {parsed_filter}""",
-            (article_id,),
-        )
-        row = cursor.fetchone()
-        return dict(row) if row else None
+
+    with SessionLocal() as session:
+        row = session.execute(
+            text(f"""
+            SELECT a.*, f.title as source_name,
+                   f.url as feed_url,
+                   f.icon_url as feed_icon_url,
+                   f.favicon_url as feed_favicon_url
+            FROM articles a
+            JOIN feeds f ON a.feed_id = f.id
+            WHERE a.id = :article_id
+              {parsed_filter}
+        """),
+            {"article_id": article_id},
+        ).fetchone()
+
+        return dict(row._mapping) if row else None
 
 
 def get_articles_by_time_bucket(
-    db_path: Path,
     bucket_hours: int = 6,
 ) -> list[dict]:
-    """Get article counts grouped by time buckets.
-
-    Returns list of dicts:
-    - bucket_start, bucket_end, count
-    Useful for timeline visualization on homepage.
-    Buckets: last 0-6h, 6-12h, 12-18h, 18-24h, 24-36h, 36-48h
-    """
+    """Get article counts grouped by time buckets."""
     total_hours = 48
     num_buckets = total_hours // bucket_hours
 
-    # Pre-compute bucket boundaries
     bucket_bounds = []
     for i in range(num_buckets):
         start_hours = i * bucket_hours
         end_hours = (i + 1) * bucket_hours
-        bucket_bounds.append(
-            (_hours_ago_iso(end_hours), _hours_ago_iso(start_hours))
-        )
+        bucket_bounds.append((_hours_ago_iso(end_hours), _hours_ago_iso(start_hours)))
 
-    # Build a single query using CASE WHEN for all buckets
     case_parts = []
-    params: list = []
+    params: dict = {}
     for idx, (start, end) in enumerate(bucket_bounds):
         case_parts.append(
-            f"SUM(CASE WHEN created_at >= ? AND created_at < ? "
-            f"THEN 1 ELSE 0 END) AS bucket_{idx}"
+            f"SUM(CASE WHEN created_at >= :start_{idx} "
+            f"AND created_at < :end_{idx} THEN 1 ELSE 0 END) AS bucket_{idx}"
         )
-        params.extend([start, end])
+        params[f"start_{idx}"] = start
+        params[f"end_{idx}"] = end
 
     sql = f"SELECT {', '.join(case_parts)} FROM articles"
 
-    with get_connection(db_path) as db:
-        cursor = db.execute(sql, params)
-        row = cursor.fetchone()
+    with SessionLocal() as session:
+        row = session.execute(text(sql), params).fetchone()
 
     buckets = []
     for idx, (start, end) in enumerate(bucket_bounds):
@@ -1581,143 +1197,112 @@ def get_articles_by_time_bucket(
     return buckets
 
 
-def get_articles_older_than_hours(
-    db_path: Path, hours: int = 48
-) -> list[dict]:
-    """Get articles older than specified hours.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        hours: Number of hours to use as threshold (default: 48).
-
-    Returns:
-        A list of dicts with article data for articles older than threshold.
-    """
-    with get_connection(db_path) as db:
+def get_articles_older_than_hours(hours: int = 48) -> list[dict]:
+    """Get articles older than specified hours."""
+    with SessionLocal() as session:
         threshold = _hours_ago_iso(hours)
+        rows = session.execute(
+            text("""
+            SELECT a.*, f.url as feed_url
+            FROM articles a
+            JOIN feeds f ON a.feed_id = f.id
+            WHERE a.created_at < :threshold
+            ORDER BY a.created_at ASC
+        """),
+            {"threshold": threshold},
+        ).fetchall()
 
-        cursor = db.execute(
-            """SELECT a.*, f.url as feed_url
-               FROM articles a
-               JOIN feeds f ON a.feed_id = f.id
-               WHERE a.created_at < ?
-               ORDER BY a.created_at ASC""",
-            (threshold,),
-        )
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows]
+        return [dict(row._mapping) for row in rows]
 
 
 def release_stale_article_claims(
-    db_path: Path,
     stale_after_minutes: int = _CLAIM_TIMEOUT_MINUTES,
 ) -> dict:
-    """Release processing claims for articles stuck after a crash.
-
-    Articles that were claimed for download or parsing but never
-    completed (e.g. due to an orchestrator crash) will have their
-    processing_status cleared so they can be re-claimed.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        stale_after_minutes: Minutes after which a claim is considered stale.
-
-    Returns:
-        A dict with ``released`` count of articles whose claims were cleared.
-    """
+    """Release processing claims for articles stuck after a crash."""
     cutoff = _claim_cutoff(stale_after_minutes)
 
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            """SELECT COUNT(*) FROM articles
-               WHERE processing_status = 'claimed'
-                 AND processing_started_at IS NOT NULL
-                 AND processing_started_at < ?""",
-            (cutoff,),
+    with SessionLocal() as session:
+        count = session.execute(
+            text("""
+            SELECT COUNT(*) FROM articles
+            WHERE processing_status = 'claimed'
+              AND processing_started_at IS NOT NULL
+              AND processing_started_at < :cutoff
+        """),
+            {"cutoff": cutoff},
+        ).scalar()
+
+        session.execute(
+            text("""
+            UPDATE articles
+            SET processing_status = NULL,
+                processing_owner = NULL,
+                processing_started_at = NULL
+            WHERE processing_status = 'claimed'
+              AND processing_started_at IS NOT NULL
+              AND processing_started_at < :cutoff
+        """),
+            {"cutoff": cutoff},
         )
-        count = cursor.fetchone()[0]
+        session.commit()
 
-        db.execute(
-            """UPDATE articles
-               SET processing_status = NULL,
-                   processing_owner = NULL,
-                   processing_started_at = NULL
-               WHERE processing_status = 'claimed'
-                 AND processing_started_at IS NOT NULL
-                 AND processing_started_at < ?""",
-            (cutoff,),
-        )
-        db.commit()
-
-    return {"released": count}
+    return {"released": count or 0}
 
 
-def get_web_stats(
-    db_path: Path, hours: int = 48, parsed: bool = False
-) -> dict:
-    """Get homepage display stats within the given time window.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        hours: Time window in hours.
-        parsed: If True, only count articles that have been parsed
-            (parsed_at IS NOT NULL).
-
-    Returns dict with: live_stories, verified, clusters, sources, last_updated.
-    """
+def get_web_stats(hours: int = 48, parsed: bool = False) -> dict:
+    """Get homepage display stats within the given time window."""
     threshold = _hours_ago_iso(hours)
     parsed_filter = "AND parsed_at IS NOT NULL" if parsed else ""
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            f"""SELECT
+
+    with SessionLocal() as session:
+        row = session.execute(
+            text(f"""
+            SELECT
                 COUNT(*) AS live_stories,
                 SUM(CASE WHEN fact_check_status = 'verified'
                          THEN 1 ELSE 0 END) AS verified,
                 COUNT(DISTINCT feed_id) AS sources,
                 MAX(created_at) AS last_updated
             FROM articles
-            WHERE created_at >= ?
-              {parsed_filter}""",
-            (threshold,),
-        )
-        row = dict(cursor.fetchone())
+            WHERE created_at >= :threshold
+              {parsed_filter}
+        """),
+            {"threshold": threshold},
+        ).fetchone()
 
-        # Count clusters using the same logic as get_topic_clusters
-        cluster_count = len(
-            get_topic_clusters(db_path, hours=hours, parsed=parsed)
-        )
-        row["clusters"] = cluster_count
+        result = {
+            "live_stories": row[0] or 0,
+            "verified": row[1] or 0,
+            "sources": row[2] or 0,
+            "last_updated": row[3],
+        }
 
-        return row
+        # Count clusters
+        cluster_count = len(get_topic_clusters(hours=hours, parsed=parsed))
+        result["clusters"] = cluster_count
+
+        return result
 
 
-def get_expiring_articles(
-    db_path: Path, within_hours: int = 6, parsed: bool = False
-) -> list[dict]:
-    """Get articles that will expire within the given number of hours.
-
-    Returns articles created between (48-within_hours) and 48 hours ago,
-    ordered by creation time ascending - most urgent first.
-
-    Args:
-        db_path: Path to the SQLite database file.
-        within_hours: Number of hours before expiry to include.
-        parsed: If True, only include articles that have been parsed
-            (parsed_at IS NOT NULL).
-    """
+def get_expiring_articles(within_hours: int = 6, parsed: bool = False) -> list[dict]:
+    """Get articles that will expire within the given number of hours."""
     outer = _hours_ago_iso(48)
     inner = _hours_ago_iso(48 - within_hours)
     parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            f"""SELECT a.id, a.title, a.url, a.created_at, a.source_name,
-                       f.title as feed_source_name
+
+    with SessionLocal() as session:
+        rows = session.execute(
+            text(f"""
+            SELECT a.id, a.title, a.url, a.created_at, a.source_name,
+                   f.title as feed_source_name
             FROM articles a
             JOIN feeds f ON a.feed_id = f.id
-            WHERE a.created_at >= ? AND a.created_at < ?
+            WHERE a.created_at >= :outer AND a.created_at < :inner
               {parsed_filter}
             ORDER BY a.created_at ASC
-            LIMIT 10""",
-            (outer, inner),
-        )
-        return [dict(row) for row in cursor.fetchall()]
+            LIMIT 10
+        """),
+            {"outer": outer, "inner": inner},
+        ).fetchall()
+
+        return [dict(row._mapping) for row in rows]

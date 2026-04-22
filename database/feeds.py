@@ -1,15 +1,15 @@
-"""Feed CRUD operations."""
+"""Feed CRUD operations using SQLAlchemy ORM."""
 
-import sqlite3
+from sqlalchemy.exc import IntegrityError
 
-from database.connection import _utcnow, get_connection
+from database.connection import SessionLocal, _utcnow
+from database.models import Feed
 
 
-def seed_feeds(db_path, urls: list[str]) -> int:
+def seed_feeds(urls: list[str]) -> int:
     """Insert feeds from seed file, ignoring duplicates.
 
     Args:
-        db_path: Path to the SQLite database file.
         urls: List of feed URLs to insert.
 
     Returns:
@@ -17,61 +17,52 @@ def seed_feeds(db_path, urls: list[str]) -> int:
     """
     now = _utcnow()
     count = 0
-    with get_connection(db_path) as db:
+    with SessionLocal() as session:
         for url in urls:
             try:
-                db.execute(
-                    "INSERT INTO feeds (url, created_at) VALUES (?, ?)",
-                    (url, now),
-                )
+                feed = Feed(url=url, created_at=now)
+                session.add(feed)
+                session.flush()
                 count += 1
-            except sqlite3.IntegrityError:
-                pass  # URL already exists
-        db.commit()
+            except IntegrityError:
+                session.rollback()
+        session.commit()
     return count
 
 
-def get_all_feeds(db_path, feed_domain: str | None = None) -> list[dict]:
+def get_all_feeds(feed_domain: str | None = None) -> list[dict]:
     """Get all feeds from the database, optionally filtered by domain.
 
     Args:
-        db_path: Path to the SQLite database file.
         feed_domain: Optional domain to filter feeds by (matched against
             the feed URL using LIKE).
 
     Returns:
         A list of dicts with feed data (including 'url' and 'id').
     """
-    with get_connection(db_path) as db:
+    with SessionLocal() as session:
+        query = session.query(Feed)
         if feed_domain:
-            cursor = db.execute(
-                "SELECT * FROM feeds WHERE url LIKE '%' || ? || '%'",
-                (feed_domain,),
-            )
-        else:
-            cursor = db.execute("SELECT * FROM feeds")
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows]
+            query = query.filter(Feed.url.like(f"%{feed_domain}%"))
+        feeds = query.all()
+        return [feed.to_dict() for feed in feeds]
 
 
-def get_feed_by_url(db_path, url: str) -> dict | None:
+def get_feed_by_url(url: str) -> dict | None:
     """Look up a feed by its URL.
 
     Args:
-        db_path: Path to the SQLite database file.
         url: The feed URL to look up.
 
     Returns:
         A dict with feed data, or None if not found.
     """
-    with get_connection(db_path) as db:
-        cursor = db.execute("SELECT * FROM feeds WHERE url = ?", (url,))
-        row = cursor.fetchone()
-        return dict(row) if row else None
+    with SessionLocal() as session:
+        feed = session.query(Feed).filter(Feed.url == url).first()
+        return feed.to_dict() if feed else None
 
 
 def update_feed_metadata(
-    db_path,
     feed_id: int,
     title: str,
     description: str | None = None,
@@ -81,7 +72,6 @@ def update_feed_metadata(
     """Update feed metadata after a successful fetch.
 
     Args:
-        db_path: Path to the SQLite database file.
         feed_id: The ID of the feed to update.
         title: The feed title.
         description: Optional feed description.
@@ -89,101 +79,88 @@ def update_feed_metadata(
         favicon_url: Optional URL of the feed favicon.
     """
     now = _utcnow()
-    with get_connection(db_path) as db:
-        db.execute(
-            """UPDATE feeds
-               SET title = ?, description = ?, last_fetched_at = ?,
-                   updated_at = ?,
-                   icon_url = COALESCE(?, icon_url),
-                   favicon_url = COALESCE(?, favicon_url)
-               WHERE id = ?""",
-            (title, description, now, now, icon_url, favicon_url, feed_id),
-        )
-        db.commit()
+    with SessionLocal() as session:
+        feed = session.get(Feed, feed_id)
+        if feed:
+            feed.title = title
+            feed.description = description
+            feed.last_fetched_at = now
+            feed.updated_at = now
+            if icon_url:
+                feed.icon_url = icon_url
+            if favicon_url:
+                feed.favicon_url = favicon_url
+            session.commit()
 
 
-def get_feed_by_id(db_path, feed_id: int) -> dict | None:
+def get_feed_by_id(feed_id: int) -> dict | None:
     """Look up a feed by its ID.
 
     Args:
-        db_path: Path to the SQLite database file.
         feed_id: The feed ID to look up.
 
     Returns:
         A dict with feed data, or None if not found.
     """
-    with get_connection(db_path) as db:
-        cursor = db.execute("SELECT * FROM feeds WHERE id = ?", (feed_id,))
-        row = cursor.fetchone()
-        return dict(row) if row else None
+    with SessionLocal() as session:
+        feed = session.get(Feed, feed_id)
+        return feed.to_dict() if feed else None
 
 
-def get_feed_article_count(db_path, feed_id: int) -> int:
+def get_feed_article_count(feed_id: int) -> int:
     """Get the number of articles for a specific feed.
 
     Args:
-        db_path: Path to the SQLite database file.
         feed_id: The feed ID to count articles for.
 
     Returns:
         Number of articles associated with the feed.
     """
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            "SELECT COUNT(*) FROM articles WHERE feed_id = ?", (feed_id,)
-        )
-        row = cursor.fetchone()
-        return row[0] if row else 0
+    from database.models import Article
+
+    with SessionLocal() as session:
+        count = session.query(Article).filter(Article.feed_id == feed_id).count()
+        return count
 
 
-def delete_feed(db_path, feed_id: int) -> bool:
+def delete_feed(feed_id: int) -> bool:
     """Delete a feed and its associated articles by feed ID.
 
     Args:
-        db_path: Path to the SQLite database file.
         feed_id: The ID of the feed to delete.
 
     Returns:
         True if the feed was deleted, False if not found.
     """
-    with get_connection(db_path) as db:
-        # Delete associated articles first to avoid FK constraint errors
-        db.execute("DELETE FROM articles WHERE feed_id = ?", (feed_id,))
-        cursor = db.execute("DELETE FROM feeds WHERE id = ?", (feed_id,))
-        db.commit()
-        return cursor.rowcount > 0
+    with SessionLocal() as session:
+        feed = session.get(Feed, feed_id)
+        if feed:
+            session.delete(feed)
+            session.commit()
+            return True
+        return False
 
 
-def get_feeds_paginated(db_path, limit: int = 20, offset: int = 0) -> list[dict]:
+def get_feeds_paginated(limit: int = 20, offset: int = 0) -> list[dict]:
     """Get feeds with server-side pagination.
 
     Args:
-        db_path: Path to the SQLite database file.
         limit: Maximum number of feeds to return.
         offset: Number of feeds to skip.
 
     Returns:
         A list of dicts with feed data.
     """
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            "SELECT * FROM feeds ORDER BY id LIMIT ? OFFSET ?",
-            (limit, offset),
-        )
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows]
+    with SessionLocal() as session:
+        feeds = session.query(Feed).order_by(Feed.id).limit(limit).offset(offset).all()
+        return [feed.to_dict() for feed in feeds]
 
 
-def get_feed_count(db_path) -> int:
+def get_feed_count() -> int:
     """Get total number of feeds in the database.
-
-    Args:
-        db_path: Path to the SQLite database file.
 
     Returns:
         Total number of feeds.
     """
-    with get_connection(db_path) as db:
-        cursor = db.execute("SELECT COUNT(*) FROM feeds")
-        row = cursor.fetchone()
-        return row[0] if row else 0
+    with SessionLocal() as session:
+        return session.query(Feed).count()

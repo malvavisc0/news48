@@ -1,11 +1,9 @@
 """Stats command - show system statistics."""
 
 import json
-import os
-import sqlite3
-from pathlib import Path
 
 import typer
+from sqlalchemy.exc import SQLAlchemyError
 
 from agents.tools.planner import _ensure_plans_dir
 from database import (
@@ -14,7 +12,6 @@ from database import (
     get_feed_stats,
     get_fetch_stats,
     get_retention_policy_stats,
-    init_database,
 )
 
 from ._common import _fmt_date, emit_error, emit_json, require_db
@@ -30,14 +27,7 @@ def _format_size(size_bytes: int) -> str:
 
 
 def _extract_domain(url: str) -> str:
-    """Extract domain from a URL for display purposes.
-
-    Args:
-        url: A URL string.
-
-    Returns:
-        The domain portion of the URL, or the original URL if parsing fails.
-    """
+    """Extract domain from a URL for display purposes."""
     try:
         from urllib.parse import urlparse
 
@@ -54,24 +44,14 @@ def _safe_int(value: int | float | str | None) -> int:
     return int(value)
 
 
-def _collect_stats(db_path: Path, stale_days: int) -> dict:
-    """Gather all stats into a single dict.
+def _collect_stats(stale_days: int) -> dict:
+    """Gather all stats into a single dict."""
+    article = get_article_stats()
+    feed = get_feed_stats(stale_days)
+    fetch = get_fetch_stats()
 
-    Args:
-        db_path: Path to the SQLite database file.
-        stale_days: Days before a feed is considered stale.
-
-    Returns:
-        A dict containing database, articles, feeds, and runs stats.
-    """
-    db_size = os.path.getsize(db_path)
-
-    article = get_article_stats(db_path)
-    feed = get_feed_stats(db_path, stale_days)
-    fetch = get_fetch_stats(db_path)
-
-    retention = get_retention_policy_stats(db_path)
-    health = check_database_health(db_path)
+    retention = get_retention_policy_stats()
+    health = check_database_health()
 
     plans = {"pending": 0, "executing": 0, "completed": 0, "failed": 0}
     for plan_file in _ensure_plans_dir().glob("*.json"):
@@ -84,7 +64,7 @@ def _collect_stats(db_path: Path, stale_days: int) -> dict:
             plans[status] += 1
 
     return {
-        "db_size_mb": round(db_size / (1024 * 1024), 2),
+        "db_size_mb": health.get("db_size_mb", 0),
         "articles": {
             "total": _safe_int(article["total"]),
             "parsed": _safe_int(article["parsed"]),
@@ -128,7 +108,6 @@ def _collect_stats(db_path: Path, stale_days: int) -> dict:
         "health": {
             "is_connected": health["is_connected"],
             "db_size_mb": health["db_size_mb"],
-            "wal_mode": health["wal_mode"],
             "integrity_ok": health["integrity_ok"],
             "table_counts": health["table_counts"],
         },
@@ -137,11 +116,7 @@ def _collect_stats(db_path: Path, stale_days: int) -> dict:
 
 
 def _render_text(data: dict) -> None:
-    """Render stats as simple text output.
-
-    Args:
-        data: The stats dict from _collect_stats.
-    """
+    """Render stats as simple text output."""
     art = data["articles"]
     sent = data["sentiment"]
     feeds = data["feeds"]
@@ -243,7 +218,6 @@ def _render_text(data: dict) -> None:
     hlt = data["health"]
     print("\nDatabase Health:")
     print(f"  Connected: {'✓' if hlt['is_connected'] else '✗'}")
-    print(f"  WAL mode: {'✓' if hlt['wal_mode'] else '✗'}")
     print(f"  Integrity: {'✓' if hlt['integrity_ok'] else '✗'}")
     if hlt.get("table_counts"):
         print("  Table counts:")
@@ -263,18 +237,12 @@ def stats(
         help="Days before a feed is considered stale",
     ),
 ) -> None:
-    """Show system statistics.
-
-    Displays database size, article counts, pipeline health,
-    sentiment distribution, feed statistics, and recent run
-    history.
-    """
-    db_path = require_db()
-    init_database(db_path)
+    """Show system statistics."""
+    require_db()
 
     try:
-        data = _collect_stats(db_path, stale_days)
-    except sqlite3.DatabaseError as exc:
+        data = _collect_stats(stale_days)
+    except SQLAlchemyError as exc:
         emit_error(f"Database error: {exc}", as_json=output_json)
     except Exception as exc:
         emit_error(str(exc), as_json=output_json)

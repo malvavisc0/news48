@@ -2,7 +2,7 @@
 
 import typer
 
-from database import get_articles_paginated, init_database
+from database import get_articles_paginated
 
 from ._common import emit_error, require_db
 
@@ -17,15 +17,13 @@ def generate_sitemap_cmd(
     site_url: str = typer.Option(..., "--site-url", help="Base URL of the website"),
 ) -> None:
     """Generate sitemap.xml for search engines."""
-    db_path = require_db()
-    init_database(db_path)
+    require_db()
 
     try:
         from helpers.seo import generate_sitemap
 
         # Fetch all articles within 48h
         articles, total = get_articles_paginated(
-            db_path,
             limit=1000,
             hours=48,
             include_source=True,

@@ -5,9 +5,9 @@ Manual test steps for all `news48` CLI commands. Run each test in order -- later
 ## Prerequisites
 
 ```bash
-# Copy .env.example to .env and configure DATABASE_PATH
+# Copy .env.example to .env and configure DATABASE_URL
 cp .env.example .env
-# Edit .env: set DATABASE_PATH=news48_test.db (use a test DB)
+# Edit .env: set DATABASE_URL=mysql+mysqlconnector://news48:news48@localhost:3306/news48_test
 
 # Verify the CLI is available
 uv run news48 --help
@@ -599,13 +599,13 @@ Expected: `{"error": "Log file not found: nonexistent"}`, exit code 1
 
 ### 14.1 No database configured
 ```bash
-DATABASE_PATH="" uv run news48 stats
+DATABASE_URL="" uv run news48 stats
 ```
-Expected: `Error: DATABASE_PATH not configured` to stderr, exit code 1
+Expected: `Error: DATABASE_URL not configured` to stderr, exit code 1
 
 ### 14.2 Invalid database path
 ```bash
-DATABASE_PATH=/nonexistent/path.db uv run news48 stats --json
+DATABASE_URL=mysql+mysqlconnector://bad:bad@localhost:3306/does_not_exist uv run news48 stats --json
 ```
 Expected: `{"error": "..."}` to stdout, exit code 1
 
@@ -872,6 +872,6 @@ uv run news48 parse --retry --json
 ## Cleanup
 
 ```bash
-# Remove the test database
-rm -f news48_test.db news48_test.db-wal news48_test.db-shm
+# Remove and recreate the test schema
+mysql -unews48 -pnews48 -e "DROP DATABASE IF EXISTS news48_test; CREATE DATABASE news48_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 ```

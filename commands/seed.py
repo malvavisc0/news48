@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import typer
 
 import config
-from database import init_database, seed_feeds
+from database import seed_feeds
 from helpers import load_urls
 
 from ._common import emit_error, emit_json, require_db, status_msg
@@ -49,13 +49,11 @@ def _seed(seed_file: str) -> dict:
     Returns:
         A dict with seeding results.
     """
-    db_path = require_db()
-
-    init_database(db_path)
+    require_db()
     urls = load_urls(seed_file)
 
     status_msg(f"Seeding {len(urls)} feed URLs...")
-    count = seed_feeds(db_path, urls)
+    count = seed_feeds(urls)
 
     result = {
         "seeded": count,

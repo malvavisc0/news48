@@ -49,7 +49,7 @@ tests/
 .pytest_cache/
 htmlcov/
 .coverage
-run.website.sh
+scripts/run-website.sh
 LICENSE
 README.md
 .python-version

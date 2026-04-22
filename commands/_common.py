@@ -3,7 +3,6 @@
 import json
 import sys
 from datetime import datetime
-from pathlib import Path
 from typing import NoReturn
 
 import typer
@@ -25,12 +24,11 @@ def _fmt_date(iso_str: str | None) -> str:
         return iso_str
 
 
-def require_db() -> Path:
-    """Return the DB path or exit with an error."""
-    if not DbConfig.path:
-        print("DATABASE_PATH not configured", file=sys.stderr)
+def require_db() -> None:
+    """Verify database is configured. No longer returns a path."""
+    if not DbConfig.url:
+        print("DATABASE_URL not configured", file=sys.stderr)
         raise typer.Exit(code=1)
-    return DbConfig.path
 
 
 def emit_json(data: dict) -> None:

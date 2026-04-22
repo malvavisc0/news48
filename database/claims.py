@@ -2,9 +2,9 @@
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 
-from .connection import get_connection
+from database.connection import SessionLocal
+from database.models import Claim
 
 
 def _utcnow() -> str:
@@ -12,14 +12,13 @@ def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def insert_claims(db_path: Path, article_id: int, claims: list[dict]) -> int:
+def insert_claims(article_id: int, claims: list[dict]) -> int:
     """Insert per-claim fact-check results for an article.
 
     Deletes existing claims first (idempotent re-check).
     Returns number of claims inserted.
 
     Args:
-        db_path: Path to the SQLite database file.
         article_id: The article ID to associate claims with.
         claims: List of dicts with keys: claim_text, verdict,
                 evidence_summary, sources (list or JSON string).
@@ -27,12 +26,12 @@ def insert_claims(db_path: Path, article_id: int, claims: list[dict]) -> int:
     Returns:
         Number of claims inserted.
     """
-    delete_claims_for_article(db_path, article_id)
+    delete_claims_for_article(article_id)
 
     now = _utcnow()
     inserted = 0
 
-    with get_connection(db_path) as db:
+    with SessionLocal() as session:
         for claim in claims:
             sources = claim.get("sources", [])
             if isinstance(sources, list):
@@ -40,48 +39,42 @@ def insert_claims(db_path: Path, article_id: int, claims: list[dict]) -> int:
             else:
                 sources_json = sources
 
-            db.execute(
-                """INSERT INTO claims
-                   (article_id, claim_text, verdict,
-                    evidence_summary, sources, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (
-                    article_id,
-                    claim["claim_text"],
-                    claim["verdict"],
-                    claim.get("evidence_summary"),
-                    sources_json,
-                    now,
-                ),
+            claim_obj = Claim(
+                article_id=article_id,
+                claim_text=claim["claim_text"],
+                verdict=claim["verdict"],
+                evidence_summary=claim.get("evidence_summary"),
+                sources=sources_json,
+                created_at=now,
             )
+            session.add(claim_obj)
             inserted += 1
-        db.commit()
+        session.commit()
 
     return inserted
 
 
-def get_claims_for_article(db_path: Path, article_id: int) -> list[dict]:
+def get_claims_for_article(article_id: int) -> list[dict]:
     """Return all claims for an article, ordered by id.
 
     Args:
-        db_path: Path to the SQLite database file.
         article_id: The article ID to fetch claims for.
 
     Returns:
         List of dicts with keys: id, article_id, claim_text, verdict,
         evidence_summary, sources (parsed list), created_at.
     """
-    with get_connection(db_path) as db:
-        rows = db.execute(
-            "SELECT id, article_id, claim_text, verdict, "
-            "evidence_summary, sources, created_at "
-            "FROM claims WHERE article_id = ? ORDER BY id",
-            (article_id,),
-        ).fetchall()
+    with SessionLocal() as session:
+        claims = (
+            session.query(Claim)
+            .filter(Claim.article_id == article_id)
+            .order_by(Claim.id)
+            .all()
+        )
 
     result = []
-    for row in rows:
-        sources_raw = row["sources"]
+    for claim in claims:
+        sources_raw = claim.sources
         try:
             sources = json.loads(sources_raw) if sources_raw else []
         except (json.JSONDecodeError, TypeError):
@@ -89,41 +82,33 @@ def get_claims_for_article(db_path: Path, article_id: int) -> list[dict]:
 
         result.append(
             {
-                "id": row["id"],
-                "article_id": row["article_id"],
-                "claim_text": row["claim_text"],
-                "verdict": row["verdict"],
-                "evidence_summary": row["evidence_summary"],
+                "id": claim.id,
+                "article_id": claim.article_id,
+                "claim_text": claim.claim_text,
+                "verdict": claim.verdict,
+                "evidence_summary": claim.evidence_summary,
                 "sources": sources,
-                "created_at": row["created_at"],
+                "created_at": claim.created_at,
             }
         )
 
     return result
 
 
-def delete_claims_for_article(db_path: Path, article_id: int) -> int:
+def delete_claims_for_article(article_id: int) -> int:
     """Delete all claims for an article. Returns count deleted.
 
     Args:
-        db_path: Path to the SQLite database file.
         article_id: The article ID to delete claims for.
 
     Returns:
         Number of claims deleted.
     """
-    with get_connection(db_path) as db:
-        cursor = db.execute(
-            "SELECT COUNT(*) FROM claims WHERE article_id = ?",
-            (article_id,),
-        )
-        count = cursor.fetchone()[0]
+    with SessionLocal() as session:
+        count = session.query(Claim).filter(Claim.article_id == article_id).count()
 
-        db.execute(
-            "DELETE FROM claims WHERE article_id = ?",
-            (article_id,),
-        )
-        db.commit()
+        session.query(Claim).filter(Claim.article_id == article_id).delete()
+        session.commit()
 
     return count
 
