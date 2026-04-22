@@ -1222,27 +1222,21 @@ def release_stale_article_claims(
     cutoff = _claim_cutoff(stale_after_minutes)
 
     with SessionLocal() as session:
-        count = session.execute(
-            text("""
-            SELECT COUNT(*) FROM articles
-            WHERE processing_status = 'claimed'
-              AND processing_started_at IS NOT NULL
-              AND processing_started_at < :cutoff
-        """),
-            {"cutoff": cutoff},
-        ).scalar()
+        stale_query = session.query(Article).filter(
+            Article.processing_status.in_(_VALID_PROCESSING_ACTIONS),
+            Article.processing_started_at.is_not(None),
+            Article.processing_started_at < cutoff,
+        )
 
-        session.execute(
-            text("""
-            UPDATE articles
-            SET processing_status = NULL,
-                processing_owner = NULL,
-                processing_started_at = NULL
-            WHERE processing_status = 'claimed'
-              AND processing_started_at IS NOT NULL
-              AND processing_started_at < :cutoff
-        """),
-            {"cutoff": cutoff},
+        count = stale_query.count()
+
+        stale_query.update(
+            {
+                Article.processing_status: None,
+                Article.processing_owner: None,
+                Article.processing_started_at: None,
+            },
+            synchronize_session=False,
         )
         session.commit()
 
@@ -1253,6 +1247,7 @@ def get_web_stats(hours: int = 48, parsed: bool = False) -> dict:
     """Get homepage display stats within the given time window."""
     threshold = _hours_ago_iso(hours)
     parsed_filter = "AND parsed_at IS NOT NULL" if parsed else ""
+    last_updated_column = "MAX(parsed_at)" if parsed else "MAX(created_at)"
 
     with SessionLocal() as session:
         row = session.execute(
@@ -1262,7 +1257,7 @@ def get_web_stats(hours: int = 48, parsed: bool = False) -> dict:
                 SUM(CASE WHEN fact_check_status = 'verified'
                          THEN 1 ELSE 0 END) AS verified,
                 COUNT(DISTINCT feed_id) AS sources,
-                MAX(created_at) AS last_updated
+                {last_updated_column} AS last_updated
             FROM articles
             WHERE created_at >= :threshold
               {parsed_filter}

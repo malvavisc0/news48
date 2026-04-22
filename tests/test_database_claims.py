@@ -1,5 +1,7 @@
 """Tests for claims database operations using SQLAlchemy session fixture."""
 
+from datetime import datetime, timedelta, timezone
+
 from database import (
     claim_articles_for_processing,
     clear_article_processing_claim,
@@ -7,16 +9,19 @@ from database import (
     delete_claims_for_article,
     get_article_by_id,
     get_claims_for_article,
+    get_web_stats,
     insert_claims,
     update_article_fact_check,
 )
+from database.articles import release_stale_article_claims
 from database.models import Article, Feed, Fetch
 
 
 def _create_article(db_session, url: str = "https://example.com/a") -> int:
     """Create a test article using the session fixture."""
+    suffix = url.rsplit("/", 1)[-1]
     feed = Feed(
-        url="https://example.com/feed.xml",
+        url=f"https://example.com/{suffix}-feed.xml",
         created_at="2024-01-01T00:00:00+00:00",
     )
     db_session.add(feed)
@@ -72,6 +77,48 @@ def test_processing_claim_can_be_released(db_session):
     assert claimed == [article_id]
 
 
+def test_release_stale_article_claims_releases_download_claims(db_session):
+    article_id = _create_article(db_session)
+
+    claim_articles_for_processing([article_id], "download", "owner-a")
+
+    article = db_session.get(Article, article_id)
+    article.processing_started_at = (
+        datetime.now(timezone.utc) - timedelta(minutes=31)
+    ).isoformat()
+    db_session.commit()
+
+    result = release_stale_article_claims()
+    assert result["released"] == 1
+
+    refreshed = get_article_by_id(article_id)
+    assert refreshed is not None
+    assert refreshed["processing_status"] is None
+    assert refreshed["processing_owner"] is None
+    assert refreshed["processing_started_at"] is None
+
+
+def test_get_web_stats_uses_latest_parsed_timestamp_for_parsed_view(
+    db_session,
+):
+    old_article_id = _create_article(db_session, url="https://example.com/old")
+    new_article_id = _create_article(db_session, url="https://example.com/new")
+
+    old_article = db_session.get(Article, old_article_id)
+    new_article = db_session.get(Article, new_article_id)
+    assert old_article is not None
+    assert new_article is not None
+
+    old_article.created_at = "2024-01-01T00:10:00+00:00"
+    old_article.parsed_at = "2024-01-01T00:20:00+00:00"
+    new_article.created_at = "2024-01-01T00:40:00+00:00"
+    new_article.parsed_at = "2024-01-01T00:30:00+00:00"
+    db_session.commit()
+
+    stats = get_web_stats(hours=999999, parsed=True)
+    assert stats["last_updated"] == "2024-01-01T00:30:00+00:00"
+
+
 def test_update_article_fact_check_requires_force_to_overwrite(db_session):
     article_id = _create_article(db_session)
 
@@ -98,6 +145,7 @@ def test_update_article_fact_check_requires_force_to_overwrite(db_session):
     assert updated_with_force is True
 
     article = get_article_by_id(article_id)
+    assert article is not None
     assert article["fact_check_status"] == "disputed"
     assert article["fact_check_result"] == "changed"
 

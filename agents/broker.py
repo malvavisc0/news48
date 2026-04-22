@@ -30,10 +30,8 @@ else:
 # Register custom middleware (must be added AFTER set_broker)
 # Import here to avoid circular imports — actors import broker at top.
 from agents.middleware import PlanRecoveryMiddleware  # noqa: E402
-from agents.middleware import (
-    StartupRecoveryMiddleware,  # noqa: E402
-    StructuredLoggingMiddleware,
-)
+from agents.middleware import StartupRecoveryMiddleware  # noqa: E402
+from agents.middleware import StructuredLoggingMiddleware
 
 # Only add middleware once (check by class name)
 _middleware_names = {type(m).__name__ for m in redis_broker.middleware}
