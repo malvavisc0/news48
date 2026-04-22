@@ -8,12 +8,17 @@ from database import (
     compute_overall_verdict,
     delete_claims_for_article,
     get_article_by_id,
+    get_articles_paginated,
     get_claims_for_article,
     get_web_stats,
     insert_claims,
     update_article_fact_check,
 )
-from database.articles import get_articles_by_category, release_stale_article_claims
+from database.articles import (
+    get_articles_by_category,
+    get_articles_by_tag,
+    release_stale_article_claims,
+)
 from database.models import Article, Feed, Fetch
 
 
@@ -137,6 +142,42 @@ def test_get_articles_by_category_without_limit_returns_all_matches(
     articles, total = get_articles_by_category("world", hours=999999, limit=None)
     assert total == 2
     assert len(articles) == 2
+
+
+def test_get_articles_by_tag_without_limit_returns_all_matches(db_session):
+    first_id = _create_article(db_session, url="https://example.com/tag-1")
+    second_id = _create_article(db_session, url="https://example.com/tag-2")
+
+    first = db_session.get(Article, first_id)
+    second = db_session.get(Article, second_id)
+    assert first is not None
+    assert second is not None
+
+    first.tags = "europe"
+    second.tags = "europe"
+    db_session.commit()
+
+    articles, total = get_articles_by_tag("europe", hours=999999, limit=None)
+    assert total == 2
+    assert len(articles) == 2
+
+
+def test_get_articles_paginated_respects_requested_limit(db_session):
+    ids = [
+        _create_article(db_session, url=f"https://example.com/home-{i}")
+        for i in range(40)
+    ]
+
+    for idx, article_id in enumerate(ids):
+        article = db_session.get(Article, article_id)
+        assert article is not None
+        article.created_at = f"2024-01-01T00:{idx:02d}:00+00:00"
+        article.parsed_at = f"2024-01-01T00:{idx:02d}:30+00:00"
+    db_session.commit()
+
+    articles, total = get_articles_paginated(hours=999999, limit=35, parsed=True)
+    assert total == 40
+    assert len(articles) == 35
 
 
 def test_update_article_fact_check_requires_force_to_overwrite(db_session):

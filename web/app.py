@@ -46,7 +46,7 @@ async def homepage(request: Request):
 
     stats = get_web_stats(hours=48, parsed=True)
     stories, _ = get_articles_paginated(
-        hours=48, limit=20, include_source=True, parsed=True
+        hours=48, limit=35, include_source=True, parsed=True
     )
     clusters = get_topic_clusters(hours=48, parsed=True)
     expiring = get_expiring_articles(within_hours=6, parsed=True)
@@ -135,7 +135,9 @@ async def cluster_detail(request: Request, cluster_slug: str):
     """Cluster detail page showing all articles matching a tag."""
     from database.articles import get_all_categories, get_articles_by_tag
 
-    articles, total = get_articles_by_tag(cluster_slug, hours=48, limit=50, parsed=True)
+    articles, total = get_articles_by_tag(
+        cluster_slug, hours=48, limit=None, parsed=True
+    )
     if not articles:
         raise HTTPException(status_code=404, detail="Cluster not found")
 
