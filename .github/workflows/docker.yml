@@ -46,18 +46,22 @@ jobs:
           fi
           echo "✓ Versions match"
 
-  build-and-push:
+  build:
     needs: [test, check-version]
     if: always() && needs.test.result == 'success' && (needs.check-version.result == 'success' || needs.check-version.result == 'skipped')
-    runs-on: ubuntu-latest
     strategy:
       matrix:
         target: [web, worker]
+        platform:
+          - runner: ubuntu-latest
+            docker: linux/amd64
+            suffix: amd64
+          - runner: ubuntu-24.04-arm
+            docker: linux/arm64
+            suffix: arm64
+    runs-on: ${{ matrix.platform.runner }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up QEMU (for ARM64 cross-compilation)
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -76,19 +80,59 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch,suffix=-${{ matrix.target }}
-            type=semver,pattern={{version}},suffix=-${{ matrix.target }}
-            type=semver,pattern={{major}}.{{minor}},suffix=-${{ matrix.target }}
-            type=sha,suffix=-${{ matrix.target }}
+            type=ref,event=branch,suffix=-${{ matrix.target }}-${{ matrix.platform.suffix }}
+            type=semver,pattern={{version}},suffix=-${{ matrix.target }}-${{ matrix.platform.suffix }}
+            type=semver,pattern={{major}}.{{minor}},suffix=-${{ matrix.target }}-${{ matrix.platform.suffix }}
+            type=sha,suffix=-${{ matrix.target }}-${{ matrix.platform.suffix }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           target: ${{ matrix.target }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform.docker }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  merge:
+    needs: [build]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [web, worker]
+    steps:
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create multi-platform manifest
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+
+          # Determine tag prefixes based on ref
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            MAJOR_MINOR="${VERSION%.*}"
+            TAGS=("${VERSION}-${{ matrix.target }}" "${MAJOR_MINOR}-${{ matrix.target }}")
+          else
+            TAGS=("${GITHUB_REF_NAME}-${{ matrix.target }}")
+          fi
+
+          # Always include SHA tag
+          SHA="${GITHUB_SHA::7}"
+          TAGS+=("${SHA}-${{ matrix.target }}")
+
+          for TAG in "${TAGS[@]}"; do
+            echo "Merging manifest for ${IMAGE}:${TAG}"
+            docker buildx imagetools create \
+              -t "${IMAGE}:${TAG}" \
+              "${IMAGE}:${TAG}-amd64" \
+              "${IMAGE}:${TAG}-arm64"
+          done
