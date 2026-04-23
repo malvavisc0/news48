@@ -16,20 +16,20 @@ dependencies = [
     "SQLAlchemy",
     "alembic",
     "mysql-connector-python",
+    "dateparser",
+    "feedparser",
+    "httpx",
+    "redis",
 ]
 
 [project.optional-dependencies]
 cli = [
     "typer",
     "rich",
-    "feedparser",
-    "dateparser",
-    "httpx",
     "html-to-markdown",
     "llama-index-llms-openai-like",
     "dramatiq",
     "periodiq",
-    "redis",
     "mcp[cli]",
 ]
 web = [
@@ -37,7 +37,6 @@ web = [
     "uvicorn",
     "Jinja2",
     "mcp",
-    "redis",
 ]
 all = ["news48[cli,web]"]
 

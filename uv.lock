@@ -1321,40 +1321,36 @@ name = "news48"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "dateparser" },
+    { name = "feedparser" },
+    { name = "httpx" },
     { name = "loguru" },
     { name = "mysql-connector-python" },
     { name = "pydantic" },
     { name = "python-dotenv" },
+    { name = "redis" },
     { name = "sqlalchemy" },
 ]
 
 [package.optional-dependencies]
 all = [
-    { name = "dateparser" },
     { name = "dramatiq" },
     { name = "fastapi" },
-    { name = "feedparser" },
     { name = "html-to-markdown" },
-    { name = "httpx" },
     { name = "jinja2" },
     { name = "llama-index-llms-openai-like" },
     { name = "mcp", extra = ["cli"] },
     { name = "periodiq" },
-    { name = "redis" },
     { name = "rich" },
     { name = "typer" },
     { name = "uvicorn" },
 ]
 cli = [
-    { name = "dateparser" },
     { name = "dramatiq" },
-    { name = "feedparser" },
     { name = "html-to-markdown" },
-    { name = "httpx" },
     { name = "llama-index-llms-openai-like" },
     { name = "mcp", extra = ["cli"] },
     { name = "periodiq" },
-    { name = "redis" },
     { name = "rich" },
     { name = "typer" },
 ]
@@ -1362,7 +1358,6 @@ web = [
     { name = "fastapi" },
     { name = "jinja2" },
     { name = "mcp" },
-    { name = "redis" },
     { name = "uvicorn" },
 ]
 
@@ -1376,12 +1371,12 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic" },
-    { name = "dateparser", marker = "extra == 'cli'" },
+    { name = "dateparser" },
     { name = "dramatiq", marker = "extra == 'cli'" },
     { name = "fastapi", marker = "extra == 'web'" },
-    { name = "feedparser", marker = "extra == 'cli'" },
+    { name = "feedparser" },
     { name = "html-to-markdown", marker = "extra == 'cli'" },
-    { name = "httpx", marker = "extra == 'cli'" },
+    { name = "httpx" },
     { name = "jinja2", marker = "extra == 'web'" },
     { name = "llama-index-llms-openai-like", marker = "extra == 'cli'" },
     { name = "loguru" },
@@ -1392,8 +1387,7 @@ requires-dist = [
     { name = "periodiq", marker = "extra == 'cli'" },
     { name = "pydantic" },
     { name = "python-dotenv" },
-    { name = "redis", marker = "extra == 'cli'" },
-    { name = "redis", marker = "extra == 'web'" },
+    { name = "redis" },
     { name = "rich", marker = "extra == 'cli'" },
     { name = "sqlalchemy" },
     { name = "typer", marker = "extra == 'cli'" },
