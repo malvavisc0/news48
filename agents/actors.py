@@ -195,7 +195,7 @@ if not _actors_already_registered():
 
     @dramatiq.actor(
         queue_name="fact_checker",
-        periodic=cron("*/5 * * * *"),  # every 5 minutes
+        periodic=cron("*/10 * * * *"),  # every 10 minutes
     )
     def scheduled_fact_checker() -> None:
         """Periodic scheduler for fact_checker."""

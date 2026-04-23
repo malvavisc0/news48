@@ -29,6 +29,9 @@ Error codes follow the pattern `category.detail` — a category prefix, a dot, a
 | `parse.fidelity` | Fidelity violation | Invented facts or missing core facts |
 | `parse.html_in_output` | HTML in output | HTML tags found in title, summary, or content |
 | `parse.clickbait_title` | Clickbait title | Title is vague, deictic, or clickbait without a descriptive subject |
+| `parse.verbatim_copy` | Verbatim copy | Content contains verbatim or near-verbatim passages from source |
+| `parse.shallow_content` | Shallow content | Content is too brief or lacks substantive depth (below 1200 chars or fewer than 3 substantive paragraphs) |
+| `parse.unchanged_title` | Unchanged title | Output title is identical or near-identical to source title |
 | `sys` | System | Infrastructure or tool failures |
 | `sys.db` | Database error | SQLite write contention, connection failure |
 | `sys.plan` | Plan error | Plan claim failure, stale plan, step transition error |
@@ -46,3 +49,6 @@ Error codes follow the pattern `category.detail` — a category prefix, a dot, a
 - `sys.db` — persistence or database write failure.
 - `parse.invalid_field` — ineligible fact-check target or invalid normalized field.
 - `parse.fidelity` — missing required supported content or invented unsupported facts.
+- `parse.verbatim_copy` — content contains phrases of 4+ consecutive words matching the source.
+- `parse.shallow_content` — content below 1200 chars or fewer than 3 substantive paragraphs.
+- `parse.unchanged_title` — output title matches source title verbatim or with only trivial changes.

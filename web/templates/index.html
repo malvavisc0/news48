@@ -1,13 +1,23 @@
 {% extends "base.html" %}
 
-{% block title %}news48 — live news within 48 hours{% endblock %}
+{% block title %}{{ seo.title if seo is defined and seo else 'Live AI-Verified News and Fact-Checked Stories | news48'
+}}{% endblock %}
+
+{% block json_ld %}
+{% if seo is defined and seo and seo.json_ld %}
+{% for item in seo.json_ld %}
+<script type="application/ld+json">{{ item | tojson }}</script>
+{% endfor %}
+{% endif %}
+{% endblock %}
 
 {% block body_class %}page-index{% endblock %}
 
 {% block content %}
 <header>
-    <h1 class="masthead">news48</h1>
-    <div class="tagline">ai-verified news · 48 hour window · live machine feed</div>
+    <h1 class="masthead">Live AI-verified news from the last 48 hours</h1>
+    <div class="tagline">Rewritten summaries, source transparency, fact-check signals, and fast topic discovery in one
+        live feed.</div>
     <div class="status-line">
         <span><span class="live-dot"></span><strong>{{ stats.live_stories }}</strong> live stories</span>
         <span><strong>{{ stats.verified }}</strong> verified</span>
@@ -31,7 +41,7 @@
 </nav>
 
 <section class="section" aria-labelledby="now-label">
-    <h2 class="section-label" id="now-label">now</h2>
+    <h2 class="section-label" id="now-label">latest verified and developing stories</h2>
     <div class="story-list">
         {% for story in stories %}
         <article class="story{% if story.is_breaking %} is-breaking{% endif %}">
@@ -75,7 +85,7 @@
                     </span>
                 </div>
                 <div class="story-links">
-                    <a href="/article/{{ story.id }}">Read rewritten article →</a>
+                    <a href="/article/{{ story.id }}">Read {{ story.title }} on news48 →</a>
                     <a href="{{ story.url }}" target="_blank" rel="noopener"
                         title="Opens the original source in a new tab">Open original source ↗</a>
                 </div>
@@ -88,7 +98,7 @@
 </section>
 
 <section class="section" aria-labelledby="clusters-label">
-    <h2 class="section-label" id="clusters-label">topic clusters</h2>
+    <h2 class="section-label" id="clusters-label">topic clusters and related coverage</h2>
     {% if clusters %}
     <div class="cluster-list">
         {% for cluster in clusters %}
@@ -117,8 +127,9 @@
 </section>
 
 <section class="section expiring" aria-labelledby="expiring-label">
-    <h2 class="section-label" id="expiring-label">expiring soon</h2>
-    <p class="section-hint">Stories disappear from public view after the 48-hour window.</p>
+    <h2 class="section-label" id="expiring-label">stories leaving the public feed soon</h2>
+    <p class="section-hint">Use this list to catch time-sensitive reporting before it leaves the 48-hour public archive.
+    </p>
     {% if expiring %}
     <div class="expiring-list">
         {% for item in expiring %}
@@ -133,5 +144,6 @@
     {% endif %}
 </section>
 
-<p class="footnote">Only stories inside the last 48 hours are visible. Older stories expire automatically.</p>
+<p class="footnote">news48 surfaces only the latest 48 hours of public stories to keep coverage fresh, readable, and
+    easy to compare.</p>
 {% endblock %}

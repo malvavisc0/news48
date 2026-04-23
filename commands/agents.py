@@ -47,7 +47,7 @@ CRON_SCHEDULES = {
     "sentinel": "*/5 * * * *",
     "executor": "* * * * *",
     "parser": "* * * * *",
-    "fact_checker": "*/5 * * * *",
+    "fact_checker": "*/10 * * * *",
 }
 
 QUEUE_NAMES = {

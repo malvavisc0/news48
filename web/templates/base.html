@@ -4,13 +4,28 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{% block title %}news48{% endblock %}</title>
+    <title>{% block title %}{{ seo.title if seo is defined and seo else 'news48' }}{% endblock %}</title>
+    <meta name="description"
+        content="{{ seo.description if seo is defined and seo else 'Live AI-verified news and fact-checked stories on news48.' }}" />
+    <meta name="robots" content="{{ seo.robots if seo is defined and seo else 'index,follow' }}" />
+    {% if seo is defined and seo and seo.canonical_url %}
+    <link rel="canonical" href="{{ seo.canonical_url }}" />
+    {% endif %}
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
         rel="stylesheet" />
     <link rel="stylesheet" href="/static/style.css" />
+    {% if seo is defined and seo and seo.og_tags %}
+    {% for name, value in seo.og_tags.items() %}
+    {% if name.startswith('og:') %}
+    <meta property="{{ name }}" content="{{ value }}" />
+    {% else %}
+    <meta name="{{ name }}" content="{{ value }}" />
+    {% endif %}
+    {% endfor %}
+    {% endif %}
     {% block og_tags %}{% endblock %}
     {% block json_ld %}{% endblock %}
 </head>

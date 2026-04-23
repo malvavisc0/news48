@@ -3,13 +3,50 @@
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import web.helpers as filters
+from helpers.seo import (
+    build_breadcrumb_schema,
+    build_canonical_url,
+    build_collection_schema,
+    build_seo_meta,
+    build_website_schema,
+    generate_json_ld,
+    generate_og_tags,
+    generate_sitemap,
+)
 from news48 import __version__
 
 app = FastAPI(title="news48")
+
+
+def _site_url(request: Request) -> str:
+    return str(request.base_url).rstrip("/")
+
+
+def _default_meta(request: Request) -> dict[str, object]:
+    site_url = _site_url(request)
+    canonical_url = build_canonical_url(site_url, str(request.url.path))
+    seo = build_seo_meta(
+        title="Live AI-Verified News and Fact-Checked Stories | news48",
+        description=(
+            "Browse live news from the last 48 hours with AI-rewritten "
+            "summaries, source links, fact-check signals, and topic clusters."
+        ),
+        canonical_url=canonical_url,
+    )
+    seo["json_ld"] = [build_website_schema(site_url)]
+    return seo
+
+
+def _seo_str(seo: dict[str, object], key: str) -> str:
+    """Read a string value from the SEO metadata dict."""
+    value = seo.get(key, "")
+    return value if isinstance(value, str) else ""
+
 
 # Static files
 _web_dir = Path(__file__).parent
@@ -56,6 +93,29 @@ async def homepage(request: Request):
 
     # Compute max cluster count for proportional bar rendering
     max_cluster_count = max((c["article_count"] for c in clusters), default=10)
+    site_url = _site_url(request)
+    seo = _default_meta(request)
+    canonical_url = _seo_str(seo, "canonical_url")
+    seo["json_ld"] = [
+        build_website_schema(site_url),
+        build_collection_schema(
+            name="Live AI-verified news in the last 48 hours",
+            description=(
+                "Fresh live news with AI-rewritten summaries, topic clusters, "
+                "and source transparency."
+            ),
+            url=canonical_url,
+            items=[
+                {
+                    "title": story.get("title"),
+                    "canonical_url": build_canonical_url(
+                        site_url, f"/article/{story['id']}"
+                    ),
+                }
+                for story in stories
+            ],
+        ),
+    ]
 
     return templates.TemplateResponse(
         request=request,
@@ -68,6 +128,7 @@ async def homepage(request: Request):
             "max_cluster_count": max_cluster_count,
             "categories": categories,
             "active_category": None,
+            "seo": seo,
         },
     )
 
@@ -82,7 +143,6 @@ async def article_detail(request: Request, article_id: int):
         increment_view_count,
     )
     from database.claims import get_claims_for_article
-    from helpers.seo import generate_json_ld, generate_og_tags
 
     article = get_article_detail(article_id, parsed=True)
     if not article:
@@ -105,10 +165,31 @@ async def article_detail(request: Request, article_id: int):
         if verdict in claims_summary:
             claims_summary[verdict] += 1
 
-    # SEO metadata from existing helpers
-    site_url = str(request.base_url).rstrip("/")
-    og_tags = generate_og_tags(article, site_url)
-    json_ld = generate_json_ld(article, site_url)
+    site_url = _site_url(request)
+    article["canonical_url"] = build_canonical_url(site_url, f"/article/{article_id}")
+    seo = build_seo_meta(
+        title=f"{article['title']} | news48",
+        description=(
+            article.get("summary")
+            or (
+                "Read the rewritten article, review the original source, "
+                "and see fact-check context on news48."
+            )
+        ),
+        canonical_url=article["canonical_url"],
+        og_type="article",
+        image_url=article.get("image_url"),
+    )
+    seo["og_tags"] = generate_og_tags(article, site_url)
+    seo["json_ld"] = [
+        generate_json_ld(article, site_url),
+        build_breadcrumb_schema(
+            [
+                ("Home", build_canonical_url(site_url, "/")),
+                (article["title"], article["canonical_url"]),
+            ]
+        ),
+    ]
 
     # Increment view count - no rate limiting for v1
     try:
@@ -124,10 +205,9 @@ async def article_detail(request: Request, article_id: int):
             "claims": claims,
             "claims_summary": claims_summary,
             "related": related,
-            "og_tags": og_tags,
-            "json_ld": json_ld,
             "categories": categories,
             "active_category": None,
+            "seo": seo,
         },
     )
 
@@ -144,16 +224,51 @@ async def cluster_detail(request: Request, cluster_slug: str):
         raise HTTPException(status_code=404, detail="Cluster not found")
 
     categories = get_all_categories(hours=48, parsed=True)
+    site_url = _site_url(request)
+    cluster_name = cluster_slug.replace("-", " ").title()
+    canonical_url = build_canonical_url(site_url, f"/cluster/{cluster_slug}")
+    cluster_description = (
+        f"Track the latest coverage on {cluster_name} with grouped stories, "
+        "rewritten summaries, and source links for quick comparison."
+    )
+    seo = build_seo_meta(
+        title=f"{cluster_name} News and Related Coverage | news48",
+        description=cluster_description,
+        canonical_url=canonical_url,
+    )
+    seo["json_ld"] = [
+        build_collection_schema(
+            name=f"{cluster_name} news coverage",
+            description=cluster_description,
+            url=canonical_url,
+            items=[
+                {
+                    "title": item.get("title"),
+                    "canonical_url": build_canonical_url(
+                        site_url, f"/article/{item['id']}"
+                    ),
+                }
+                for item in articles
+            ],
+        ),
+        build_breadcrumb_schema(
+            [
+                ("Home", build_canonical_url(site_url, "/")),
+                (cluster_name, canonical_url),
+            ]
+        ),
+    ]
 
     return templates.TemplateResponse(
         request=request,
         name="cluster.html",
         context={
-            "cluster_name": cluster_slug,
+            "cluster_name": cluster_name,
             "articles": articles,
             "total": total,
             "categories": categories,
             "active_category": None,
+            "seo": seo,
         },
     )
 
@@ -177,13 +292,46 @@ async def category_detail(request: Request, category_slug: str):
     stats = get_web_stats(hours=48, parsed=True)
 
     # Look up display name from categories list
-    cat_match = next(
-        (c for c in categories if c["slug"] == category_slug), None
-    )
-    raw_name = (
-        cat_match["name"] if cat_match else category_slug.replace("-", " ")
-    )
+    cat_match = next((c for c in categories if c["slug"] == category_slug), None)
+    raw_name = cat_match["name"] if cat_match else category_slug.replace("-", " ")
     category_name = filters.format_category_name(raw_name)
+    site_url = _site_url(request)
+    canonical_url = build_canonical_url(site_url, f"/category/{category_slug}")
+    category_title = (
+        f"{category_name} News Today | Live Verified Stories " "in the Last 48 Hours"
+    )
+    category_description = (
+        f"Explore the latest {category_name} news from the last 48 hours "
+        "with rewritten coverage, source transparency, and fast access "
+        "to related stories."
+    )
+    seo = build_seo_meta(
+        title=category_title,
+        description=category_description,
+        canonical_url=canonical_url,
+    )
+    seo["json_ld"] = [
+        build_collection_schema(
+            name=f"{category_name} news",
+            description=category_description,
+            url=canonical_url,
+            items=[
+                {
+                    "title": item.get("title"),
+                    "canonical_url": build_canonical_url(
+                        site_url, f"/article/{item['id']}"
+                    ),
+                }
+                for item in articles
+            ],
+        ),
+        build_breadcrumb_schema(
+            [
+                ("Home", build_canonical_url(site_url, "/")),
+                (category_name, canonical_url),
+            ]
+        ),
+    ]
 
     return templates.TemplateResponse(
         request=request,
@@ -196,8 +344,68 @@ async def category_detail(request: Request, category_slug: str):
             "categories": categories,
             "active_category": category_slug,
             "stats": stats,
+            "seo": seo,
         },
     )
+
+
+@app.get("/robots.txt", response_class=PlainTextResponse)
+async def robots(request: Request):
+    """Robots directives for crawlers."""
+    site_url = _site_url(request)
+    return "User-agent: *\n" "Allow: /\n" f"Sitemap: {site_url}/sitemap.xml\n"
+
+
+@app.get("/sitemap.xml", response_class=PlainTextResponse)
+async def sitemap(request: Request):
+    """XML sitemap for key indexable pages."""
+    from database.articles import (
+        get_all_categories,
+        get_articles_paginated,
+        get_topic_clusters,
+    )
+
+    site_url = _site_url(request)
+    articles, _ = get_articles_paginated(
+        hours=48, limit=250, include_source=True, parsed=True
+    )
+    categories = get_all_categories(hours=48, parsed=True)
+    clusters = get_topic_clusters(hours=48, parsed=True)
+
+    extra_urls = [
+        {
+            "canonical_url": build_canonical_url(site_url, "/"),
+            "priority": "1.0",
+            "changefreq": "hourly",
+        }
+    ]
+    extra_urls.extend(
+        {
+            "canonical_url": build_canonical_url(
+                site_url, f"/category/{category['slug']}"
+            ),
+            "priority": "0.9",
+            "changefreq": "hourly",
+        }
+        for category in categories
+    )
+    extra_urls.extend(
+        {
+            "canonical_url": build_canonical_url(
+                site_url, f"/cluster/{cluster['slug']}"
+            ),
+            "priority": "0.8",
+            "changefreq": "hourly",
+        }
+        for cluster in clusters
+    )
+
+    for article in articles:
+        article["canonical_url"] = build_canonical_url(
+            site_url, f"/article/{article['id']}"
+        )
+
+    return generate_sitemap(articles, site_url, extra_urls=extra_urls)
 
 
 @app.get("/health")

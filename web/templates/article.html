@@ -1,31 +1,23 @@
 {% extends "base.html" %}
 
-{% block title %}news48 — {{ article.title }}{% endblock %}
+{% block title %}{{ seo.title if seo is defined and seo else article.title ~ ' | news48' }}{% endblock %}
 
 {% block body_class %}page-article{% endblock %}
 
-{% block og_tags %}
-{% for name, value in og_tags.items() %}
-<meta property="{{ name }}" content="{{ value }}" />
-{% if name == "og:title" %}
-<meta name="twitter:title" content="{{ value }}" />
-{% elif name == "og:description" %}
-<meta name="twitter:description" content="{{ value }}" />
-{% elif name == "og:image" %}
-<meta name="twitter:image" content="{{ value }}" />
-{% endif %}
-{% endfor %}
-{% endblock %}
-
 {% block json_ld %}
-<script type="application/ld+json">{{ json_ld | tojson }}</script>
+{% if seo is defined and seo and seo.json_ld %}
+{% for item in seo.json_ld %}
+<script type="application/ld+json">{{ item | tojson }}</script>
+{% endfor %}
+{% endif %}
 {% endblock %}
 
 {% block content %}
 <a class="back-link" href="/">← back to live feed</a>
 <header>
     <h1 class="site-mark"><a href="/">news48</a></h1>
-    <div class="tagline">rewritten article · original source visible · expires inside 48 hours</div>
+    <div class="tagline">Rewritten for quick understanding, linked to the original source, and available during the live
+        48-hour window.</div>
 </header>
 
 <article class="article-shell">
@@ -33,7 +25,6 @@
     {% if article.summary %}
     <p class="standfirst">{{ article.summary }}</p>
     {% endif %}
-
     <div class="reading-meta">
         {% set wc = article.content | word_count %}
         <span>{{ wc | read_time }} min read · {{ wc }} words</span>
@@ -158,7 +149,7 @@
 {% endif %}
 
 <section class="section" aria-labelledby="related-label">
-    <h2 class="section-label" id="related-label">related stories</h2>
+    <h2 class="section-label" id="related-label">related stories and follow-up coverage</h2>
     {% if related %}
     <div class="related-list">
         {% for item in related %}
@@ -182,7 +173,7 @@
 </section>
 
 <section class="section" aria-labelledby="article-categories-label">
-    <h2 class="section-label" id="article-categories-label">browse by category</h2>
+    <h2 class="section-label" id="article-categories-label">explore more live news by category</h2>
     <nav class="category-nav" aria-label="Categories">
         <a href="/" class="category-pill{% if not active_category %} active{% endif %}">all</a>
         {% for cat in categories %}
