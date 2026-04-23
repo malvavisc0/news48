@@ -125,7 +125,10 @@ jobs:
             TAGS=("${GITHUB_REF_NAME}-${{ matrix.target }}")
           fi
 
-          # Always include SHA tag (matches metadata action's type=sha format)
+          # latest tag (matches docker-compose.prod.yml image references)
+          TAGS+=("latest-${{ matrix.target }}")
+
+          # SHA tag (matches metadata action's type=sha format)
           SHA="${GITHUB_SHA::7}"
           TAGS+=("sha-${SHA}-${{ matrix.target }}")
 
