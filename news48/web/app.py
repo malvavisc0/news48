@@ -1,5 +1,6 @@
 """FastAPI web application with routes for the news48 web interface."""
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -18,12 +19,21 @@ from news48.core.helpers.seo import (
     generate_og_tags,
     generate_sitemap,
 )
-from news48.web.mcp.endpoint import router as mcp_router
+from news48.web.mcp.endpoint import mcp_endpoint
 
 from . import helpers as filters
 
-app = FastAPI(title="news48")
-app.include_router(mcp_router)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage MCP endpoint lifecycle."""
+    await mcp_endpoint.startup()
+    yield
+    await mcp_endpoint.shutdown()
+
+
+app = FastAPI(title="news48", lifespan=lifespan)
+app.mount("/mcp", mcp_endpoint)
 
 
 def _site_url(request: Request) -> str:

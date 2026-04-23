@@ -2,29 +2,40 @@
 
 Exposes read-only news browsing operations via MCP over Streamable HTTP.
 Protected by API key authentication backed by Redis.
+
+The ``MCPEndpoint`` class is an ASGI app that:
+  1. Validates Bearer-token auth against Redis on every request.
+  2. Delegates to ``StreamableHTTPServerTransport.handle_request``.
+
+Lifecycle (``startup`` / ``shutdown``) is driven by the FastAPI app
+lifespan in ``news48.web.app``.
 """
 
+import asyncio
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from mcp import types
 from mcp.server import Server
 from mcp.server.streamable_http import StreamableHTTPServerTransport
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.types import Receive, Scope, Send
 
 from news48.web.mcp.auth import verify_key
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/mcp", tags=["MCP"])
+# ---------------------------------------------------------------------------
+# MCP Server + tool definitions
+# ---------------------------------------------------------------------------
+
 mcp_app = Server("news48-web")
-security = HTTPBearer()
 
 TOOLS = [
     types.Tool(
         name="browse_articles",
-        description=("Browse recent articles with optional category filter."),
+        description="Browse recent articles with optional category filter.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -90,18 +101,6 @@ TOOLS = [
 ]
 
 
-async def _require_mcp_key(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-) -> str:
-    """FastAPI dependency that validates the MCP API key."""
-    if not verify_key(credentials.credentials):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or revoked MCP API key",
-        )
-    return credentials.credentials
-
-
 @mcp_app.list_tools()
 async def list_tools() -> list[types.Tool]:
     """Return available web MCP tools."""
@@ -129,6 +128,9 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         return [types.TextContent(type="text", text=f"Error: {e}")]
 
 
+# -- Tool implementations ---------------------------------------------------
+
+
 async def _browse_articles(args: dict) -> list[types.TextContent]:
     from news48.core.database.articles import get_articles_paginated
 
@@ -146,9 +148,7 @@ async def _browse_articles(args: dict) -> list[types.TextContent]:
     ]
 
 
-async def _get_topic_clusters(
-    args: dict,
-) -> list[types.TextContent]:
+async def _get_topic_clusters(args: dict) -> list[types.TextContent]:
     from news48.core.database.articles import get_topic_clusters
 
     hours = args.get("hours", 48)
@@ -201,31 +201,105 @@ async def _web_stats(args: dict) -> list[types.TextContent]:
     ]
 
 
-@router.post("/", dependencies=[Depends(_require_mcp_key)])
-async def mcp_endpoint(request: Request) -> Response:
-    """Streamable HTTP endpoint for MCP connections.
+# ---------------------------------------------------------------------------
+# ASGI app: auth middleware + transport passthrough
+# ---------------------------------------------------------------------------
 
-    Bridges the ASGI request to the MCP StreamableHTTP transport.
+
+class MCPEndpoint:
+    """ASGI application that authenticates and delegates to MCP transport.
+
+    The transport's ``handle_request`` is a native ASGI handler, so we
+    pass ``scope/receive/send`` straight through after verifying the
+    Bearer token.  This preserves streaming (SSE / chunked) semantics
+    that would be lost by buffering the response.
+
+    Call ``startup()`` before the first request and ``shutdown()`` when
+    the application is stopping.
     """
-    transport = StreamableHTTPServerTransport(mcp_session_id=None)
 
-    # Collect the response from the ASGI send callable
-    response_body = b""
-    response_status = 200
-    response_headers: list[tuple[bytes, bytes]] = []
+    def __init__(self) -> None:
+        self._transport: StreamableHTTPServerTransport | None = None
+        self._server_task: asyncio.Task | None = None  # type: ignore[type-arg]
+        self._connect_cm: object | None = None
 
-    async def send(message: dict) -> None:
-        nonlocal response_body, response_status, response_headers
-        if message["type"] == "http.response.start":
-            response_status = message["status"]
-            response_headers = message.get("headers", [])
-        elif message["type"] == "http.response.body":
-            response_body += message.get("body", b"")
+    # -- lifecycle -----------------------------------------------------------
 
-    await transport.handle_request(request.scope, request.receive, send)
+    async def startup(self) -> None:
+        """Create transport, connect streams, start the MCP server loop."""
+        self._transport = StreamableHTTPServerTransport(
+            mcp_session_id=None,
+        )
+        self._connect_cm = self._transport.connect()
+        # Enter the context manager manually so it stays open
+        cm = self._connect_cm
+        streams = await cm.__aenter__()  # type: ignore[union-attr]
+        self._server_task = asyncio.create_task(
+            mcp_app.run(
+                streams[0],
+                streams[1],
+                mcp_app.create_initialization_options(),
+            )
+        )
+        logger.info("MCP web endpoint started (Streamable HTTP)")
 
-    return Response(
-        content=response_body,
-        status_code=response_status,
-        headers=dict((k.decode(), v.decode()) for k, v in response_headers),
-    )
+    async def shutdown(self) -> None:
+        """Cancel the server task and close the transport connection."""
+        if self._server_task is not None:
+            self._server_task.cancel()
+            try:
+                await self._server_task
+            except asyncio.CancelledError:
+                pass
+            self._server_task = None
+        if self._connect_cm is not None:
+            cm = self._connect_cm
+            await cm.__aexit__(None, None, None)  # type: ignore[union-attr]
+            self._connect_cm = None
+        if self._transport is not None:
+            self._transport = None
+        logger.info("MCP web endpoint stopped")
+
+    # -- ASGI handler --------------------------------------------------------
+
+    async def __call__(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> None:
+        """ASGI entry point — validate auth then delegate to transport."""
+        if scope["type"] != "http":
+            return
+
+        # --- authenticate ---------------------------------------------------
+        request = Request(scope)
+        auth_header = request.headers.get("authorization", "")
+        if not auth_header.startswith("Bearer "):
+            response = JSONResponse(
+                {"detail": "Missing Bearer token"},
+                status_code=401,
+            )
+            await response(scope, receive, send)
+            return
+
+        api_key = auth_header[7:]
+        if not verify_key(api_key):
+            response = JSONResponse(
+                {"detail": "Invalid or revoked MCP API key"},
+                status_code=401,
+            )
+            await response(scope, receive, send)
+            return
+
+        # --- delegate to transport ------------------------------------------
+        if self._transport is None:
+            response = JSONResponse(
+                {"detail": "MCP endpoint not ready"},
+                status_code=503,
+            )
+            await response(scope, receive, send)
+            return
+
+        await self._transport.handle_request(scope, receive, send)
+
+
+# Module-level singleton — mounted by ``news48.web.app``.
+mcp_endpoint = MCPEndpoint()

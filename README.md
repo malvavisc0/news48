@@ -27,8 +27,9 @@ news48 collects feed entries, downloads article pages, parses structured content
   - [Seeding the Database](#seeding-the-database)
   - [Development](#docker-development)
   - [Production](#docker-production)
-- [Schedule Defaults](#-schedule-defaults)
-- [Documentation](#-documentation)
+- [MCP Integration](#-mcp-integration)
+  - [Local MCP Server](#local-mcp-server-stdio)
+  - [Remote MCP Endpoint](#remote-mcp-endpoint-streamable-http)
 - [Development](#-development)
 - [License](#-license)
 
@@ -343,17 +344,17 @@ This means Dramatiq execution is currently observed through Redis, logs, and the
 
 ## 🔌 MCP Integration
 
-news48 exposes operations via the [Model Context Protocol](https://modelcontextprotocol.io/) so AI assistants can interact with your news pipeline.
+news48 exposes operations via the [Model Context Protocol](https://modelcontextprotocol.io/) so AI assistants can interact with your news pipeline. There are two MCP interfaces: a **local server** (stdio, no auth) for development, and a **remote endpoint** (Streamable HTTP, auth required) for production.
 
 ### Local MCP Server (stdio)
 
-Start the local MCP server for Claude Desktop, Cursor, etc.:
+The local MCP server communicates over stdio and requires no authentication — ideal for local AI assistants like Claude Desktop or Cursor:
 
 ```bash
 uv run news48 mcp serve
 ```
 
-Configure your AI assistant:
+Configure your AI assistant to use it:
 
 ```json
 {
@@ -370,15 +371,41 @@ Configure your AI assistant:
 
 ### Remote MCP Endpoint (Streamable HTTP)
 
-The web app exposes an authenticated MCP endpoint at `/mcp/`. Manage API keys with:
+The web app exposes an authenticated MCP endpoint at `/mcp/` protected by API keys stored in Redis. Before connecting, you need to create a key.
+
+#### Creating an API Key
 
 ```bash
+# Local development
 uv run news48 mcp create-key --label "Claude Desktop"
-uv run news48 mcp list-keys
-uv run news48 mcp revoke-key n48-abc123...
+# Output: Created MCP API key: n48-aBcDeFgHiJkLmNoPqRsTuVwXyZ...
+# Store this key securely — it cannot be retrieved later.
+
+# Inside Docker
+docker compose exec dramatiq-worker news48 mcp create-key --label "My Assistant"
 ```
 
-Remote clients connect with a Bearer token:
+> **Important:** The full key is only displayed once at creation time. Copy it immediately and store it securely. The `list-keys` command only shows masked keys (e.g., `n48-aBcD...vXyZ`).
+
+#### Managing API Keys
+
+```bash
+# List all active keys (masked)
+uv run news48 mcp list-keys
+
+# Revoke a key (takes effect immediately, no restart needed)
+uv run news48 mcp revoke-key n48-aBcDeFgHiJkLmNoPqRsTuVwXyZ...
+
+# In Docker
+docker compose exec dramatiq-worker news48 mcp list-keys
+docker compose exec dramatiq-worker news48 mcp revoke-key n48-...
+```
+
+Keys are stored in a Redis SET (`mcp:keys`) for O(1) lookup. Revoking a key removes it from Redis instantly — no application restart required. Keys persist across Redis restarts (Redis is configured with AOF + periodic snapshots).
+
+#### Connecting a Remote MCP Client
+
+Once you have a key, configure your AI assistant:
 
 ```json
 {
@@ -392,6 +419,25 @@ Remote clients connect with a Bearer token:
   }
 }
 ```
+
+**Available tools:** `browse_articles`, `get_topic_clusters`, `article_detail`, `web_stats`
+
+#### Testing the Endpoint
+
+```bash
+# Without auth — should return 401
+curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8000/mcp/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}'
+
+# With valid auth — should return 200
+curl -X POST http://localhost:8000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer n48-your-key-here" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}'
+```
+
+> **Security:** All keys are prefixed `n48-` for easy detection in secret scanners. The web service requires `REDIS_URL` to verify keys — if Redis is unreachable, all MCP requests are denied (fail-closed).
 
 ## 🧬 Development
 

@@ -34,14 +34,12 @@ def create_key(label: str | None = None) -> str:
     key = f"n48-{secrets.token_urlsafe(32)}"
     r = _get_redis()
     r.sadd(MCP_KEYS_SET, key)
+    metadata: dict[str, str] = {
+        "created_at": datetime.now().isoformat(),
+    }
     if label:
-        r.hset(
-            f"mcp:key:{key}",
-            mapping={
-                "label": label,
-                "created_at": datetime.now().isoformat(),
-            },
-        )
+        metadata["label"] = label
+    r.hset(f"mcp:key:{key}", mapping=metadata)
     return key
 
 

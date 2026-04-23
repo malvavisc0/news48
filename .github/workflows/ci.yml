@@ -28,8 +28,26 @@ jobs:
       - name: Run tests
         run: uv run pytest -v
 
+  check-version:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag matches package version
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          PKG_VERSION=$(grep -oP '__version__\s*=\s*"\K[^"]+' news48/__init__.py)
+          echo "Tag version:     $TAG_VERSION"
+          echo "Package version: $PKG_VERSION"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag v$TAG_VERSION does not match news48/__init__.py version $PKG_VERSION"
+            exit 1
+          fi
+          echo "✓ Versions match"
+
   build:
-    needs: test
+    needs: [test, check-version]
+    if: always() && needs.test.result == 'success' && (needs.check-version.result == 'success' || needs.check-version.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
