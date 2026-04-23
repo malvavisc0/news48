@@ -116,18 +116,23 @@ jobs:
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           TARGET="${{ matrix.target }}"
-          AMD64="${IMAGE}:main-${TARGET}-amd64"
-          ARM64="${IMAGE}:main-${TARGET}-arm64"
 
-          # Determine which tags to create
-          TAGS=("latest-${TARGET}")
+          # Determine the primary tag used by the build job
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            PRIMARY_TAG="${GITHUB_REF#refs/tags/v}"
+          else
+            PRIMARY_TAG="${GITHUB_REF_NAME}"
+          fi
+
+          AMD64="${IMAGE}:${PRIMARY_TAG}-${TARGET}-amd64"
+          ARM64="${IMAGE}:${PRIMARY_TAG}-${TARGET}-arm64"
+
+          # All tags to create as multi-platform manifests
+          TAGS=("latest-${TARGET}" "${PRIMARY_TAG}-${TARGET}")
 
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/v}"
-            MAJOR_MINOR="${VERSION%.*}"
-            TAGS+=("${VERSION}-${TARGET}" "${MAJOR_MINOR}-${TARGET}")
-          else
-            TAGS+=("${GITHUB_REF_NAME}-${TARGET}")
+            MAJOR_MINOR="${PRIMARY_TAG%.*}"
+            TAGS+=("${MAJOR_MINOR}-${TARGET}")
           fi
 
           SHA="${GITHUB_SHA::7}"
@@ -139,6 +144,6 @@ jobs:
             TAG_FLAGS="${TAG_FLAGS} -t ${IMAGE}:${TAG}"
           done
 
-          echo "Creating multi-platform manifest from ${AMD64} and ${ARM64}"
+          echo "Source: ${AMD64} + ${ARM64}"
           echo "Tags: ${TAGS[*]}"
           docker buildx imagetools create ${TAG_FLAGS} "${AMD64}" "${ARM64}"
