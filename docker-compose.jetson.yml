@@ -1,0 +1,16 @@
+# Jetson / ARM64 override — disables Docker llamacpp and uses host llama.cpp instead.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.jetson.yml up -d
+#
+# Set API_BASE in .env to point to your host llama.cpp:
+#   API_BASE=http://jetson.tago.lan:7070/v1
+
+services:
+  # Disable Docker-managed llamacpp — using host llama.cpp at jetson.tago.lan:7070
+  llamacpp:
+    profiles:
+      - disabled
+  llamacpp-init:
+    profiles:
+      - disabled
