@@ -14,6 +14,11 @@ services:
       timeout: 10s
       retries: 5
 
+  # One-shot init container — uses pre-built worker image instead of building locally.
+  db-migrate:
+    image: ghcr.io/malvavisc0/news48:latest-worker
+    entrypoint: [ "alembic", "upgrade", "head" ]
+
   web:
     image: ghcr.io/malvavisc0/news48:latest-web
     ports:
@@ -92,10 +97,14 @@ services:
     image: ghcr.io/malvavisc0/news48:latest-worker
     restart: unless-stopped
     depends_on:
-      llamacpp:
+      mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
+      llamacpp:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: [ "CMD", "python", "-c", "import redis; r=redis.from_url('redis://redis:6379/0'); r.ping()" ]
       interval: 30s
@@ -111,8 +120,14 @@ services:
     image: ghcr.io/malvavisc0/news48:latest-worker
     restart: unless-stopped
     depends_on:
+      mysql:
+        condition: service_healthy
       redis:
         condition: service_healthy
+      llamacpp:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     deploy:
       resources:
         limits:
