@@ -24,6 +24,14 @@ Always active — parser must enforce canonical taxonomy.
 - Lowercase, comma-separated, no duplicates
 - 2-8 tags when source provides signals
 
+### Title Case
+- Use **sentence case** only: capitalize the first word and proper nouns only
+- Do NOT use Title Case, ALL CAPS, or camelCase
+- Examples:
+  - ✅ "Fed lifts rates to 22-year high in inflation fight"
+  - ❌ "Fed Lifts Rates To 22-Year High In Inflation Fight"
+  - ❌ "FED LIFTS RATES TO 22-YEAR HIGH IN INFLATION FIGHT"
+
 ### Size Bounds
 - Title: 8-140 characters
 - Summary: 40-420 characters, 1-3 sentences, not duplicate of title

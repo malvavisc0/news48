@@ -162,7 +162,9 @@ class TestStripHtmlTagsInUpdateArticle:
     def test_strips_html_from_summary(self, article_id: int) -> None:
         from news48.core.database.articles import update_article
 
-        update_article(article_id, content="clean", summary="<b>Bold</b> summary")
+        update_article(
+            article_id, content="clean", summary="<b>Bold</b> summary"
+        )
         from news48.core.database.articles import get_article_by_id
 
         article = get_article_by_id(article_id)
@@ -171,11 +173,13 @@ class TestStripHtmlTagsInUpdateArticle:
     def test_strips_html_from_title(self, article_id: int) -> None:
         from news48.core.database.articles import update_article
 
-        update_article(article_id, content="clean", title="<i>Italic</i> Title")
+        update_article(
+            article_id, content="clean", title="<i>Italic</i> Title"
+        )
         from news48.core.database.articles import get_article_by_id
 
         article = get_article_by_id(article_id)
-        assert article["title"] == "Italic Title"
+        assert article["title"] == "Italic title"
 
     def test_strips_html_from_content(self, article_id: int) -> None:
         from news48.core.database.articles import update_article
