@@ -115,27 +115,30 @@ jobs:
       - name: Create multi-platform manifest
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          TARGET="${{ matrix.target }}"
+          AMD64="${IMAGE}:main-${TARGET}-amd64"
+          ARM64="${IMAGE}:main-${TARGET}-arm64"
 
-          # Determine tag prefixes based on ref
+          # Determine which tags to create
+          TAGS=("latest-${TARGET}")
+
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
             MAJOR_MINOR="${VERSION%.*}"
-            TAGS=("${VERSION}-${{ matrix.target }}" "${MAJOR_MINOR}-${{ matrix.target }}")
+            TAGS+=("${VERSION}-${TARGET}" "${MAJOR_MINOR}-${TARGET}")
           else
-            TAGS=("${GITHUB_REF_NAME}-${{ matrix.target }}")
+            TAGS+=("${GITHUB_REF_NAME}-${TARGET}")
           fi
 
-          # latest tag (matches docker-compose.prod.yml image references)
-          TAGS+=("latest-${{ matrix.target }}")
-
-          # SHA tag (matches metadata action's type=sha format)
           SHA="${GITHUB_SHA::7}"
-          TAGS+=("sha-${SHA}-${{ matrix.target }}")
+          TAGS+=("sha-${SHA}-${TARGET}")
 
+          # Build -t flags from tags
+          TAG_FLAGS=""
           for TAG in "${TAGS[@]}"; do
-            echo "Merging manifest for ${IMAGE}:${TAG}"
-            docker buildx imagetools create \
-              -t "${IMAGE}:${TAG}" \
-              "${IMAGE}:${TAG}-amd64" \
-              "${IMAGE}:${TAG}-arm64"
+            TAG_FLAGS="${TAG_FLAGS} -t ${IMAGE}:${TAG}"
           done
+
+          echo "Creating multi-platform manifest from ${AMD64} and ${ARM64}"
+          echo "Tags: ${TAGS[*]}"
+          docker buildx imagetools create ${TAG_FLAGS} "${AMD64}" "${ARM64}"
