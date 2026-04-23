@@ -125,9 +125,9 @@ jobs:
             TAGS=("${GITHUB_REF_NAME}-${{ matrix.target }}")
           fi
 
-          # Always include SHA tag
+          # Always include SHA tag (matches metadata action's type=sha format)
           SHA="${GITHUB_SHA::7}"
-          TAGS+=("${SHA}-${{ matrix.target }}")
+          TAGS+=("sha-${SHA}-${{ matrix.target }}")
 
           for TAG in "${TAGS[@]}"; do
             echo "Merging manifest for ${IMAGE}:${TAG}"
