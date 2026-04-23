@@ -16,11 +16,6 @@ def clean_text(value: str | None, limit: int | None = None) -> str:
     return text
 
 
-def slug_to_name(slug: str) -> str:
-    """Convert URL slug to readable title case text."""
-    return clean_text(slug.replace("-", " ")).title()
-
-
 def build_canonical_url(site_url: str, path: str) -> str:
     """Build an absolute canonical URL from a relative path."""
     base = site_url.rstrip("/")

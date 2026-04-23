@@ -68,11 +68,6 @@ def freshness_class(remaining: int) -> str:
     return "f8"
 
 
-def freshness_bar(remaining: int) -> str:
-    """Return the CSS class string for a freshness bar element."""
-    return freshness_class(remaining)
-
-
 def word_count(text: str) -> int:
     """Count words in text."""
     if not text:

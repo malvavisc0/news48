@@ -5,7 +5,7 @@ import sys
 
 import typer
 
-from news48.core import config
+from news48.core.agents.tools.lessons import _read_lessons
 
 from ._common import emit_error, emit_json
 
@@ -13,25 +13,6 @@ lessons_app = typer.Typer(help="View and manage agent lessons.")
 
 
 AGENT_NAMES = ["executor", "parser", "sentinel", "fact_checker"]
-
-
-def _read_lessons() -> list[dict]:
-    """Read lessons from the JSON file.
-
-    Returns an empty list if the file doesn't exist or is empty.
-    """
-    if not config.LESSONS_FILE.exists():
-        return []
-    try:
-        content = config.LESSONS_FILE.read_text(encoding="utf-8")
-        if not content.strip():
-            return []
-        data = json.loads(content)
-        if isinstance(data, list):
-            return data
-        return []
-    except (json.JSONDecodeError, OSError):
-        return []
 
 
 @lessons_app.command(name="list")

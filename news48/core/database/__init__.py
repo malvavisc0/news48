@@ -15,7 +15,6 @@ from .articles import (
     get_expiring_articles,
     get_feed_stats,
     get_fetch_stats,
-    get_malformed_articles,
     get_parse_failed_articles,
     get_related_articles,
     get_topic_clusters,

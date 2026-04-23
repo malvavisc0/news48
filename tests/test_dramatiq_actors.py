@@ -106,7 +106,6 @@ class TestActorModuleSyntax:
             "executor_cycle",
             "scheduled_executor",
             "parser_cycle",
-            "parse_single_article",
             "scheduled_parser",
             "fact_check_cycle",
             "scheduled_fact_checker",

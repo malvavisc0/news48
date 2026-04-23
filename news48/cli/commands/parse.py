@@ -3,11 +3,11 @@
 import asyncio
 import logging
 import os
-import tempfile
 
 import typer
 
 from news48.core.agents import run_parser
+from news48.core.agents.parser import _get_temp_file_path
 from news48.core.database import (
     claim_articles_for_processing,
     clear_article_processing_claim,
@@ -21,25 +21,6 @@ from news48.core.database import (
 from ._common import emit_error, emit_json, require_db, status_msg
 
 logger = logging.getLogger(__name__)
-
-
-def _get_temp_file_path(content: str) -> str:
-    """Create a temp file with content and return its path.
-
-    This is a separate function to ensure the file is not garbage collected
-    while the agent is using it.
-
-    Args:
-        content: The content to write to the temp file.
-
-    Returns:
-        The path to the temp file.
-    """
-    tmp = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt")
-    tmp.write(content)
-    tmp.close()
-    logger.debug(f"Created temp file: {tmp.name}")
-    return tmp.name
 
 
 async def _parse(article_id: int, *, force: bool = False) -> dict:

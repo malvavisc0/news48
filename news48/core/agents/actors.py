@@ -140,37 +140,6 @@ if not _actors_already_registered():
 
     @dramatiq.actor(
         queue_name="parser",
-        max_retries=2,
-        time_limit=10 * 60 * 1000,  # 10 min for single article
-        min_backoff=30_000,  # 30s
-        max_backoff=300_000,  # 5 min
-    )
-    def parse_single_article(
-        article_id: int,
-        title: str,
-        content_file: str,
-        url: str,
-    ) -> Any:
-        """Parse a single article.
-
-        Can be enqueued directly for fine-grained control.
-        """
-        from .parser import run
-
-        task = (
-            f"\nParse the following article.\n"
-            f"--------------------------------------\n"
-            f"Article ID: {article_id}\n"
-            f"Title: {title}\n"
-            f"Content file path: {content_file}\n"
-            f"URL: {url}\n"
-            f"--------------------------------------\n"
-        )
-        result = asyncio.run(run(task, {}))
-        return result
-
-    @dramatiq.actor(
-        queue_name="parser",
         periodic=cron("* * * * *"),  # every minute
     )
     def scheduled_parser() -> None:
@@ -298,7 +267,6 @@ else:
     executor_cycle = _require_registered_actor("executor_cycle")
     scheduled_executor = _require_registered_actor("scheduled_executor")
     parser_cycle = _require_registered_actor("parser_cycle")
-    parse_single_article = _require_registered_actor("parse_single_article")
     scheduled_parser = _require_registered_actor("scheduled_parser")
     fact_check_cycle = _require_registered_actor("fact_check_cycle")
     scheduled_fact_checker = _require_registered_actor("scheduled_fact_checker")

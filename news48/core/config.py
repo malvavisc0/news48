@@ -19,19 +19,12 @@ class DataDir:
 
     root: Path = Path(getenv("DATA_DIR", "data"))
 
-    @classmethod
-    def path(cls) -> Path:
-        p = cls.root
-        p.mkdir(parents=True, exist_ok=True)
-        return p
-
 
 # Path constants derived from DataDir.root
 FILES_DIR = DataDir.root / "files"
 LOGS_DIR = DataDir.root / "logs"
 PLANS_DIR = DataDir.root / "plans"
 MONITOR_DIR = DataDir.root / "monitor"
-METRICS_DIR = DataDir.root / "metrics"
 CACHE_DIR = DataDir.root / "cache"
 LESSONS_FILE = DataDir.root / "lessons.json"
 

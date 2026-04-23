@@ -81,7 +81,7 @@
                     <span class="freshness" title="Available for 48 hours from ingestion"
                         aria-label="{{ story.created_at | hours_remaining }} hours remaining. Available for 48 hours from ingestion.">
                         {{ story.created_at | hours_remaining }}h left
-                        <span class="freshness-bar {{ story.created_at | hours_remaining | freshness_bar }}"></span>
+                        <span class="freshness-bar {{ story.created_at | hours_remaining | freshness_class }}"></span>
                     </span>
                 </div>
                 <div class="story-links">

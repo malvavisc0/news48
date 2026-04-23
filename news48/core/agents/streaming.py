@@ -5,8 +5,6 @@ import re
 
 logger = logging.getLogger(__name__)
 
-_SENTENCE_BOUNDARY_RE = re.compile(r"(?:[.!?][\"')\]]*\s+|\n{2,})")
-
 # Standard logging format:
 # 2026-04-05 23:56:00 [agents._run] Executing tool: run_shell_command...
 _LOG_LINE_RE = re.compile(

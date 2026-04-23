@@ -581,24 +581,6 @@ def get_article_stats() -> dict:
         return result
 
 
-def get_malformed_articles(limit: int = 50) -> list[dict]:
-    """Get parsed articles with HTML tags in summary or title."""
-    with SessionLocal() as session:
-        rows = session.execute(
-            text("""
-            SELECT id, title, summary, url
-            FROM articles
-            WHERE parsed_at IS NOT NULL
-              AND (summary LIKE '%<%>%' OR title LIKE '%<%>%')
-            ORDER BY parsed_at DESC
-            LIMIT :limit
-        """),
-            {"limit": limit},
-        ).fetchall()
-
-        return [dict(row._mapping) for row in rows]
-
-
 def get_feed_stats(stale_days: int = 7) -> dict:
     """Get consolidated feed statistics in a single query."""
     stale_threshold = (
@@ -742,48 +724,6 @@ def set_article_breaking(article_id: int, breaking: bool = True) -> None:
             session.commit()
 
 
-def get_featured_articles(limit: int = 10) -> list[dict]:
-    """Get all currently featured articles within 48h window."""
-    threshold = _hours_ago_iso(48)
-    with SessionLocal() as session:
-        rows = session.execute(
-            text("""
-            SELECT a.*, f.title as source_name,
-                   f.icon_url as feed_icon_url,
-                   f.favicon_url as feed_favicon_url
-            FROM articles a
-            JOIN feeds f ON a.feed_id = f.id
-            WHERE a.is_featured = 1 AND a.created_at >= :threshold
-            ORDER BY a.created_at DESC
-            LIMIT :limit
-        """),
-            {"threshold": threshold, "limit": limit},
-        ).fetchall()
-
-        return [dict(row._mapping) for row in rows]
-
-
-def get_breaking_articles(limit: int = 5) -> list[dict]:
-    """Get all currently breaking news articles within 48h window."""
-    threshold = _hours_ago_iso(48)
-    with SessionLocal() as session:
-        rows = session.execute(
-            text("""
-            SELECT a.*, f.title as source_name,
-                   f.icon_url as feed_icon_url,
-                   f.favicon_url as feed_favicon_url
-            FROM articles a
-            JOIN feeds f ON a.feed_id = f.id
-            WHERE a.is_breaking = 1 AND a.created_at >= :threshold
-            ORDER BY a.created_at DESC
-            LIMIT :limit
-        """),
-            {"threshold": threshold, "limit": limit},
-        ).fetchall()
-
-        return [dict(row._mapping) for row in rows]
-
-
 def increment_view_count(article_id: int) -> None:
     """Atomically increment the view count for an article."""
     with SessionLocal() as session:
@@ -792,30 +732,6 @@ def increment_view_count(article_id: int) -> None:
             {"id": article_id},
         )
         session.commit()
-
-
-def get_trending_articles(
-    hours: int = 24,
-    limit: int = 10,
-) -> list[dict]:
-    """Get most-viewed articles within the given time window."""
-    threshold = _hours_ago_iso(hours)
-    with SessionLocal() as session:
-        rows = session.execute(
-            text("""
-            SELECT a.*, f.title as source_name,
-                   f.icon_url as feed_icon_url,
-                   f.favicon_url as feed_favicon_url
-            FROM articles a
-            JOIN feeds f ON a.feed_id = f.id
-            WHERE a.created_at >= :threshold
-            ORDER BY a.view_count DESC
-            LIMIT :limit
-        """),
-            {"threshold": threshold, "limit": limit},
-        ).fetchall()
-
-        return [dict(row._mapping) for row in rows]
 
 
 def get_all_categories(hours: int = 48, parsed: bool = False) -> list[dict]:
@@ -850,39 +766,6 @@ def get_all_categories(hours: int = 48, parsed: bool = False) -> list[dict]:
                 "article_count": count,
             }
             for name, count in sorted(counts.items(), key=lambda x: -x[1])
-        ]
-
-
-def get_all_tags(hours: int = 48, limit: int = 50) -> list[dict]:
-    """Get most common tags with article counts within time window."""
-    threshold = _hours_ago_iso(hours)
-
-    with SessionLocal() as session:
-        rows = session.execute(
-            text("""
-            SELECT tags FROM articles
-            WHERE created_at >= :threshold AND tags IS NOT NULL
-              AND tags != ''
-        """),
-            {"threshold": threshold},
-        ).fetchall()
-
-        counts: dict[str, int] = {}
-        for row in rows:
-            tags = row[0]
-            if tags:
-                for tag in tags.split(","):
-                    tag = tag.strip().lower()
-                    if tag:
-                        counts[tag] = counts.get(tag, 0) + 1
-
-        return [
-            {
-                "name": name,
-                "slug": name.replace(" ", "-"),
-                "article_count": count,
-            }
-            for name, count in sorted(counts.items(), key=lambda x: -x[1])[:limit]
         ]
 
 
@@ -1154,47 +1037,6 @@ def get_article_detail(article_id: int, parsed: bool = False) -> dict | None:
         ).fetchone()
 
         return dict(row._mapping) if row else None
-
-
-def get_articles_by_time_bucket(
-    bucket_hours: int = 6,
-) -> list[dict]:
-    """Get article counts grouped by time buckets."""
-    total_hours = 48
-    num_buckets = total_hours // bucket_hours
-
-    bucket_bounds = []
-    for i in range(num_buckets):
-        start_hours = i * bucket_hours
-        end_hours = (i + 1) * bucket_hours
-        bucket_bounds.append((_hours_ago_iso(end_hours), _hours_ago_iso(start_hours)))
-
-    case_parts = []
-    params: dict = {}
-    for idx, (start, end) in enumerate(bucket_bounds):
-        case_parts.append(
-            f"SUM(CASE WHEN created_at >= :start_{idx} "
-            f"AND created_at < :end_{idx} THEN 1 ELSE 0 END) AS bucket_{idx}"
-        )
-        params[f"start_{idx}"] = start
-        params[f"end_{idx}"] = end
-
-    sql = f"SELECT {', '.join(case_parts)} FROM articles"
-
-    with SessionLocal() as session:
-        row = session.execute(text(sql), params).fetchone()
-
-    buckets = []
-    for idx, (start, end) in enumerate(bucket_bounds):
-        buckets.append(
-            {
-                "bucket_start": start,
-                "bucket_end": end,
-                "count": row[idx] or 0,
-            }
-        )
-
-    return buckets
 
 
 def get_articles_older_than_hours(hours: int = 48) -> list[dict]:

@@ -76,7 +76,6 @@ templates.env.globals["app_version"] = __version__
 templates.env.filters["relative_time"] = filters.format_relative_time
 templates.env.filters["hours_remaining"] = filters.hours_remaining
 templates.env.filters["freshness_class"] = filters.freshness_class
-templates.env.filters["freshness_bar"] = filters.freshness_bar
 templates.env.filters["cluster_bar"] = filters.cluster_bar
 templates.env.filters["word_count"] = filters.word_count
 templates.env.filters["read_time"] = filters.read_time

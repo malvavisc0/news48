@@ -1,15 +1,9 @@
 """Claims database operations — per-claim fact-check results."""
 
 import json
-from datetime import datetime, timezone
 
-from .connection import SessionLocal
+from .connection import SessionLocal, _utcnow
 from .models import Claim
-
-
-def _utcnow() -> str:
-    """Return current UTC time as ISO 8601 string."""
-    return datetime.now(timezone.utc).isoformat()
 
 
 def insert_claims(article_id: int, claims: list[dict]) -> int:
