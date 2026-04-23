@@ -124,9 +124,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         elif name == "parse_article":
             return await _parse_article(arguments)
         else:
-            return [
-                types.TextContent(type="text", text=f"Unknown tool: {name}")
-            ]
+            return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
     except Exception as e:
         logger.exception("Tool %s failed", name)
         return [types.TextContent(type="text", text=f"Error: {e}")]
@@ -140,9 +138,7 @@ async def _fetch_feeds(args: dict) -> list[types.TextContent]:
     if domain:
         feeds = [f for f in feeds if domain in f.get("url", "")]
     return [
-        types.TextContent(
-            type="text", text=json.dumps(feeds, default=str, indent=2)
-        )
+        types.TextContent(type="text", text=json.dumps(feeds, default=str, indent=2))
     ]
 
 
@@ -152,9 +148,7 @@ async def _list_feeds(args: dict) -> list[types.TextContent]:
     limit = args.get("limit", 50)
     feeds = get_all_feeds()[:limit]
     return [
-        types.TextContent(
-            type="text", text=json.dumps(feeds, default=str, indent=2)
-        )
+        types.TextContent(type="text", text=json.dumps(feeds, default=str, indent=2))
     ]
 
 
@@ -165,9 +159,7 @@ async def _search_articles(args: dict) -> list[types.TextContent]:
     limit = args.get("limit", 10)
     results = search_articles(query, limit=limit)
     return [
-        types.TextContent(
-            type="text", text=json.dumps(results, default=str, indent=2)
-        )
+        types.TextContent(type="text", text=json.dumps(results, default=str, indent=2))
     ]
 
 
@@ -177,29 +169,19 @@ async def _get_article_detail(args: dict) -> list[types.TextContent]:
     article_id = args["article_id"]
     article = get_article_by_id(article_id)
     if not article:
-        return [
-            types.TextContent(
-                type="text", text=f"Article {article_id} not found"
-            )
-        ]
+        return [types.TextContent(type="text", text=f"Article {article_id} not found")]
     claims = get_claims_for_article(article_id)
     result = {
         "article": article if isinstance(article, dict) else article.to_dict(),
         "claims": claims,
     }
     return [
-        types.TextContent(
-            type="text", text=json.dumps(result, default=str, indent=2)
-        )
+        types.TextContent(type="text", text=json.dumps(result, default=str, indent=2))
     ]
 
 
 async def _get_stats(args: dict) -> list[types.TextContent]:
-    from news48.core.database import (
-        get_article_stats,
-        get_feed_stats,
-        get_fetch_stats,
-    )
+    from news48.core.database import get_article_stats, get_feed_stats, get_fetch_stats
 
     stats = {
         "articles": get_article_stats(),
@@ -207,9 +189,7 @@ async def _get_stats(args: dict) -> list[types.TextContent]:
         "fetches": get_fetch_stats(),
     }
     return [
-        types.TextContent(
-            type="text", text=json.dumps(stats, default=str, indent=2)
-        )
+        types.TextContent(type="text", text=json.dumps(stats, default=str, indent=2))
     ]
 
 
@@ -219,15 +199,11 @@ async def _parse_article(args: dict) -> list[types.TextContent]:
     article_id = args["article_id"]
     result = await run_parser(article_id)
     return [
-        types.TextContent(
-            type="text", text=json.dumps(result, default=str, indent=2)
-        )
+        types.TextContent(type="text", text=json.dumps(result, default=str, indent=2))
     ]
 
 
 async def main():
     """Run the MCP server via stdio transport."""
     async with stdio_server() as streams:
-        await app.run(
-            streams[0], streams[1], app.create_initialization_options()
-        )
+        await app.run(streams[0], streams[1], app.create_initialization_options())

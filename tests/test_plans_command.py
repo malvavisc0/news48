@@ -2,8 +2,8 @@ import json
 
 from typer.testing import CliRunner
 
-from news48.core import config
 from news48.cli.main import app
+from news48.core import config
 
 runner = CliRunner()
 

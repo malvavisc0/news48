@@ -9,8 +9,6 @@ from os import getenv
 from llama_index.core.agent.workflow import FunctionAgent
 from llama_index.llms.openai_like import OpenAILike
 
-from ._run import run_agent
-from .skills import compose_agent_instructions
 from news48.core.database import (
     claim_articles_for_processing,
     clear_article_processing_claim,
@@ -18,6 +16,9 @@ from news48.core.database import (
     get_unparsed_articles,
     mark_article_parse_failed,
 )
+
+from ._run import run_agent
+from .skills import compose_agent_instructions
 
 logger = logging.getLogger(__name__)
 

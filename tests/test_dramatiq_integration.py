@@ -13,7 +13,9 @@ class TestActorModuleSyntax:
         import ast
         from pathlib import Path
 
-        actors_path = Path(__file__).parent.parent / "news48" / "core" / "agents" / "actors.py"
+        actors_path = (
+            Path(__file__).parent.parent / "news48" / "core" / "agents" / "actors.py"
+        )
         source = actors_path.read_text(encoding="utf-8")
         # Should not raise SyntaxError
         ast.parse(source)
@@ -22,7 +24,9 @@ class TestActorModuleSyntax:
         """Verify actors.py uses periodiq cron decorator."""
         from pathlib import Path
 
-        actors_path = Path(__file__).parent.parent / "news48" / "core" / "agents" / "actors.py"
+        actors_path = (
+            Path(__file__).parent.parent / "news48" / "core" / "agents" / "actors.py"
+        )
         source = actors_path.read_text(encoding="utf-8")
         assert "periodic=cron(" in source
 
@@ -30,7 +34,9 @@ class TestActorModuleSyntax:
         """Verify actors.py defines queue assignments."""
         from pathlib import Path
 
-        actors_path = Path(__file__).parent.parent / "news48" / "core" / "agents" / "actors.py"
+        actors_path = (
+            Path(__file__).parent.parent / "news48" / "core" / "agents" / "actors.py"
+        )
         source = actors_path.read_text(encoding="utf-8")
         for queue in [
             "sentinel",

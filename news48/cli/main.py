@@ -101,9 +101,7 @@ def mcp_list_keys():
 
     keys = list_keys()
     if not keys:
-        typer.echo(
-            "No MCP API keys found. " "Create one with: news48 mcp create-key"
-        )
+        typer.echo("No MCP API keys found. " "Create one with: news48 mcp create-key")
         return
     table = Table(title="MCP API Keys")
     table.add_column("Key", style="cyan")

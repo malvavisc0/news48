@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from news48.core import config
+
 from ._helpers import _safe_json
 
 _STALE_PLAN_TIMEOUT_MINUTES = 60

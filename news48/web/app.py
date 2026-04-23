@@ -179,9 +179,7 @@ async def article_detail(request: Request, article_id: int):
             claims_summary[verdict] += 1
 
     site_url = _site_url(request)
-    article["canonical_url"] = build_canonical_url(
-        site_url, f"/article/{article_id}"
-    )
+    article["canonical_url"] = build_canonical_url(site_url, f"/article/{article_id}")
     seo = build_seo_meta(
         title=f"{article['title']} | news48",
         description=(
@@ -230,10 +228,7 @@ async def article_detail(request: Request, article_id: int):
 @app.get("/cluster/{cluster_slug}")
 async def cluster_detail(request: Request, cluster_slug: str):
     """Cluster detail page showing all articles matching a tag."""
-    from news48.core.database.articles import (
-        get_all_categories,
-        get_articles_by_tag,
-    )
+    from news48.core.database.articles import get_all_categories, get_articles_by_tag
 
     articles, total = get_articles_by_tag(
         cluster_slug, hours=48, limit=None, parsed=True
@@ -310,18 +305,13 @@ async def category_detail(request: Request, category_slug: str):
     stats = get_web_stats(hours=48, parsed=True)
 
     # Look up display name from categories list
-    cat_match = next(
-        (c for c in categories if c["slug"] == category_slug), None
-    )
-    raw_name = (
-        cat_match["name"] if cat_match else category_slug.replace("-", " ")
-    )
+    cat_match = next((c for c in categories if c["slug"] == category_slug), None)
+    raw_name = cat_match["name"] if cat_match else category_slug.replace("-", " ")
     category_name = filters.format_category_name(raw_name)
     site_url = _site_url(request)
     canonical_url = build_canonical_url(site_url, f"/category/{category_slug}")
     category_title = (
-        f"{category_name} News Today | Live Verified Stories "
-        "in the Last 48 Hours"
+        f"{category_name} News Today | Live Verified Stories " "in the Last 48 Hours"
     )
     category_description = (
         f"Explore the latest {category_name} news from the last 48 hours "

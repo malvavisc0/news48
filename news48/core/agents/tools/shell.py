@@ -34,9 +34,7 @@ def _prepare_shell_command(command: str) -> tuple[list[str], str]:
     return ["/bin/bash", "-lc", resolved_command], resolved_command
 
 
-def run_shell_command(
-    reason: str, command: str, timeout: Optional[int] = 120
-) -> str:
+def run_shell_command(reason: str, command: str, timeout: Optional[int] = 120) -> str:
     """Execute a shell command and return its output.
 
     ## When to Use

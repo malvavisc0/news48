@@ -6,9 +6,10 @@ from os import getenv
 from llama_index.core.agent.workflow import FunctionAgent
 from llama_index.llms.openai_like import OpenAILike
 
+from news48.core.database import get_article_by_id, get_articles_paginated
+
 from ._run import run_agent
 from .skills import compose_agent_instructions
-from news48.core.database import get_article_by_id, get_articles_paginated
 
 logger = logging.getLogger(__name__)
 

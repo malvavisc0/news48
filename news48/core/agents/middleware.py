@@ -27,8 +27,9 @@ class StartupRecoveryMiddleware(dramatiq.Middleware):
         """Called once when a worker process starts."""
         logger.info("StartupRecoveryMiddleware: running recovery tasks")
         try:
-            from .tools.planner import archive_terminal_plans, recover_stale_plans
             from news48.core.database.articles import release_stale_article_claims
+
+            from .tools.planner import archive_terminal_plans, recover_stale_plans
 
             # Recover stale plans
             payload = recover_stale_plans("Dramatiq worker startup recovery")

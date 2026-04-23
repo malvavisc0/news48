@@ -120,9 +120,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         elif name == "web_stats":
             return await _web_stats(arguments)
         else:
-            return [
-                types.TextContent(type="text", text=f"Unknown tool: {name}")
-            ]
+            return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
     except Exception as e:
         logger.exception("Web MCP tool %s failed", name)
         return [types.TextContent(type="text", text=f"Error: {e}")]
@@ -137,9 +135,7 @@ async def _browse_articles(args: dict) -> list[types.TextContent]:
     hours = args.get("hours", 48)
     category = args.get("category")
     limit = args.get("limit", 20)
-    articles, _ = get_articles_paginated(
-        limit=limit, hours=hours, category=category
-    )
+    articles, _ = get_articles_paginated(limit=limit, hours=hours, category=category)
     return [
         types.TextContent(
             type="text",
@@ -175,9 +171,7 @@ async def _article_detail(args: dict) -> list[types.TextContent]:
         ]
     claims = get_claims_for_article(article_id)
     result = {
-        "article": (
-            article if isinstance(article, dict) else article.to_dict()
-        ),
+        "article": (article if isinstance(article, dict) else article.to_dict()),
         "claims": claims,
     }
     return [
@@ -262,9 +256,7 @@ class MCPEndpoint:
 
     # -- ASGI handler --------------------------------------------------------
 
-    async def __call__(
-        self, scope: Scope, receive: Receive, send: Send
-    ) -> None:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """ASGI entry point — validate auth then delegate to transport."""
         if scope["type"] != "http":
             return

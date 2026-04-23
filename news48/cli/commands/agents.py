@@ -162,6 +162,7 @@ def _enqueue_agent(agent_name: str, task_prompt: str) -> None:
     """Enqueue an agent task to Dramatiq."""
     try:
         import agents.broker  # noqa: F401
+
         from news48.core.agents.actors import (
             executor_cycle,
             fact_check_cycle,

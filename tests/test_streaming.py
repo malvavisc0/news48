@@ -1,7 +1,11 @@
 """Tests for agents/streaming.py functions."""
 
 from news48.core.agents import streaming
-from news48.core.agents.streaming import _strip_prefix, emit_stream_delta, format_log_line
+from news48.core.agents.streaming import (
+    _strip_prefix,
+    emit_stream_delta,
+    format_log_line,
+)
 
 
 class TestStripPrefix:

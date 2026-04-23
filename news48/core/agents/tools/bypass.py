@@ -5,11 +5,16 @@ from typing import Any
 
 from html_to_markdown import convert
 
-from ._helpers import _safe_json
 from news48.core.config import Services
-from news48.core.helpers.bypass import fetch_url_content, get_byparr_solution, strip_html_noise
+from news48.core.helpers.bypass import (
+    fetch_url_content,
+    get_byparr_solution,
+    strip_html_noise,
+)
 from news48.core.helpers.url import get_base_url
 from news48.core.models import ByparrSolution
+
+from ._helpers import _safe_json
 
 
 async def fetch_webpage_content(

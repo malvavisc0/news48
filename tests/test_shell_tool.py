@@ -1,9 +1,6 @@
 import sys
 
-from news48.core.agents.tools.shell import (
-    _MAIN_MODULE_PATH,
-    _prepare_shell_command,
-)
+from news48.core.agents.tools.shell import _MAIN_MODULE_PATH, _prepare_shell_command
 
 
 def test_prepare_shell_command_binds_news48_to_current_interpreter():
