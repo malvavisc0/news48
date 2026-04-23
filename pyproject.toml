@@ -1,7 +1,11 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "news48"
-version = "0.1.0"
 description = "Add your description here"
+dynamic = ["version"]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -30,8 +34,11 @@ dependencies = [
 news48 = "main:main"
 
 [tool.setuptools]
-packages = ["agents", "commands", "database", "helpers", "web"]
+packages = ["agents", "commands", "database", "helpers", "web", "news48"]
 py-modules = ["config", "models", "main"]
+
+[tool.setuptools.dynamic]
+version = { attr = "news48.__version__" }
 
 [tool.uv]
 package = true

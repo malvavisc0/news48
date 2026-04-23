@@ -111,7 +111,7 @@ services:
   redis:
     image: redis/redis-stack:latest
     ports:
-      - "6379:6379" # Redis API
+      # - "6379:6379" # Redis API
       - "8001:8001" # RedisInsight dashboard
     volumes:
       - redis-data:/data

@@ -65,6 +65,7 @@ COPY --from=web-builder /app/.venv /app/.venv
 COPY web/ web/
 COPY database/ database/
 COPY config.py ./
+COPY news48/ news48/
 
 # Create a minimal helpers/__init__.py that doesn't import heavy modules
 RUN mkdir -p helpers && \

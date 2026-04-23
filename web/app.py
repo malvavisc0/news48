@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import web.helpers as filters
+from news48 import __version__
 
 app = FastAPI(title="news48")
 
@@ -21,6 +22,7 @@ app.mount(
 # Templates with custom filters and caching disabled
 templates = Jinja2Templates(directory=_web_dir / "templates")
 templates.env.cache = None
+templates.env.globals["app_version"] = __version__
 templates.env.filters["relative_time"] = filters.format_relative_time
 templates.env.filters["hours_remaining"] = filters.hours_remaining
 templates.env.filters["freshness_class"] = filters.freshness_class
@@ -175,8 +177,12 @@ async def category_detail(request: Request, category_slug: str):
     stats = get_web_stats(hours=48, parsed=True)
 
     # Look up display name from categories list
-    cat_match = next((c for c in categories if c["slug"] == category_slug), None)
-    raw_name = cat_match["name"] if cat_match else category_slug.replace("-", " ")
+    cat_match = next(
+        (c for c in categories if c["slug"] == category_slug), None
+    )
+    raw_name = (
+        cat_match["name"] if cat_match else category_slug.replace("-", " ")
+    )
     category_name = filters.format_category_name(raw_name)
 
     return templates.TemplateResponse(

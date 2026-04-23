@@ -19,9 +19,9 @@ services:
     stdin_open: true
     tty: true
 
-  llamacpp:
-    ports:
-      - "9090:8080"
+  #llamacpp:
+  #  ports:
+  #    - "8090:8080"
 
   dramatiq-worker:
     build:
