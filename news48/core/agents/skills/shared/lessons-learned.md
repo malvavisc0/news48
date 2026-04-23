@@ -13,7 +13,7 @@ Save lessons eagerly, but only when they improve future system operation.
 Save a lesson when any of these happen:
 
 1. **A command fails and you discover the correct syntax** — save the working syntax so you never fail the same way again.
-1a. **You use `uv run news48 --help` or subcommand help to confirm the real CLI shape** — save the useful syntax only if it corrected uncertainty or prevented a mistake.
+1a. **You use `news48 --help` or subcommand help to confirm the real CLI shape** — save the useful syntax only if it corrected uncertainty or prevented a mistake.
 2. **You retry something and find the right approach** — save what worked and why the first attempt failed.
 3. **You learn how a process or workflow operates through execution** — save the insight so future runs don't need to rediscover it.
 4. **You discover a feed-specific quirk** — non-standard date formats, unusual HTML structure, rate limits, timeouts.

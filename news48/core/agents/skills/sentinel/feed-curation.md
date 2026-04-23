@@ -34,8 +34,8 @@ Recommend deletion only when one of these conditions is strongly supported:
    with at least 10 relevant articles in the window.
    Check with:
    ```bash
-   uv run news48 articles list --feed <domain> --status parse-failed --json
-   uv run news48 articles list --feed <domain> --status parsed --json
+   news48 articles list --feed <domain> --status parse-failed --json
+   news48 articles list --feed <domain> --status parsed --json
    ```
    If parse_failed / (parse_failed + parsed) > 60%, the feed is
    consistently producing unparseable content and should be removed.
@@ -54,9 +54,9 @@ Create a human-review plan rather than recommending deletion when:
 
 ## Before Recommending Deletion
 
-1. Use `uv run news48 feeds info <id> --json` to confirm the feed identity.
+1. Use `news48 feeds info <id> --json` to confirm the feed identity.
 2. Record the exact evidence, denominator, and observation window in the sentinel report.
-3. Check `uv run news48 plans list --json` to ensure the issue is not already being handled.
+3. Check `news48 plans list --json` to ensure the issue is not already being handled.
 4. If the situation is novel, log the pattern using `save_lesson`.
 5. Send an email alert if email is configured and the recommendation is high-impact.
 

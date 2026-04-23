@@ -60,7 +60,7 @@ The output title MUST always differ from the source article title. This is a har
 ## Failure Handling
 If any quality gate or fidelity check fails:
 ```bash
-uv run news48 articles fail ARTICLEID --error "parse.<reason_code>: Failed parser quality gate: <reason>" --json
+news48 articles fail ARTICLEID --error "parse.<reason_code>: Failed parser quality gate: <reason>" --json
 ```
 
 ## Failure Reason Codes

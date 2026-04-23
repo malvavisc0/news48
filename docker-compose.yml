@@ -23,6 +23,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      llamacpp:
+        condition: service_healthy
     networks:
       - news48-net
 
@@ -48,6 +50,27 @@ services:
     networks:
       - news48-net
 
+  # One-shot init container that downloads the GGUF model before the server starts.
+  # Shares the llamacpp-models volume so the model is immediately available.
+  llamacpp-init:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda13
+    entrypoint: [ "bash", "/app/download-model.sh" ]
+    volumes:
+      - llamacpp-models:/models
+      - ./scripts/download-model.sh:/app/download-model.sh:ro
+    environment:
+      - LLAMACPP_MODEL_REPO=${LLAMACPP_MODEL_REPO:-mradermacher/claude-oss-i1-GGUF}
+      - LLAMACPP_MODEL_FILE=${LLAMACPP_MODEL_FILE:-claude-oss.i1-Q6_K.gguf}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+    networks:
+      - news48-net
+
   llamacpp:
     image: ghcr.io/ggml-org/llama.cpp:server-cuda13
     entrypoint: [ "bash", "/app/llamacpp-entrypoint.sh" ]
@@ -66,12 +89,15 @@ services:
       - LLAMACPP_CACHE_TYPE_K=${LLAMACPP_CACHE_TYPE_K:-q8_0}
       - LLAMACPP_CACHE_TYPE_V=${LLAMACPP_CACHE_TYPE_V:-q8_0}
       - LLAMACPP_FLASH_ATTN=${LLAMACPP_FLASH_ATTN:-on}
+    depends_on:
+      llamacpp-init:
+        condition: service_completed_successfully
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 120s
+      start_period: 30s
     deploy:
       resources:
         reservations:
@@ -160,6 +186,8 @@ services:
         condition: service_healthy
       mysql:
         condition: service_healthy
+      llamacpp:
+        condition: service_healthy
     networks:
       - news48-net
 
@@ -181,6 +209,8 @@ services:
       redis:
         condition: service_healthy
       mysql:
+        condition: service_healthy
+      llamacpp:
         condition: service_healthy
     networks:
       - news48-net

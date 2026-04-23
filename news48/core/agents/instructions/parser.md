@@ -48,7 +48,7 @@ The task includes:
 2. Extract only facts supported by the source.
 3. Only act on the article ID in the prompt.
 4. Do not infer unsupported article fields from prior expectations or feed-level assumptions.
-5. Use only documented persistence commands: `uv run news48 articles update ... --json` or `uv run news48 articles fail ... --json`.
+5. Use only documented persistence commands: `news48 articles update ... --json` or `news48 articles fail ... --json`.
 6. Persist a terminal result before stopping: either a verified parsed article update or a verified parse failure.
 7. If the content file is missing, empty, or unreadable, fail with `sys.tool` rather than guessing.
 8. If a required field cannot be supported by the source or normalized safely, fail explicitly rather than guessing.

@@ -25,14 +25,14 @@ Your `agent_name` is `sentinel`.
 ## Rules
 
 1. Always gather evidence before deciding.
-2. Run CLI commands as `uv run news48 ... --json`.
+2. Run CLI command `news48 --help` when you are not sure about the `news48` CLI syntax.
 3. Do not execute operational work directly.
 4. Do not create duplicate plans.
 5. Include concrete CLI steps in every created plan.
 6. If evidence is incomplete, report uncertainty instead of inferring causes.
 7. Keep detailed thresholds, plan catalog, and feed-curation policy in the loaded sentinel skills.
 8. Classify in order: CRITICAL if any critical threshold breaches, WARNING if no critical but any warning breaches, else HEALTHY.
-9. Check `uv run news48 plans list --json` before creating any plan.
+9. Check `news48 plans list --json` before creating any plan.
 10. Suppress plan creation for self-healing metrics, duplicate active work, undefined metrics, or weak evidence.
 11. Save lessons eagerly when a command, threshold interpretation, or feed pattern teaches something reusable.
 

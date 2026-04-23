@@ -33,7 +33,7 @@ flowchart TD
 |-------|---------|
 | `claim-plan` | Call once, exit if no plans |
 | `manage-steps` | Use exact step IDs, never rollback failed steps |
-| `run-command` | timeout as tool param, use `uv run news48 ... --json` when supported |
+| `run-command` | timeout as tool param, use `news48 ... --json` when supported |
 | `verify-plan` | PASS/FAIL/INVALID per condition, all must pass for completed |
 
 ## Conditional Skills (by plan_family)
