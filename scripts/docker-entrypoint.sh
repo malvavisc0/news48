@@ -25,10 +25,5 @@ with e.connect() as c:
     sleep 2
 done
 
-# Run Alembic migrations on startup
-echo "Running database migrations..."
-alembic upgrade head
-echo "Migrations complete"
-
 # Execute the passed command
 exec "$@"
