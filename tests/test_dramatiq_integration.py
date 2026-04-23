@@ -13,7 +13,7 @@ class TestActorModuleSyntax:
         import ast
         from pathlib import Path
 
-        actors_path = Path(__file__).parent.parent / "agents" / "actors.py"
+        actors_path = Path(__file__).parent.parent / "news48" / "core" / "agents" / "actors.py"
         source = actors_path.read_text(encoding="utf-8")
         # Should not raise SyntaxError
         ast.parse(source)
@@ -22,7 +22,7 @@ class TestActorModuleSyntax:
         """Verify actors.py uses periodiq cron decorator."""
         from pathlib import Path
 
-        actors_path = Path(__file__).parent.parent / "agents" / "actors.py"
+        actors_path = Path(__file__).parent.parent / "news48" / "core" / "agents" / "actors.py"
         source = actors_path.read_text(encoding="utf-8")
         assert "periodic=cron(" in source
 
@@ -30,7 +30,7 @@ class TestActorModuleSyntax:
         """Verify actors.py defines queue assignments."""
         from pathlib import Path
 
-        actors_path = Path(__file__).parent.parent / "agents" / "actors.py"
+        actors_path = Path(__file__).parent.parent / "news48" / "core" / "agents" / "actors.py"
         source = actors_path.read_text(encoding="utf-8")
         for queue in [
             "sentinel",
@@ -47,21 +47,21 @@ class TestWorkersHelpers:
 
     def test_build_task_context_sentinel(self):
         """Verify sentinel context includes email_configured."""
-        from agents.workers import build_task_context
+        from news48.core.agents.workers import build_task_context
 
         ctx = build_task_context("sentinel")
         assert "email_configured" in ctx
 
     def test_build_task_context_executor(self):
         """Verify executor context is a dict."""
-        from agents.workers import build_task_context
+        from news48.core.agents.workers import build_task_context
 
         ctx = build_task_context("executor")
         assert isinstance(ctx, dict)
 
     def test_build_task_context_fact_checker(self):
         """Verify fact_checker context is empty dict."""
-        from agents.workers import build_task_context
+        from news48.core.agents.workers import build_task_context
 
         ctx = build_task_context("fact_checker")
         assert ctx == {}
@@ -72,19 +72,19 @@ class TestMiddleware:
 
     def test_structured_logging_middleware_exists(self):
         """Verify StructuredLoggingMiddleware is defined."""
-        from agents.middleware import StructuredLoggingMiddleware
+        from news48.core.agents.middleware import StructuredLoggingMiddleware
 
         assert StructuredLoggingMiddleware is not None
 
     def test_plan_recovery_middleware_exists(self):
         """Verify PlanRecoveryMiddleware is defined."""
-        from agents.middleware import PlanRecoveryMiddleware
+        from news48.core.agents.middleware import PlanRecoveryMiddleware
 
         assert PlanRecoveryMiddleware is not None
 
     def test_startup_recovery_middleware_exists(self):
         """Verify StartupRecoveryMiddleware is defined."""
-        from agents.middleware import StartupRecoveryMiddleware
+        from news48.core.agents.middleware import StartupRecoveryMiddleware
 
         assert StartupRecoveryMiddleware is not None
 
@@ -94,7 +94,7 @@ class TestBroker:
 
     def test_broker_configured(self):
         """Verify broker module can be imported."""
-        from agents import broker
+        from news48.core.agents import broker
 
         assert broker.redis_broker is not None
 
@@ -104,14 +104,14 @@ class TestPlannerExtensions:
 
     def test_release_plans_for_owner_exists(self):
         """Verify release_plans_for_owner function exists."""
-        from agents.tools.planner import release_plans_for_owner
+        from news48.core.agents.tools.planner import release_plans_for_owner
 
         assert callable(release_plans_for_owner)
 
     def test_release_plans_for_owner_empty(self, tmp_path, monkeypatch):
         """Verify release_plans_for_owner returns dict with count."""
-        import config
-        from agents.tools.planner import release_plans_for_owner
+        from news48.core import config
+        from news48.core.agents.tools.planner import release_plans_for_owner
 
         monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
         result = release_plans_for_owner("test:owner")

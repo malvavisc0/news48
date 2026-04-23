@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-import config
-from agents.tools.lessons import _load_lessons, save_lesson
+from news48.core import config
+from news48.core.agents.tools.lessons import _load_lessons, save_lesson
 
 
 @pytest.fixture
@@ -146,7 +146,7 @@ def test_compose_agent_instructions_includes_lessons(
         )
     )
 
-    from agents.skills import compose_agent_instructions
+    from news48.core.agents.skills import compose_agent_instructions
 
     prompt = compose_agent_instructions("executor", {})
     assert "<!-- LESSONS LEARNED -->" in prompt
@@ -156,7 +156,7 @@ def test_compose_agent_instructions_includes_lessons(
 def test_compose_agent_instructions_no_lessons_when_empty(tmp_path, monkeypatch):
     """compose_agent_instructions has no lessons section when no file."""
     monkeypatch.setattr(config, "LESSONS_FILE", tmp_path / "lessons.json")
-    from agents.skills import compose_agent_instructions
+    from news48.core.agents.skills import compose_agent_instructions
 
     prompt = compose_agent_instructions("executor", {})
     assert "<!-- LESSONS LEARNED -->" not in prompt

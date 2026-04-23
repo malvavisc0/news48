@@ -1,6 +1,6 @@
 """Non-LLM tests for agent run helpers and Dramatiq architecture."""
 
-from agents._run import _is_empty_claim_result, _is_substantive_result
+from news48.core.agents._run import _is_empty_claim_result, _is_substantive_result
 
 
 class TestRunLoopHelpers:

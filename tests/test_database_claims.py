@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from database import (
+from news48.core.database import (
     claim_articles_for_processing,
     clear_article_processing_claim,
     compute_overall_verdict,
@@ -14,12 +14,12 @@ from database import (
     insert_claims,
     update_article_fact_check,
 )
-from database.articles import (
+from news48.core.database.articles import (
     get_articles_by_category,
     get_articles_by_tag,
     release_stale_article_claims,
 )
-from database.models import Article, Feed, Fetch
+from news48.core.database.models import Article, Feed, Fetch
 
 
 def _create_article(db_session, url: str = "https://example.com/a") -> int:

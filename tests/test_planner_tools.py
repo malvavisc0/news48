@@ -1,7 +1,7 @@
 import json
 
-import config
-from agents.tools import planner as planner_tools
+from news48.core import config
+from news48.core.agents.tools import planner as planner_tools
 
 
 def test_create_plan_defaults_to_pending_and_parent_id(tmp_path, monkeypatch):

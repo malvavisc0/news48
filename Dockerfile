@@ -11,9 +11,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Copy dependency files for layer caching
 COPY pyproject.toml uv.lock ./
 
-# Install all non-dev runtime dependencies so the web image has the same
-# database drivers and shared runtime packages as the worker image.
-RUN uv sync --frozen --no-dev --no-install-project
+# Install web extra dependencies (no dev, no project install)
+RUN uv sync --frozen --no-dev --extra web --no-install-project
 
 # =============================================================================
 # Stage 2: worker-builder — Install ALL project dependencies (no dev)
@@ -29,7 +28,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 
 # Install all project dependencies (excludes dev group)
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --extra all --no-install-project
 
 # =============================================================================
 # Stage 2b: dev-builder — Install ALL dependencies INCLUDING dev
@@ -45,7 +44,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 
 # Install all dependencies including dev group (black, isort, pytest)
-RUN uv sync --frozen --no-install-project
+RUN uv sync --frozen --extra all --no-install-project
 
 # =============================================================================
 # Stage 3: web — Production web image (minimal)
@@ -61,16 +60,12 @@ RUN groupadd -g 1000 news48 && \
 # Copy installed packages from builder
 COPY --from=web-builder /app/.venv /app/.venv
 
-# Copy only web-relevant source code
-COPY web/ web/
-COPY database/ database/
-COPY config.py ./
+# Copy the entire news48 package (includes core + web subpackages)
 COPY news48/ news48/
 
-# Create a minimal helpers/__init__.py that doesn't import heavy modules
-RUN mkdir -p helpers && \
-    echo '"""Web-only helpers."""' > helpers/__init__.py
-COPY helpers/seo.py helpers/
+# Copy Alembic (entrypoint runs migrations)
+COPY alembic/ alembic/
+COPY alembic.ini ./
 
 # Copy and make entrypoint executable
 COPY scripts/docker-entrypoint.sh /app/scripts/docker-entrypoint.sh
@@ -93,7 +88,7 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/')" || exit 1
 
 # Default command (overridden by compose)
-CMD ["uvicorn", "web.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "news48.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # =============================================================================
 # Stage 4: worker — Production worker image (full stack)
@@ -114,7 +109,7 @@ COPY . .
 
 # Install the project itself (dependencies already in .venv from builder)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --extra all
 
 # Ensure entrypoint is executable
 RUN chmod +x /app/scripts/docker-entrypoint.sh
@@ -129,7 +124,7 @@ RUN mkdir -p /data && chown news48:news48 /data
 USER news48
 
 # Default command (overridden by compose)
-CMD ["dramatiq", "agents.actors", "--processes", "1", "--threads", "8"]
+CMD ["dramatiq", "news48.core.agents.actors", "--processes", "1", "--threads", "8"]
 
 # =============================================================================
 # Stage 5: web-dev — Development web image

@@ -14,8 +14,8 @@ from sqlalchemy import create_engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 # Import all models so they are registered on Base.metadata
-import database.models  # noqa: F401, E402
-from database import connection as db_connection  # noqa: E402
+import news48.core.database.models  # noqa: F401, E402
+from news48.core.database import connection as db_connection  # noqa: E402
 
 
 def _patch_database_modules(test_engine):
@@ -23,7 +23,7 @@ def _patch_database_modules(test_engine):
     test_session_factory = sessionmaker(bind=test_engine, expire_on_commit=False)
     db_connection.SessionLocal = test_session_factory
 
-    from database import articles, claims, feeds, fetches, retention
+    from news48.core.database import articles, claims, feeds, fetches, retention
 
     for mod in (articles, claims, fetches, feeds, retention):
         mod.SessionLocal = test_session_factory  # type: ignore[attr-defined]

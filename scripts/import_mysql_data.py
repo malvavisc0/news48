@@ -8,8 +8,8 @@ import argparse
 import json
 from pathlib import Path
 
-from database.connection import SessionLocal
-from database.models import Article, Claim, Feed, Fetch
+from news48.core.database.connection import SessionLocal
+from news48.core.database.models import Article, Claim, Feed, Fetch
 
 TABLE_MODEL_MAP = {
     "feeds": Feed,

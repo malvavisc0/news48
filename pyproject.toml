@@ -4,38 +4,53 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "news48"
-description = "Add your description here"
+description = "Autonomous news ingestion and verification pipeline with AI agents"
 dynamic = ["version"]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "dateparser",
-    "feedparser",
-    "html-to-markdown",
-    "httpx",
-    "llama-index-llms-openai-like",
-    "loguru",
+    # Core dependencies (always installed)
     "pydantic",
     "python-dotenv",
-    "rich",
-    "typer",
-    "Jinja2",
-    "fastapi",
-    "uvicorn",
-    "dramatiq",
-    "periodiq",
-    "redis",
+    "loguru",
     "SQLAlchemy",
     "alembic",
     "mysql-connector-python",
 ]
 
-[project.scripts]
-news48 = "main:main"
+[project.optional-dependencies]
+cli = [
+    "typer",
+    "rich",
+    "feedparser",
+    "dateparser",
+    "httpx",
+    "html-to-markdown",
+    "llama-index-llms-openai-like",
+    "dramatiq",
+    "periodiq",
+    "redis",
+    "mcp[cli]",
+]
+web = [
+    "fastapi",
+    "uvicorn",
+    "Jinja2",
+    "mcp",
+    "redis",
+]
+all = ["news48[cli,web]"]
 
-[tool.setuptools]
-packages = ["agents", "commands", "database", "helpers", "web", "news48"]
-py-modules = ["config", "models", "main"]
+[project.scripts]
+news48 = "news48.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["news48*"]
+
+[tool.setuptools.package-data]
+"news48.core.agents" = ["instructions/**/*.md", "skills/**/*.md"]
+"news48.web" = ["static/**/*", "templates/**/*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "news48.__version__" }
@@ -44,13 +59,4 @@ version = { attr = "news48.__version__" }
 package = true
 
 [dependency-groups]
-web = [
-    "fastapi",
-    "uvicorn",
-    "Jinja2",
-    "python-dotenv",
-    "sqlalchemy",
-    "mysql-connector-python",
-    "alembic",
-]
 dev = ["black", "isort", "pytest"]

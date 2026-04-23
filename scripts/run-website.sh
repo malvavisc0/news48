@@ -188,7 +188,7 @@ trap cleanup SIGINT SIGTERM
 
 CMD=(
     uv run uvicorn
-    web.app:app
+    news48.web.app:app
     --host "$HOST"
     --port "$PORT"
     --log-level "$LOG_LEVEL"

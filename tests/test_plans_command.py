@@ -2,14 +2,14 @@ import json
 
 from typer.testing import CliRunner
 
-import config
-from main import app
+from news48.core import config
+from news48.cli.main import app
 
 runner = CliRunner()
 
 
 def test_plans_list_show_cancel(tmp_path, monkeypatch):
-    from agents.tools import planner as planner_tools
+    from news48.core.agents.tools import planner as planner_tools
 
     monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
@@ -37,7 +37,7 @@ def test_plans_list_show_cancel(tmp_path, monkeypatch):
 
 
 def test_plans_show_displays_success_conditions(tmp_path, monkeypatch):
-    from agents.tools import planner as planner_tools
+    from news48.core.agents.tools import planner as planner_tools
 
     monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
@@ -59,7 +59,7 @@ def test_plans_show_displays_success_conditions(tmp_path, monkeypatch):
 
 
 def test_plans_show_json_includes_success_conditions(tmp_path, monkeypatch):
-    from agents.tools import planner as planner_tools
+    from news48.core.agents.tools import planner as planner_tools
 
     monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
@@ -84,7 +84,7 @@ def test_plans_show_json_includes_success_conditions(tmp_path, monkeypatch):
 
 
 def test_plans_remediate_preview_and_apply(tmp_path, monkeypatch):
-    from agents.tools import planner as planner_tools
+    from news48.core.agents.tools import planner as planner_tools
 
     monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
@@ -126,7 +126,7 @@ def test_plans_remediate_preview_and_apply(tmp_path, monkeypatch):
 def test_plans_remediate_clears_campaign_parent_deadlock(tmp_path, monkeypatch):
     """plans remediate --apply clears parent_id when parent is a pending
     campaign, preventing permanent deadlock (Fix 2)."""
-    from agents.tools import planner as planner_tools
+    from news48.core.agents.tools import planner as planner_tools
 
     monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
@@ -180,7 +180,7 @@ def test_plans_remediate_clears_campaign_parent_deadlock(tmp_path, monkeypatch):
 def test_has_active_children_finds_parent_id_linked_children(tmp_path, monkeypatch):
     """_has_active_children detects children linked via parent_id, not just
     campaign_id (Fix 4)."""
-    from commands.plans import _has_active_children
+    from news48.cli.commands.plans import _has_active_children
 
     campaign_id = "test-campaign-id"
     all_plans = [

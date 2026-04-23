@@ -31,7 +31,7 @@ alembic upgrade head
 echo "Migrations complete"
 
 # Seed feeds from seed.txt if available (worker/scheduler images only)
-if [ -f /app/seed.txt ] && [ -f /app/main.py ]; then
+if [ -f /app/seed.txt ] && [ -d /app/news48 ]; then
     echo "Seeding feeds from seed.txt..."
     news48 seed /app/seed.txt || echo "Feed seeding skipped or failed (non-fatal)"
 fi

@@ -4,7 +4,7 @@ import json
 
 from typer.testing import CliRunner
 
-from main import app
+from news48.cli.main import app
 
 runner = CliRunner()
 

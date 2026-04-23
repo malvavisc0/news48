@@ -3,8 +3,8 @@ and _strip_html_tags()."""
 
 import pytest
 
-from helpers.bypass import strip_html_noise
-from helpers.url import extract_og_image
+from news48.core.helpers.bypass import strip_html_noise
+from news48.core.helpers.url import extract_og_image
 
 # ---------------------------------------------------------------------------
 # strip_html_noise() — body extraction
@@ -130,7 +130,7 @@ class TestStripHtmlTagsInUpdateArticle:
     @pytest.fixture()
     def article_id(self, db_session) -> int:
         """Create a test article using the SQLAlchemy session fixture."""
-        from database.models import Article, Feed, Fetch
+        from news48.core.database.models import Article, Feed, Fetch
 
         feed = Feed(
             url="https://example.com/feed.xml",
@@ -160,41 +160,41 @@ class TestStripHtmlTagsInUpdateArticle:
         return article.id
 
     def test_strips_html_from_summary(self, article_id: int) -> None:
-        from database.articles import update_article
+        from news48.core.database.articles import update_article
 
         update_article(article_id, content="clean", summary="<b>Bold</b> summary")
-        from database.articles import get_article_by_id
+        from news48.core.database.articles import get_article_by_id
 
         article = get_article_by_id(article_id)
         assert article["summary"] == "Bold summary"
 
     def test_strips_html_from_title(self, article_id: int) -> None:
-        from database.articles import update_article
+        from news48.core.database.articles import update_article
 
         update_article(article_id, content="clean", title="<i>Italic</i> Title")
-        from database.articles import get_article_by_id
+        from news48.core.database.articles import get_article_by_id
 
         article = get_article_by_id(article_id)
         assert article["title"] == "Italic Title"
 
     def test_strips_html_from_content(self, article_id: int) -> None:
-        from database.articles import update_article
+        from news48.core.database.articles import update_article
 
         update_article(
             article_id,
             content="<p>Paragraph</p> with <a href='#'>link</a>",
         )
-        from database.articles import get_article_by_id
+        from news48.core.database.articles import get_article_by_id
 
         article = get_article_by_id(article_id)
         assert article["content"] == "Paragraph with link"
 
     def test_none_values_unchanged(self, article_id: int) -> None:
-        from database.articles import update_article
+        from news48.core.database.articles import update_article
 
         # Should not raise when summary/title are None
         update_article(article_id, content="clean", summary=None, title=None)
-        from database.articles import get_article_by_id
+        from news48.core.database.articles import get_article_by_id
 
         article = get_article_by_id(article_id)
         assert article["content"] == "clean"

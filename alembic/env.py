@@ -17,12 +17,12 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Import Base and all models so they are registered on Base.metadata
-from database.connection import Base  # noqa: E402
+from news48.core.database.connection import Base  # noqa: E402
 
 target_metadata = Base.metadata
 
 # Import all models so they register themselves on Base.metadata
-import database.models  # noqa: E402, F401
+import news48.core.database.models  # noqa: E402, F401
 
 
 def get_url() -> str:

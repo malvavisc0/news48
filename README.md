@@ -73,7 +73,7 @@ Four scheduled agents run through Periodiq-scheduled Dramatiq actors backed by R
 | **Parser** | Claims downloaded articles and parses them autonomously |
 | **Fact-checker** | Verifies claims by searching evidence and recording verdicts |
 
-> **Source:** Dramatiq actors in [`agents/actors.py`](agents/actors.py), Periodiq cron schedules in [`agents/actors.py`](agents/actors.py), CLI entry points in [`commands/agents.py`](commands/agents.py).
+> **Source:** Dramatiq actors in [`news48/core/agents/actors.py`](news48/core/agents/actors.py), Periodiq cron schedules in [`news48/core/agents/actors.py`](news48/core/agents/actors.py), CLI entry points in [`news48/cli/commands/agents.py`](news48/cli/commands/agents.py).
 
 ## 🧠 Self-Learning Agents
 
@@ -103,7 +103,7 @@ Run 2:  Executor starts with "timeout for fact-check should be 600s" already loa
 | Best Practices | Patterns that lead to better outcomes |
 | Timing & Thresholds | Correct batch sizes, intervals, limits |
 
-> The lessons file is gitignored (instance-specific). See [`agents/skills/shared/lessons-learned.md`](agents/skills/shared/lessons-learned.md) for the agent-facing skill documentation.
+> The lessons file is gitignored (instance-specific). See [`news48/core/agents/skills/shared/lessons-learned.md`](news48/core/agents/skills/shared/lessons-learned.md) for the agent-facing skill documentation.
 
 ## 🚀 Quick Start
 
@@ -117,11 +117,19 @@ Run 2:  Executor starts with "timeout for fact-check should be 600s" already loa
 ### Installation
 
 ```bash
-# 1. Install dependencies
-uv sync
+# 1. Install dependencies (CLI + web)
+uv sync --extra all
 
 # 2. Configure environment
 cp .env.example .env
+```
+
+**Install extras:**
+
+```bash
+uv sync --extra cli    # CLI + agents only
+uv sync --extra web    # Web server only
+uv sync --extra all    # Everything
 ```
 
 Edit `.env` and set the required variables:
@@ -188,8 +196,8 @@ uv run news48 agents run --agent fact_checker
 **Continuous autonomous mode:**
 
 ```bash
-dramatiq agents.actors --processes 1 --threads 8  # run workers
-periodiq agents.actors                               # enqueue cron tasks
+dramatiq news48.core.agents.actors --processes 1 --threads 8  # run workers
+periodiq news48.core.agents.actors                               # enqueue cron tasks
 uv run news48 agents status --json                  # inspect queues and schedules
 ```
 
@@ -332,6 +340,58 @@ This means Dramatiq execution is currently observed through Redis, logs, and the
 | `searxng` | searxng/searxng:latest | 8080 (internal) | Meta-search engine |
 | `dozzle` | amir20/dozzle:latest | 8080 | Container log viewer |
 | `byparr` | ghcr.io/thephaseless/byparr:main | 8191 (internal) | Anti-bot bypass |
+
+## 🔌 MCP Integration
+
+news48 exposes operations via the [Model Context Protocol](https://modelcontextprotocol.io/) so AI assistants can interact with your news pipeline.
+
+### Local MCP Server (stdio)
+
+Start the local MCP server for Claude Desktop, Cursor, etc.:
+
+```bash
+uv run news48 mcp serve
+```
+
+Configure your AI assistant:
+
+```json
+{
+  "mcpServers": {
+    "news48": {
+      "command": "news48",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+**Available tools:** `fetch_feeds`, `list_feeds`, `search_articles`, `get_article_detail`, `get_stats`, `parse_article`
+
+### Remote MCP Endpoint (Streamable HTTP)
+
+The web app exposes an authenticated MCP endpoint at `/mcp/`. Manage API keys with:
+
+```bash
+uv run news48 mcp create-key --label "Claude Desktop"
+uv run news48 mcp list-keys
+uv run news48 mcp revoke-key n48-abc123...
+```
+
+Remote clients connect with a Bearer token:
+
+```json
+{
+  "mcpServers": {
+    "news48-remote": {
+      "url": "https://your-domain.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer n48-your-api-key-here"
+      }
+    }
+  }
+}
+```
 
 ## 🧬 Development
 
