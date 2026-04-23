@@ -95,6 +95,8 @@ services:
 
   dramatiq-worker:
     image: ghcr.io/malvavisc0/news48:latest-worker
+    volumes:
+      - ./seed.txt:/app/seed.txt:ro
     restart: unless-stopped
     depends_on:
       mysql:
