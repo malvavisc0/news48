@@ -1,0 +1,35 @@
+# External LLM override — disables Docker llamacpp and uses an external
+# OpenAI-compatible API instead (host llama.cpp, OpenAI, Groq, Ollama, etc.).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.external-llm.yml up -d
+#
+# Set API_BASE in .env to point to your LLM endpoint:
+#   API_BASE=http://host:7070/v1          # host llama.cpp
+#   API_BASE=https://api.openai.com/v1    # OpenAI
+#   API_BASE=https://api.groq.com/openai/v1  # Groq
+#   API_BASE=http://host:11434/v1         # Ollama
+
+services:
+  # No-op: skip model download (model is managed externally)
+  llamacpp-init:
+    image: busybox
+    entrypoint: [ "sh", "-c", "echo 'Skipping model download — using external LLM' && exit 0" ]
+    volumes: []
+    environment: []
+
+  # No-op: skip Docker llama.cpp server (using external LLM endpoint)
+  llamacpp:
+    image: busybox
+    entrypoint: [ "sh", "-c", "echo 'Skipping Docker llamacpp — using external LLM' && sleep infinity" ]
+    healthcheck:
+      test: [ "CMD", "true" ]
+      interval: 5s
+      timeout: 2s
+      retries: 1
+      start_period: 1s
+    volumes: []
+    environment: []
+    depends_on:
+      llamacpp-init:
+        condition: service_completed_successfully

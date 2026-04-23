@@ -1,19 +1,20 @@
 # Deployment Guide
 
-Two deployment modes:
+Three deployment modes:
 
-| Mode | Use case | llama.cpp | Compose files |
-|------|----------|-----------|---------------|
-| **Standard** | x86 server with NVIDIA GPU | Docker container | `docker-compose.yml` + `docker-compose.prod.yml` |
-| **Jetson** | ARM64 with host llama.cpp | Host process | `docker-compose.yml` + `docker-compose.jetson.yml` |
+| Mode | Use case | LLM source | Compose files |
+|------|----------|------------|---------------|
+| **Standard** | Server with NVIDIA GPU | Docker llama.cpp container | `docker-compose.yml` + `docker-compose.prod.yml` |
+| **External LLM** | Any host with separate LLM endpoint | Host llama.cpp, OpenAI, Groq, Ollama, etc. | `docker-compose.yml` + `docker-compose.external-llm.yml` |
+| **Combined** | External LLM + production hardening | Any external API | All three `-f` files |
 
 ---
 
 ## Table of Contents
 
 - [Compose File Reference](#compose-file-reference)
-- [Standard Deployment (x86 Server)](#standard-deployment-x86-server)
-- [Jetson / ARM64 Deployment](#jetson--arm64-deployment)
+- [Standard Deployment (Docker llama.cpp)](#standard-deployment-docker-llamacpp)
+- [External LLM Deployment](#external-llm-deployment)
 - [Environment Variables](#environment-variables)
 - [Operations](#operations)
 - [Data & Volumes](#data--volumes)
@@ -31,7 +32,7 @@ Two deployment modes:
 | [`docker-compose.yml`](../docker-compose.yml) | Base service definitions (all 10 services) | Yes |
 | [`docker-compose.override.yml`](../docker-compose.override.yml) | Dev overrides (hot reload, bind mounts, debug logging) | Yes (dev only) |
 | [`docker-compose.prod.yml`](../docker-compose.prod.yml) | Production overrides (pre-built images, resource limits, security hardening) | No — pass with `-f` |
-| [`docker-compose.jetson.yml`](../docker-compose.jetson.yml) | Replaces Docker llamacpp with no-op stubs for host llama.cpp | No — pass with `-f` |
+| [`docker-compose.external-llm.yml`](../docker-compose.external-llm.yml) | Disables Docker llamacpp, uses external OpenAI-compatible API | No — pass with `-f` |
 
 > **How Docker Compose merges files:** When you pass multiple `-f` flags, later files override earlier ones. The override file is loaded automatically in development but **not** in production — you must explicitly specify `docker-compose.prod.yml`.
 
@@ -152,15 +153,20 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail=50
 
 ---
 
-## Jetson / ARM64 Deployment
+## External LLM Deployment
 
-Uses a **host-native llama.cpp** instance instead of the Docker container. The [`docker-compose.jetson.yml`](../docker-compose.jetson.yml) override replaces `llamacpp` and `llamacpp-init` with no-op busybox stubs that always report healthy. This avoids pulling CUDA images that may not work on ARM64.
+Use this when the LLM runs **outside** the Docker stack — host llama.cpp, OpenAI, Groq, Ollama, or any OpenAI-compatible API. The [`docker-compose.external-llm.yml`](../docker-compose.external-llm.yml) override replaces `llamacpp` and `llamacpp-init` with no-op busybox stubs that always report healthy.
 
-### Prerequisites
+### Supported LLM Endpoints
 
-- Docker Engine 24+ and Docker Compose v2
-- llama.cpp compiled and running on the host (e.g., `http://jetson:7070/v1`)
-- The hostname `jetson` must resolve from inside Docker containers (or use the host's IP address)
+| Provider | `API_BASE` | `API_KEY` |
+|----------|-----------|-----------|
+| Host llama.cpp | `http://host:8080/v1` | (empty) |
+| Jetson llama.cpp | `http://jetson.tago.lan:7070/v1` | (empty) |
+| OpenAI | `https://api.openai.com/v1` | Your OpenAI key |
+| Groq | `https://api.groq.com/openai/v1` | Your Groq key |
+| Ollama | `http://host:11434/v1` | (empty) |
+| Any OpenAI-compatible | Your URL | Your key or empty |
 
 ### 1. Configure Environment
 
@@ -169,44 +175,44 @@ cd ~/news48
 cp .env.example .env
 ```
 
-Set these values in `.env` to point at your host llama.cpp:
+Set these values in `.env`:
 
 ```bash
-API_BASE=http://jetson:7070/v1   # or http://<host-ip>:7070/v1
-API_KEY=                          # leave empty for local llama.cpp
-MODEL=granite-4.1-8b              # must match the model loaded in llama.cpp
+API_BASE=http://jetson.tago.lan:7070/v1   # your LLM endpoint
+API_KEY=                                   # leave empty for local, or set your key
+MODEL=granite-4.1-8b                       # must match the loaded model
 ```
 
 ### 2. Launch
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.jetson.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.external-llm.yml up -d
 ```
 
 ### 3. Verify
 
 ```bash
-# Check services are running (llamacpp will show as "running" but is just a stub)
-docker compose -f docker-compose.yml -f docker-compose.jetson.yml ps
+# Check services (llamacpp shows as "running" but is just a stub)
+docker compose -f docker-compose.yml -f docker-compose.external-llm.yml ps
 
-# Verify llama.cpp is reachable from inside Docker
+# Verify LLM is reachable from inside Docker
 docker compose exec web python -c \
-  "import urllib.request; print(urllib.request.urlopen('http://jetson:7070/v1/models').read())"
+  "import urllib.request; print(urllib.request.urlopen('http://jetson.tago.lan:7070/v1/models').read())"
 ```
 
-### Combining Jetson + Production Overrides
+### Combining with Production Overrides
 
-For a hardened Jetson deployment with resource limits and pre-built images:
+For a hardened deployment with resource limits and pre-built images:
 
 ```bash
 docker compose \
   -f docker-compose.yml \
   -f docker-compose.prod.yml \
-  -f docker-compose.jetson.yml \
+  -f docker-compose.external-llm.yml \
   up -d
 ```
 
-> **Note:** The Jetson override must come **after** the prod override so it correctly replaces the llamacpp service.
+> **Note:** The external-llm override must come **after** the prod override so it correctly replaces the llamacpp service.
 
 ---
 
