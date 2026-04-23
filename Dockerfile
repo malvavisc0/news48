@@ -21,6 +21,13 @@ FROM python:3.12-slim AS worker-builder
 
 WORKDIR /app
 
+# Install build tools (needed for Rust-based packages like html-to-markdown)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential curl && \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    rm -rf /var/lib/apt/lists/*
+ENV PATH="/root/.cargo/bin:$PATH"
+
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
@@ -36,6 +43,13 @@ RUN uv sync --frozen --no-dev --extra all --no-install-project
 FROM python:3.12-slim AS dev-builder
 
 WORKDIR /app
+
+# Install build tools (needed for Rust-based packages like html-to-markdown)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential curl && \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    rm -rf /var/lib/apt/lists/*
+ENV PATH="/root/.cargo/bin:$PATH"
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
