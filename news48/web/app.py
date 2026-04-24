@@ -145,8 +145,8 @@ def _default_meta(request: Request) -> dict[str, object]:
     seo = build_seo_meta(
         title="AI-Verified News and Fact-Checked Stories | news48",
         description=(
-            "Browse live news from the last 48 hours with AI-rewritten "
-            "summaries, source links, fact-check signals, and topic clusters."
+            "Live news from the last 48 hours — clear summaries, "
+            "automated fact-checks, and real-time topic discovery."
         ),
         canonical_url=canonical_url,
     )
@@ -428,8 +428,8 @@ async def all_stories(
     seo = build_seo_meta(
         title="All Stories — Live Verified News | news48",
         description=(
-            "Browse all live news stories from the last 48 hours "
-            "with rewritten coverage, source transparency, and fact-check signals."
+            "Every live news story from the last 48 hours — "
+            "clear summaries, source transparency, and fact-check signals."
         ),
         canonical_url=canonical_url,
     )
@@ -512,9 +512,8 @@ async def category_detail(
         f"{category_name} News Today | Live Verified Stories " "in the Last 48 Hours"
     )
     category_description = (
-        f"Explore the latest {category_name} news from the last 48 hours "
-        "with rewritten coverage, source transparency, and fast access "
-        "to related stories."
+        f"The latest {category_name} news from the last 48 hours — "
+        "clear summaries, source transparency, and related stories."
     )
     seo = build_seo_meta(
         title=category_title,

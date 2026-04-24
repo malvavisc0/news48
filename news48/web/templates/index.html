@@ -16,7 +16,8 @@
 {% block content %}
 <header class="page-hero page-hero--home">
     <h1 class="masthead">AI-verified news from the last 48 hours</h1>
-    <div class="tagline">Rewritten in plain english, fact-check, and fast topic discovery in one live feed</div>
+    <div class="tagline">Clear summaries, automated fact-checks, and real-time topic discovery — all in one live feed
+    </div>
     <div class="status-line">
         <span><span class="live-dot"></span><strong>{{ stats.live_stories }}</strong> live stories</span>
         <span><strong>{{ stats.verified }}</strong> verified</span>
@@ -44,7 +45,7 @@
 
     <nav class="sentiment-filter filter-panel" aria-label="Filter by mood">
         <div class="filter-panel__header">
-            <h2 class="section-label" id="homepage-mood-label">filter by mood</h2>
+            <h2 class="section-label" id="homepage-mood-label">filter by tone</h2>
         </div>
         {% set base_url = "/" %}
         {% if active_sentiment == "positive" %}
@@ -122,7 +123,7 @@
 </section>
 
 <section class="section" aria-labelledby="clusters-label">
-    <h2 class="section-label" id="clusters-label">topic clusters and related coverage</h2>
+    <h2 class="section-label" id="clusters-label">trending topics</h2>
     {% if clusters %}
     <div class="cluster-list">
         {% for cluster in clusters %}
@@ -151,9 +152,8 @@
 </section>
 
 <section class="section expiring" aria-labelledby="expiring-label">
-    <h2 class="section-label" id="expiring-label">stories leaving the public feed soon</h2>
-    <p class="section-hint">Use this list to catch time-sensitive reporting before it leaves the 48-hour public archive.
-    </p>
+    <h2 class="section-label" id="expiring-label">expiring soon</h2>
+    <p class="section-hint">Catch these stories before they leave the 48-hour window.</p>
     {% if expiring %}
     <div class="expiring-list">
         {% for item in expiring %}
@@ -168,6 +168,5 @@
     {% endif %}
 </section>
 
-<p class="footnote">news48 surfaces only the latest 48 hours of public stories to keep coverage fresh, readable, and
-    easy to compare.</p>
+<p class="footnote">news48 keeps only the latest 48 hours of stories — fresh, readable, and easy to compare.</p>
 {% endblock %}
