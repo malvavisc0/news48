@@ -32,11 +32,34 @@
     <div style="width: 100%;">
         <h2 class="section-label" id="homepage-categories-label">browse by category</h2>
     </div>
-    <a href="/" class="category-pill{% if not active_category %} active{% endif %}">all</a>
+    <a href="/all{% if active_sentiment %}?sentiment={{ active_sentiment }}{% endif %}" class="category-pill">all</a>
     {% for cat in categories %}
-    <a href="/category/{{ cat.slug }}" class="category-pill{% if active_category == cat.slug %} active{% endif %}">{{
+    <a href="/category/{{ cat.slug }}{% if active_sentiment %}?sentiment={{ active_sentiment }}{% endif %}"
+        class="category-pill{% if active_category == cat.slug %} active{% endif %}">{{
         cat.name | format_category_name }}</a>
     {% endfor %}
+</nav>
+
+<nav class="sentiment-filter" aria-label="Filter by mood">
+    <div style="width: 100%;">
+        <h2 class="section-label" id="homepage-mood-label">filter by mood</h2>
+    </div>
+    {% set base_url = "/" %}
+    {% if active_sentiment == "positive" %}
+    <a href="{{ base_url }}" class="sentiment-pill active-positive">positive</a>
+    {% else %}
+    <a href="{{ base_url }}?sentiment=positive" class="sentiment-pill">positive</a>
+    {% endif %}
+    {% if active_sentiment == "neutral" %}
+    <a href="{{ base_url }}" class="sentiment-pill active-neutral">neutral</a>
+    {% else %}
+    <a href="{{ base_url }}?sentiment=neutral" class="sentiment-pill">neutral</a>
+    {% endif %}
+    {% if active_sentiment == "negative" %}
+    <a href="{{ base_url }}" class="sentiment-pill active-negative">negative</a>
+    {% else %}
+    <a href="{{ base_url }}?sentiment=negative" class="sentiment-pill">negative</a>
+    {% endif %}
 </nav>
 
 <section class="section" aria-labelledby="now-label">
@@ -76,13 +99,6 @@
                     </span>
                     {% endif %}
                 </div>
-                <div class="meta">
-                    <span class="freshness" title="Available for 48 hours from ingestion"
-                        aria-label="{{ story.created_at | hours_remaining }} hours remaining. Available for 48 hours from ingestion.">
-                        {{ story.created_at | hours_remaining }}h left
-                        <span class="freshness-bar {{ story.created_at | hours_remaining | freshness_class }}"></span>
-                    </span>
-                </div>
                 <div class="story-links">
                     <a href="/article/{{ story.id }}/{{ story.slug or '' }}">Read more →</a>
                     <a href="{{ story.url }}" target="_blank" rel="noopener"
@@ -94,6 +110,11 @@
         <p class="empty-state">No live stories are available in the current 48-hour window.</p>
         {% endfor %}
     </div>
+    {% if stories | length >= 10 %}
+    <div class="view-all-link">
+        <a href="/all{% if active_sentiment %}?sentiment={{ active_sentiment }}{% endif %}">→ view all stories</a>
+    </div>
+    {% endif %}
 </section>
 
 <section class="section" aria-labelledby="clusters-label">

@@ -330,6 +330,95 @@ a:focus-visible {
     outline-offset: 1px;
 }
 
+/* === Sentiment filter === */
+
+.sentiment-filter {
+    margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--rule);
+}
+
+.sentiment-filter+.section {
+    margin-top: var(--space-lg);
+}
+
+.sentiment-pill {
+    display: inline-flex;
+    padding: 4px 10px;
+    font-family: var(--font-label);
+    font-size: var(--text-2xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    border: 1px solid var(--rule);
+    border-radius: var(--rounded-sm);
+    text-decoration: none;
+    transition: background 0.15s ease, color 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.sentiment-pill:hover {
+    background: var(--surface);
+    color: var(--ink);
+    text-decoration: none;
+}
+
+.sentiment-pill:focus-visible {
+    outline: 2px solid var(--action);
+    outline-offset: 1px;
+}
+
+.sentiment-pill.active-positive {
+    border-color: var(--verified);
+    color: var(--verified);
+    font-weight: 500;
+}
+
+.sentiment-pill.active-neutral {
+    border-color: var(--ink-faint);
+    color: var(--ink-faint);
+    font-weight: 500;
+}
+
+.sentiment-pill.active-negative {
+    border-color: var(--breaking);
+    color: var(--breaking);
+    font-weight: 500;
+}
+
+.sentiment-pill.active-positive:hover,
+.sentiment-pill.active-neutral:hover,
+.sentiment-pill.active-negative:hover {
+    text-decoration: none;
+    background: var(--surface);
+}
+
+/* === View all link (index only) === */
+
+.view-all-link {
+    margin-top: var(--space-lg);
+    text-align: right;
+    font-family: var(--font-label);
+    font-size: var(--text-xs);
+}
+
+.view-all-link a {
+    color: var(--action);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--ink-faint);
+    padding-bottom: 1px;
+    font-weight: 500;
+}
+
+.view-all-link a:hover {
+    border-bottom-style: solid;
+    border-bottom-color: var(--action);
+    text-decoration: none;
+}
+
 /* === Status line (index only) === */
 
 .status-line {

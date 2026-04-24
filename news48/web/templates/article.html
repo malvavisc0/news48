@@ -169,7 +169,7 @@
 <section class="section" aria-labelledby="article-categories-label">
     <h2 class="section-label" id="article-categories-label">explore more live news by category</h2>
     <nav class="category-nav" aria-label="Categories">
-        <a href="/" class="category-pill{% if not active_category %} active{% endif %}">all</a>
+        <a href="/all" class="category-pill">all</a>
         {% for cat in categories %}
         <a href="/category/{{ cat.slug }}"
             class="category-pill{% if active_category == cat.slug %} active{% endif %}">{{

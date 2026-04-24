@@ -3,7 +3,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -85,8 +85,11 @@ templates.env.filters["format_category_name"] = filters.format_category_name
 
 
 @app.get("/")
-async def homepage(request: Request):
-    """Homepage with live stories, stats, clusters, expiring articles."""
+async def homepage(
+    request: Request,
+    sentiment: str | None = Query(None, pattern="^(positive|negative|neutral)$"),
+):
+    """Homepage with curated top-10 stories, stats, clusters, expiring articles."""
     from news48.core.database.articles import (
         get_all_categories,
         get_articles_paginated,
@@ -97,7 +100,11 @@ async def homepage(request: Request):
 
     stats = get_web_stats(hours=48, parsed=True)
     stories, _ = get_articles_paginated(
-        hours=48, limit=35, include_source=True, parsed=True
+        hours=48,
+        limit=10,
+        include_source=True,
+        parsed=True,
+        sentiment=sentiment,
     )
     clusters = get_topic_clusters(hours=48, parsed=True)
     expiring = get_expiring_articles(within_hours=6, parsed=True)
@@ -141,6 +148,7 @@ async def homepage(request: Request):
             "max_cluster_count": max_cluster_count,
             "categories": categories,
             "active_category": None,
+            "active_sentiment": sentiment,
             "seo": seo,
         },
     )
@@ -290,8 +298,86 @@ async def cluster_detail(request: Request, cluster_slug: str):
     )
 
 
+@app.get("/all")
+async def all_stories(
+    request: Request,
+    sentiment: str | None = Query(None, pattern="^(positive|negative|neutral)$"),
+):
+    """All stories page — shows every parsed article with optional sentiment filter."""
+    from news48.core.database.articles import (
+        get_all_categories,
+        get_articles_paginated,
+        get_web_stats,
+    )
+
+    articles, total = get_articles_paginated(
+        hours=48,
+        limit=None,
+        include_source=True,
+        parsed=True,
+        sentiment=sentiment,
+    )
+    categories = get_all_categories(hours=48, parsed=True)
+    stats = get_web_stats(hours=48, parsed=True)
+
+    site_url = _site_url(request)
+    canonical_url = build_canonical_url(site_url, "/all")
+    seo = build_seo_meta(
+        title="All Stories — Live Verified News | news48",
+        description=(
+            "Browse all live news stories from the last 48 hours "
+            "with rewritten coverage, source transparency, and fact-check signals."
+        ),
+        canonical_url=canonical_url,
+    )
+    seo["json_ld"] = [
+        build_collection_schema(
+            name="All live news stories",
+            description=(
+                "All fresh live news with AI-rewritten summaries, "
+                "topic clusters, and source transparency."
+            ),
+            url=canonical_url,
+            items=[
+                {
+                    "title": item.get("title"),
+                    "canonical_url": build_canonical_url(
+                        site_url,
+                        "/article/{}/{}".format(item["id"], item.get("slug") or ""),
+                    ),
+                }
+                for item in articles
+            ],
+        ),
+        build_breadcrumb_schema(
+            [
+                ("Home", build_canonical_url(site_url, "/")),
+                ("All Stories", canonical_url),
+            ]
+        ),
+    ]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="all.html",
+        context={
+            "articles": articles,
+            "total": total,
+            "categories": categories,
+            "active_category": "all",
+            "active_sentiment": sentiment,
+            "stats": stats,
+            "seo": seo,
+        },
+    )
+
+
 @app.get("/category/{category_slug}")
-async def category_detail(request: Request, category_slug: str):
+async def category_detail(
+    request: Request,
+    category_slug: str,
+    sentiment: str | None = Query(None, pattern="^(positive|negative|neutral)$"),
+):
     """Category detail page showing all articles matching a category."""
     from news48.core.database.articles import (
         get_all_categories,
@@ -299,11 +385,16 @@ async def category_detail(request: Request, category_slug: str):
         get_web_stats,
     )
 
-    articles, total = get_articles_by_category(
-        category_slug, hours=48, limit=None, parsed=True
+    # First check the category exists (without sentiment filter)
+    _, unfiltered_total = get_articles_by_category(
+        category_slug, hours=48, limit=0, parsed=True, sentiment=None
     )
-    if not articles:
+    if not unfiltered_total:
         raise HTTPException(status_code=404, detail="Category not found")
+
+    articles, total = get_articles_by_category(
+        category_slug, hours=48, limit=None, parsed=True, sentiment=sentiment
+    )
 
     categories = get_all_categories(hours=48, parsed=True)
     stats = get_web_stats(hours=48, parsed=True)
@@ -361,6 +452,7 @@ async def category_detail(request: Request, category_slug: str):
             "total": total,
             "categories": categories,
             "active_category": category_slug,
+            "active_sentiment": sentiment,
             "stats": stats,
             "seo": seo,
         },
@@ -395,7 +487,12 @@ async def sitemap(request: Request):
             "canonical_url": build_canonical_url(site_url, "/"),
             "priority": "1.0",
             "changefreq": "hourly",
-        }
+        },
+        {
+            "canonical_url": build_canonical_url(site_url, "/all"),
+            "priority": "0.9",
+            "changefreq": "hourly",
+        },
     ]
     extra_urls.extend(
         {

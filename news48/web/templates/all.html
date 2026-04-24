@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ seo.title if seo is defined and seo else category_name ~ ' | news48' }}{% endblock %}
+{% block title %}{{ seo.title if seo is defined and seo else 'All Stories | news48' }}{% endblock %}
 
 {% block json_ld %}
 {% if seo is defined and seo and seo.json_ld %}
@@ -13,28 +13,27 @@
 {% block body_class %}page-category{% endblock %}
 
 {% block content %}
-<a class="back-link" href="/">← back to all stories</a>
+<a class="back-link" href="/">← back to homepage</a>
 
 <header>
-    <h1 class="page-title">{{ category_name }}</h1>
-    <div class="tagline">{{ total }} live stories in {{ category_name }}</div>
+    <h1 class="page-title">All Stories</h1>
+    <div class="tagline">{{ total }} live stories across all categories</div>
 </header>
 
 <nav class="category-nav" aria-label="Categories">
     <a href="/all{% if active_sentiment %}?sentiment={{ active_sentiment }}{% endif %}"
-        class="category-pill{% if not active_category or active_category == 'all' %} active{% endif %}">all</a>
+        class="category-pill{% if active_category == 'all' %} active{% endif %}">all</a>
     {% for cat in categories %}
     <a href="/category/{{ cat.slug }}{% if active_sentiment %}?sentiment={{ active_sentiment }}{% endif %}"
-        class="category-pill{% if active_category == cat.slug %} active{% endif %}">{{
-        cat.name | format_category_name }}</a>
+        class="category-pill">{{ cat.name | format_category_name }}</a>
     {% endfor %}
 </nav>
 
 <nav class="sentiment-filter" aria-label="Filter by mood">
     <div style="width: 100%;">
-        <h2 class="section-label" id="category-mood-label">filter by mood</h2>
+        <h2 class="section-label" id="all-mood-label">filter by mood</h2>
     </div>
-    {% set base_url = "/category/" ~ category_slug %}
+    {% set base_url = "/all" %}
     {% if active_sentiment == "positive" %}
     <a href="{{ base_url }}" class="sentiment-pill active-positive">positive</a>
     {% else %}
@@ -52,8 +51,8 @@
     {% endif %}
 </nav>
 
-<section class="section" aria-labelledby="category-stories-label">
-    <h2 class="section-label" id="category-stories-label">latest {{ category_name }} stories</h2>
+<section class="section" aria-labelledby="all-stories-label">
+    <h2 class="section-label" id="all-stories-label">all live stories</h2>
     <div class="story-list">
         {% for story in articles %}
         <article class="story{% if story.is_breaking %} is-breaking{% endif %}">
@@ -70,6 +69,9 @@
                     <span>{{ story.created_at | relative_time }}</span>
                     {% if story.fact_check_status == "verified" %}
                     <span class="badge verified">Verified</span>
+                    {% endif %}
+                    {% if story.is_breaking %}
+                    <span class="badge breaking">Breaking</span>
                     {% endif %}
                     {% if story.fact_check_status == "disputed" %}
                     <span class="badge disputed">Disputed</span>
@@ -94,7 +96,7 @@
             </div>
         </article>
         {% else %}
-        <p class="empty-state">No stories are available in this category right now.</p>
+        <p class="empty-state">No stories are available right now.</p>
         {% endfor %}
     </div>
 </section>

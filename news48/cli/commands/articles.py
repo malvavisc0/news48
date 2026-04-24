@@ -94,6 +94,12 @@ def list_articles(
     language: str = typer.Option(
         None, "--language", "-L", help="Filter by language code"
     ),
+    sentiment: str = typer.Option(
+        None,
+        "--sentiment",
+        help="Filter by sentiment: positive, negative, neutral",
+    ),
+    category: str = typer.Option(None, "--category", "-c", help="Filter by category"),
     limit: int = typer.Option(20, "--limit", "-l", help="Number of articles"),
     offset: int = typer.Option(0, "--offset", "-o", help="Number to skip"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -105,6 +111,16 @@ def list_articles(
     if status:
         status_filter = _resolve_status(status, output_json)
 
+    if sentiment:
+        valid_sentiments = {"positive", "negative", "neutral"}
+        if sentiment.lower() not in valid_sentiments:
+            emit_error(
+                f"Invalid sentiment '{sentiment}'. "
+                f"Valid: {', '.join(sorted(valid_sentiments))}",
+                as_json=output_json,
+            )
+        sentiment = sentiment.lower()
+
     try:
         articles, total = get_articles_paginated(
             limit=limit,
@@ -112,6 +128,8 @@ def list_articles(
             feed_domain=feed,
             status=status_filter,
             language=language,
+            sentiment=sentiment,
+            category=category,
         )
     except SystemExit:
         raise
@@ -128,6 +146,8 @@ def list_articles(
                 "url": a["url"],
                 "feed_url": a["feed_url"],
                 "status": _article_status(a),
+                "sentiment": a.get("sentiment"),
+                "categories": a.get("categories"),
                 "processing_status": a.get("processing_status"),
                 "processing_owner": a.get("processing_owner"),
                 "processing_started_at": a.get("processing_started_at"),
@@ -138,6 +158,8 @@ def list_articles(
     data = {
         "feed_filter": feed,
         "status_filter": status_filter,
+        "sentiment_filter": sentiment,
+        "category_filter": category,
         "total": total,
         "limit": limit,
         "offset": offset,
@@ -152,6 +174,10 @@ def list_articles(
             header += f" (feed: {feed})"
         if status_filter:
             header += f" (status: {status_filter})"
+        if sentiment:
+            header += f" (sentiment: {sentiment})"
+        if category:
+            header += f" (category: {category})"
         print(header)
         for a in article_list:
             title = a["title"] or "Untitled"

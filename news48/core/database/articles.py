@@ -367,7 +367,7 @@ def reset_article_download(article_id: int) -> None:
 
 
 def get_articles_paginated(
-    limit: int = 20,
+    limit: int | None = 20,
     offset: int = 0,
     feed_domain: str | None = None,
     status: str | None = None,
@@ -457,14 +457,17 @@ def get_articles_paginated(
             )
 
         # Get paginated results
+        limit_clause = "LIMIT :limit OFFSET :offset" if limit is not None else ""
         results_sql = (
             f"SELECT {select_cols} FROM articles "
             f"JOIN feeds ON articles.feed_id = feeds.id "
             f"{where_sql} "
             f"ORDER BY articles.parsed_at DESC "
-            f"LIMIT :limit OFFSET :offset"
+            f"{limit_clause}"
         )
-        query_params = {**params, "limit": limit, "offset": offset}
+        query_params = {**params, "offset": offset}
+        if limit is not None:
+            query_params["limit"] = limit
         rows = session.execute(text(results_sql), query_params).fetchall()
 
         result = []
@@ -980,23 +983,37 @@ def get_articles_by_category(
     limit: int | None = 20,
     offset: int = 0,
     parsed: bool = False,
+    sentiment: str | None = None,
 ) -> tuple[list[dict], int]:
     """Get articles matching a category within the time window."""
     threshold = _hours_ago_iso(hours)
     parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
+    sentiment_filter = "AND a.sentiment = :sentiment" if sentiment else ""
     limit_clause = "LIMIT :limit OFFSET :offset" if limit is not None else ""
 
     with SessionLocal() as session:
+        params: dict = {
+            "category": f"%{category}%",
+            "threshold": threshold,
+        }
+        if sentiment:
+            params["sentiment"] = sentiment
+
         total = session.execute(
             text(f"""
             SELECT COUNT(*) FROM articles a
             WHERE a.categories LIKE :category
               AND a.created_at >= :threshold
               {parsed_filter}
+              {sentiment_filter}
         """),
-            {"category": f"%{category}%", "threshold": threshold},
+            params,
         ).scalar()
 
+        query_params = {
+            **params,
+            **({"limit": limit, "offset": offset} if limit is not None else {}),
+        }
         rows = session.execute(
             text(f"""
             SELECT a.*, f.title as source_name,
@@ -1007,14 +1024,11 @@ def get_articles_by_category(
             WHERE a.categories LIKE :category
               AND a.created_at >= :threshold
               {parsed_filter}
+              {sentiment_filter}
             ORDER BY a.parsed_at DESC
             {limit_clause}
         """),
-            {
-                "category": f"%{category}%",
-                "threshold": threshold,
-                **({"limit": limit, "offset": offset} if limit is not None else {}),
-            },
+            query_params,
         ).fetchall()
 
         return [dict(row._mapping) for row in rows], total or 0
