@@ -17,9 +17,7 @@ _CLAIM_TIMEOUT_MINUTES = 30
 
 def _claim_cutoff(minutes: int = _CLAIM_TIMEOUT_MINUTES) -> str:
     """Return the cutoff timestamp for stale processing claims."""
-    return (
-        datetime.now(timezone.utc) - timedelta(minutes=minutes)
-    ).isoformat()
+    return (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
 
 
 def _strip_html_tags(text: str | None) -> str | None:
@@ -80,8 +78,7 @@ def insert_articles(
 
         if entries:
             _log.info(
-                "insert_articles: %d entries, %d new, "
-                "%d duplicates, %d no-url",
+                "insert_articles: %d entries, %d new, " "%d duplicates, %d no-url",
                 len(entries),
                 count,
                 duplicates,
@@ -312,14 +309,11 @@ def get_parse_failed_articles(
 
         rows = query.all()
         return [
-            {**article.to_dict(), "feed_url": feed_url}
-            for article, feed_url in rows
+            {**article.to_dict(), "feed_url": feed_url} for article, feed_url in rows
         ]
 
 
-def get_empty_articles(
-    limit: int = 50, feed_domain: str | None = None
-) -> list[dict]:
+def get_empty_articles(limit: int = 50, feed_domain: str | None = None) -> list[dict]:
     """Get articles that have no content."""
     with SessionLocal() as session:
         query = (
@@ -337,8 +331,7 @@ def get_empty_articles(
 
         rows = query.all()
         return [
-            {**article.to_dict(), "feed_url": feed_url}
-            for article, feed_url in rows
+            {**article.to_dict(), "feed_url": feed_url} for article, feed_url in rows
         ]
 
 
@@ -359,8 +352,7 @@ def get_download_failed_articles(
 
         rows = query.all()
         return [
-            {**article.to_dict(), "feed_url": feed_url}
-            for article, feed_url in rows
+            {**article.to_dict(), "feed_url": feed_url} for article, feed_url in rows
         ]
 
 
@@ -398,8 +390,7 @@ def get_articles_paginated(
         "parse-failed": "articles.parse_failed = 1",
         "fact-checked": "articles.fact_check_status IS NOT NULL",
         "fact-unchecked": (
-            "articles.parsed_at IS NOT NULL "
-            "AND articles.fact_check_status IS NULL"
+            "articles.parsed_at IS NOT NULL " "AND articles.fact_check_status IS NULL"
         ),
     }
 
@@ -543,9 +534,7 @@ def delete_article(article_id: int) -> bool:
 def get_article_stats() -> dict:
     """Get consolidated article statistics in a single query."""
     with SessionLocal() as session:
-        row = session.execute(
-            text(
-                """
+        row = session.execute(text("""
             SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN parsed_at IS NOT NULL THEN 1 ELSE 0 END)
@@ -580,9 +569,7 @@ def get_article_stats() -> dict:
                          OR sentiment IS NULL OR sentiment = '')
                     THEN 1 ELSE 0 END) AS missing_fields
             FROM articles
-        """
-            )
-        ).fetchone()
+        """)).fetchone()
 
         result = {
             "total": row[0] or 0,
@@ -601,42 +588,57 @@ def get_article_stats() -> dict:
         }
 
         # Oldest unparsed article
-        oldest = session.execute(
-            text(
-                """
+        oldest = session.execute(text("""
             SELECT MIN(created_at) AS oldest_unparsed_at
             FROM articles
             WHERE content IS NOT NULL
               AND parsed_at IS NULL
               AND parse_failed = 0
-        """
-            )
-        ).fetchone()
+        """)).fetchone()
         result["oldest_unparsed_at"] = oldest[0] if oldest else None
 
         # Articles created today (UTC)
-        today = session.execute(
-            text(
-                """
+        today = session.execute(text("""
             SELECT COUNT(*) FROM articles
             WHERE DATE(created_at) = CURDATE()
-        """
-            )
-        ).scalar()
+        """)).scalar()
         result["articles_today"] = today or 0
 
         # Articles created this week (UTC, Monday-based)
-        week = session.execute(
-            text(
-                """
+        week = session.execute(text("""
             SELECT COUNT(*) FROM articles
             WHERE YEARWEEK(created_at, 1) = YEARWEEK(CURDATE(), 1)
-        """
-            )
-        ).scalar()
+        """)).scalar()
         result["articles_this_week"] = week or 0
 
         return result
+
+
+def patch_article_fields(
+    article_id: int,
+    summary: str | None = None,
+    categories: str | None = None,
+    sentiment: str | None = None,
+    tags: str | None = None,
+) -> None:
+    """Patch specific metadata fields on an article without touching content.
+
+    Only updates fields that are provided (non-None).
+    Does NOT modify content, title, parsed_at, or other fields.
+    """
+    with SessionLocal() as session:
+        article = session.get(Article, article_id)
+        if not article:
+            return
+        if summary:
+            article.summary = _strip_html_tags(summary)
+        if categories:
+            article.categories = categories.lower()
+        if sentiment:
+            article.sentiment = sentiment.lower()
+        if tags:
+            article.tags = tags.lower()
+        session.commit()
 
 
 def get_articles_with_missing_fields(
@@ -649,8 +651,7 @@ def get_articles_with_missing_fields(
     """
     with SessionLocal() as session:
         rows = session.execute(
-            text(
-                """
+            text("""
             SELECT a.*, f.url as feed_url,
                    f.title as feed_source_name
             FROM articles a
@@ -661,8 +662,7 @@ def get_articles_with_missing_fields(
                    OR a.sentiment IS NULL OR a.sentiment = '')
             ORDER BY a.created_at DESC
             LIMIT :limit
-        """
-            ),
+        """),
             {"limit": limit},
         ).fetchall()
 
@@ -693,8 +693,7 @@ def get_feed_stats(stale_days: int = 7) -> dict:
 
     with SessionLocal() as session:
         row = session.execute(
-            text(
-                """
+            text("""
             SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN last_fetched_at IS NULL THEN 1 ELSE 0 END)
@@ -702,8 +701,7 @@ def get_feed_stats(stale_days: int = 7) -> dict:
                 SUM(CASE WHEN last_fetched_at < :threshold THEN 1 ELSE 0 END)
                     AS stale
             FROM feeds
-        """
-            ),
+        """),
             {"threshold": stale_threshold},
         ).fetchone()
 
@@ -714,18 +712,14 @@ def get_feed_stats(stale_days: int = 7) -> dict:
         }
 
         # Top feeds by article count
-        top_rows = session.execute(
-            text(
-                """
+        top_rows = session.execute(text("""
             SELECT f.title, f.url, COUNT(a.id) AS article_count
             FROM feeds f
             LEFT JOIN articles a ON f.id = a.feed_id
             GROUP BY f.id
             ORDER BY article_count DESC
             LIMIT 10
-        """
-            )
-        ).fetchall()
+        """)).fetchall()
 
         result["top_feeds"] = [dict(r._mapping) for r in top_rows]
         return result
@@ -734,17 +728,13 @@ def get_feed_stats(stale_days: int = 7) -> dict:
 def get_fetch_stats() -> dict:
     """Get fetch statistics and recent fetch history."""
     with SessionLocal() as session:
-        row = session.execute(
-            text(
-                """
+        row = session.execute(text("""
             SELECT
                 COUNT(*) AS total_runs,
                 MAX(started_at) AS last_run_at,
                 ROUND(AVG(articles_found), 1) AS avg_articles_per_run
             FROM fetches
-        """
-            )
-        ).fetchone()
+        """)).fetchone()
 
         result = {
             "total_runs": row[0] or 0,
@@ -752,17 +742,13 @@ def get_fetch_stats() -> dict:
             "avg_articles_per_run": row[2],
         }
 
-        recent_rows = session.execute(
-            text(
-                """
+        recent_rows = session.execute(text("""
             SELECT id, started_at, completed_at, status,
                    feeds_fetched, articles_found
             FROM fetches
             ORDER BY started_at DESC
             LIMIT 5
-        """
-            )
-        ).fetchall()
+        """)).fetchall()
 
         result["recent_runs"] = [dict(r._mapping) for r in recent_rows]
         return result
@@ -846,10 +832,7 @@ def increment_view_count(article_id: int) -> None:
     """Atomically increment the view count for an article."""
     with SessionLocal() as session:
         session.execute(
-            text(
-                "UPDATE articles SET view_count = view_count + 1 "
-                "WHERE id = :id"
-            ),
+            text("UPDATE articles SET view_count = view_count + 1 " "WHERE id = :id"),
             {"id": article_id},
         )
         session.commit()
@@ -862,14 +845,12 @@ def get_all_categories(hours: int = 48, parsed: bool = False) -> list[dict]:
 
     with SessionLocal() as session:
         rows = session.execute(
-            text(
-                f"""
+            text(f"""
             SELECT categories FROM articles
             WHERE created_at >= :threshold AND categories IS NOT NULL
               AND categories != ''
               {parsed_filter}
-        """
-            ),
+        """),
             {"threshold": threshold},
         ).fetchall()
 
@@ -913,16 +894,13 @@ def get_topic_clusters(
         "stories",
     }
     if excluded_tags:
-        ignored.update(
-            tag.strip().lower() for tag in excluded_tags if tag.strip()
-        )
+        ignored.update(tag.strip().lower() for tag in excluded_tags if tag.strip())
 
     parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
 
     with SessionLocal() as session:
         rows = session.execute(
-            text(
-                f"""
+            text(f"""
             SELECT a.id, a.title, a.slug, a.summary, a.url,
                    a.published_at, a.created_at,
                    a.source_name, a.fact_check_status, a.tags,
@@ -934,8 +912,7 @@ def get_topic_clusters(
               AND a.tags != ''
               {parsed_filter}
             ORDER BY a.parsed_at DESC
-        """
-            ),
+        """),
             {"threshold": threshold},
         ).fetchall()
 
@@ -1011,20 +988,17 @@ def get_articles_by_category(
 
     with SessionLocal() as session:
         total = session.execute(
-            text(
-                f"""
+            text(f"""
             SELECT COUNT(*) FROM articles a
             WHERE a.categories LIKE :category
               AND a.created_at >= :threshold
               {parsed_filter}
-        """
-            ),
+        """),
             {"category": f"%{category}%", "threshold": threshold},
         ).scalar()
 
         rows = session.execute(
-            text(
-                f"""
+            text(f"""
             SELECT a.*, f.title as source_name,
                    f.icon_url as feed_icon_url,
                    f.favicon_url as feed_favicon_url
@@ -1035,16 +1009,11 @@ def get_articles_by_category(
               {parsed_filter}
             ORDER BY a.parsed_at DESC
             {limit_clause}
-        """
-            ),
+        """),
             {
                 "category": f"%{category}%",
                 "threshold": threshold,
-                **(
-                    {"limit": limit, "offset": offset}
-                    if limit is not None
-                    else {}
-                ),
+                **({"limit": limit, "offset": offset} if limit is not None else {}),
             },
         ).fetchall()
 
@@ -1065,20 +1034,17 @@ def get_articles_by_tag(
 
     with SessionLocal() as session:
         total = session.execute(
-            text(
-                f"""
+            text(f"""
             SELECT COUNT(*) FROM articles a
             WHERE a.tags LIKE :tag
               AND a.created_at >= :threshold
               {parsed_filter}
-        """
-            ),
+        """),
             {"tag": f"%{tag}%", "threshold": threshold},
         ).scalar()
 
         rows = session.execute(
-            text(
-                f"""
+            text(f"""
             SELECT a.id, a.title, a.slug, a.summary, a.url,
                    a.published_at, a.created_at,
                    a.source_name, a.fact_check_status, a.tags,
@@ -1090,16 +1056,11 @@ def get_articles_by_tag(
               {parsed_filter}
             ORDER BY a.parsed_at DESC
             {limit_clause}
-        """
-            ),
+        """),
             {
                 "tag": f"%{tag}%",
                 "threshold": threshold,
-                **(
-                    {"limit": limit, "offset": offset}
-                    if limit is not None
-                    else {}
-                ),
+                **({"limit": limit, "offset": offset} if limit is not None else {}),
             },
         ).fetchall()
 
@@ -1120,9 +1081,7 @@ def get_related_articles(
         tokens: list[str] = []
         if article.categories:
             tokens.extend(
-                t.strip().lower()
-                for t in article.categories.split(",")
-                if t.strip()
+                t.strip().lower() for t in article.categories.split(",") if t.strip()
             )
         if article.tags:
             tokens.extend(
@@ -1145,8 +1104,7 @@ def get_related_articles(
         parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
 
         rows = session.execute(
-            text(
-                f"""
+            text(f"""
             SELECT a.*, f.title as source_name,
                    f.icon_url as feed_icon_url,
                    f.favicon_url as feed_favicon_url
@@ -1156,8 +1114,7 @@ def get_related_articles(
               {parsed_filter}
             ORDER BY a.parsed_at DESC
             LIMIT :limit
-        """
-            ),
+        """),
             {**params, "limit": limit},
         ).fetchall()
 
@@ -1170,8 +1127,7 @@ def get_article_detail(article_id: int, parsed: bool = False) -> dict | None:
 
     with SessionLocal() as session:
         row = session.execute(
-            text(
-                f"""
+            text(f"""
             SELECT a.*, f.title as source_name,
                    f.url as feed_url,
                    f.icon_url as feed_icon_url,
@@ -1180,8 +1136,7 @@ def get_article_detail(article_id: int, parsed: bool = False) -> dict | None:
             JOIN feeds f ON a.feed_id = f.id
             WHERE a.id = :article_id
               {parsed_filter}
-        """
-            ),
+        """),
             {"article_id": article_id},
         ).fetchone()
 
@@ -1193,15 +1148,13 @@ def get_articles_older_than_hours(hours: int = 48) -> list[dict]:
     with SessionLocal() as session:
         threshold = _hours_ago_iso(hours)
         rows = session.execute(
-            text(
-                """
+            text("""
             SELECT a.*, f.url as feed_url
             FROM articles a
             JOIN feeds f ON a.feed_id = f.id
             WHERE a.created_at < :threshold
             ORDER BY a.created_at ASC
-        """
-            ),
+        """),
             {"threshold": threshold},
         ).fetchall()
 
@@ -1244,8 +1197,7 @@ def get_web_stats(hours: int = 48, parsed: bool = False) -> dict:
 
     with SessionLocal() as session:
         row = session.execute(
-            text(
-                f"""
+            text(f"""
             SELECT
                 COUNT(*) AS live_stories,
                 SUM(CASE WHEN fact_check_status IS NOT NULL
@@ -1255,8 +1207,7 @@ def get_web_stats(hours: int = 48, parsed: bool = False) -> dict:
             FROM articles
             WHERE created_at >= :threshold
               {parsed_filter}
-        """
-            ),
+        """),
             {"threshold": threshold},
         ).fetchone()
 
@@ -1274,9 +1225,7 @@ def get_web_stats(hours: int = 48, parsed: bool = False) -> dict:
         return result
 
 
-def get_expiring_articles(
-    within_hours: int = 6, parsed: bool = False
-) -> list[dict]:
+def get_expiring_articles(within_hours: int = 6, parsed: bool = False) -> list[dict]:
     """Get articles that will expire within the given number of hours."""
     outer = _hours_ago_iso(48)
     inner = _hours_ago_iso(48 - within_hours)
@@ -1284,8 +1233,7 @@ def get_expiring_articles(
 
     with SessionLocal() as session:
         rows = session.execute(
-            text(
-                f"""
+            text(f"""
             SELECT a.id, a.title, a.slug, a.url, a.created_at,
                    a.source_name, f.title as feed_source_name
             FROM articles a
@@ -1294,8 +1242,7 @@ def get_expiring_articles(
               {parsed_filter}
             ORDER BY a.created_at ASC
             LIMIT 10
-        """
-            ),
+        """),
             {"outer": outer, "inner": inner},
         ).fetchall()
 
