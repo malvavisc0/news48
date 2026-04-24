@@ -30,7 +30,6 @@ from news48.cli.commands import (
     plans_app,
     search_app,
     seed,
-    sitemap_app,
     stats,
 )
 from news48.cli.commands.fact_check import fact_check
@@ -62,7 +61,6 @@ app.add_typer(agents_app, name="agents")
 app.add_typer(lessons_app, name="lessons")
 app.add_typer(plans_app, name="plans")
 app.add_typer(search_app, name="search")
-app.add_typer(sitemap_app, name="sitemap")
 
 # MCP subcommand group
 mcp_app = typer.Typer(

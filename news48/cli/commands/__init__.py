@@ -12,5 +12,4 @@ from .parse import parse
 from .plans import plans_app
 from .search import search_app
 from .seed import seed
-from .sitemap import sitemap_app
 from .stats import stats
