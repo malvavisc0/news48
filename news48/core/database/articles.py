@@ -245,7 +245,15 @@ def clear_article_processing_claim(
 def get_unparsed_articles(
     limit: int = 50, feed_domain: str | None = None
 ) -> list[dict]:
-    """Get articles that have not been parsed yet."""
+    """Get unparsed articles, round-robin across sources for diversity.
+
+    Fetches a larger pool and interleaves across feeds so that
+    articles from many sources are represented in each batch.
+    """
+    from itertools import zip_longest
+
+    # Fetch a larger pool to have enough candidates for interleaving
+    fetch_limit = limit * 3
     with SessionLocal() as session:
         query = (
             session.query(Article, Feed.url.label("feed_url"))
@@ -257,15 +265,31 @@ def get_unparsed_articles(
                 Article.parse_failed.is_(False),
             )
             .order_by(Article.created_at.asc())
-            .limit(limit)
+            .limit(fetch_limit)
         )
         if feed_domain:
             query = query.filter(Feed.url.like(f"%{feed_domain}%"))
 
         rows = query.all()
-        return [
-            {**article.to_dict(), "feed_url": feed_url} for article, feed_url in rows
-        ]
+
+        # Group articles by feed_id, preserving created_at order
+        by_feed: dict[int, list[dict]] = {}
+        for article, feed_url in rows:
+            by_feed.setdefault(article.feed_id, []).append(
+                {**article.to_dict(), "feed_url": feed_url}
+            )
+
+        # Round-robin: take one from each feed in turn
+        result: list[dict] = []
+        feed_iters = [iter(articles) for articles in by_feed.values()]
+        for items in zip_longest(*feed_iters):
+            for item in items:
+                if item is not None:
+                    result.append(item)
+                    if len(result) >= limit:
+                        return result
+
+        return result
 
 
 def get_parse_failed_articles(
