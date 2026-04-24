@@ -1,6 +1,7 @@
 """Agent tool for fetching webpage content using bypass solutions."""
 
 import asyncio
+import logging
 from typing import Any
 
 from html_to_markdown import convert
@@ -11,10 +12,13 @@ from news48.core.helpers.bypass import (
     get_byparr_solution,
     strip_html_noise,
 )
+from news48.core.helpers.security import validate_url_not_private
 from news48.core.helpers.url import get_base_url
 from news48.core.models import ByparrSolution
 
 from ._helpers import _safe_json
+
+logger = logging.getLogger(__name__)
 
 
 async def fetch_webpage_content(
@@ -76,6 +80,8 @@ async def fetch_webpage_content(
     async def fetch_one(url: str) -> dict[str, Any]:
         """Fetch a single URL and return result dict."""
         try:
+            # SSRF prevention: validate URL doesn't target private IPs
+            validate_url_not_private(url)
             domain = get_base_url(url=url)
             solution = await get_solution(domain)
             content = await fetch_url_content(url=url, solution=solution)

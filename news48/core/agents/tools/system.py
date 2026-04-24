@@ -99,7 +99,20 @@ def _get_news48_info() -> dict:
     try:
         from news48.core.config import Database as DbConfig
 
-        info["database_url"] = DbConfig.url
+        # Redact credentials from database URL
+        db_url = DbConfig.url
+        if "@" in db_url:
+            scheme_end = db_url.find("://")
+            if scheme_end != -1:
+                at_pos = db_url.rfind("@")
+                info["database_url"] = (
+                    db_url[: scheme_end + 3] + "***:***@" + db_url[at_pos + 1 :]
+                )
+            else:
+                info["database_url"] = "***"
+        else:
+            info["database_url"] = db_url
+
         with SessionLocal() as session:
             session.execute(text("SELECT 1"))
             info["database_connected"] = True

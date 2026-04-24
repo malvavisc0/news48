@@ -1,4 +1,6 @@
+import logging
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -8,8 +10,125 @@ from typing import Optional
 
 from ._helpers import _safe_json
 
+logger = logging.getLogger(__name__)
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 _MAIN_MODULE_PATH = _PROJECT_ROOT / "news48" / "cli" / "main.py"
+
+# ---------------------------------------------------------------------------
+# Command allowlist — only these base commands may be executed.
+# The ``news48`` command is special-cased: it is rewritten to use the
+# current Python interpreter via _prepare_shell_command().
+#
+# SECURITY: Commands that allow arbitrary code execution (python, pip),
+# credential leakage (env, printenv), network activity (git push/clone),
+# service disruption (alembic downgrade, dramatiq, uvicorn), or filesystem
+# modification (cp, mv, mkdir, touch) are blocked via _BLOCKED_PATTERNS.
+#
+# Shell operators (|, ;, &, >, <, <<) are intentionally ALLOWED because
+# the agents use them for:
+#   - Heredocs:    cat > /tmp/fc-claims.json << 'EOF' ... EOF
+#   - Parallel:    news48 download ... > /tmp/out.log 2>&1 &
+#   - Wave sync:   wait $PID; EXIT=$?
+#   - Pipes:       cat /tmp/out.log
+# The _BLOCKED_PATTERNS regex catches dangerous commands (curl, python,
+# etc.) even when they appear after a pipe or in a subshell.
+# ---------------------------------------------------------------------------
+_ALLOWED_BASE_COMMANDS = frozenset(
+    {
+        "news48",
+        # Read-only inspection + agent workflow commands
+        "ls",
+        "cat",
+        "head",
+        "tail",
+        "wc",
+        "grep",
+        "find",
+        "sort",
+        "uniq",
+        "echo",
+        "date",
+        "pwd",
+        "du",
+        "df",
+        "file",
+        "stat",
+        # Shell builtins used in wave execution patterns
+        "wait",
+        "if",
+        "then",
+        "fi",
+        "test",
+    }
+)
+
+# Patterns that are always blocked regardless of allowlist.
+# These are checked against the full command string, so they catch
+# dangerous programs even when invoked after a pipe or in a subshell.
+_BLOCKED_PATTERNS = re.compile(
+    r"(?:"
+    r"\bcurl\b|\bwget\b|\bnc\b|\bncat\b|\bnmap\b"  # network exfil
+    r"|\bssh\b|\bscp\b|\brsync\b"  # remote access
+    r"|\bchmod\b|\bchown\b|\bchgrp\b"  # permission changes
+    r"|\bkill\b|\bpkill\b|\bshutdown\b|\breboot\b"  # process/system control
+    r"|\bmount\b|\bumount\b"  # filesystem mounts
+    r"|\bsudo\b|\bsu\b"  # privilege escalation
+    r"|\beval\b|\bexec\b"  # code execution
+    r"|\bdd\b"  # raw disk access
+    r"|\bcrontab\b"  # scheduled tasks
+    r"|\biptables\b|\bufw\b"  # firewall
+    r"|\bbase64\b.*-d"  # encoded payloads
+    r"|/dev/tcp\b|/dev/udp\b"  # bash network
+    r"|\bmkfifo\b|\bmknod\b"  # named pipes
+    r"|\bpython[0-9]*\b|\bperl\b|\bruby\b|\bnode\b"  # interpreters
+    r"|\bpip[0-9]*\b"  # package installers
+    r"|\benv\b|\bprintenv\b"  # env var leakage
+    r"|\bgit\b"  # network-capable VCS
+    r"|\balembic\b|\bdramatiq\b|\buvicorn\b"  # service management
+    r"|\bmkdir\b|\bcp\b|\bmv\b|\btouch\b|\brm\b"  # filesystem mutation
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _validate_command(command: str) -> str | None:
+    """Validate that a shell command is allowed.
+
+    Returns None if the command is valid, or an error message if blocked.
+    """
+    stripped = command.strip()
+    if not stripped:
+        return "Empty command"
+
+    # Check for blocked patterns anywhere in the command.
+    # This catches dangerous commands even behind pipes or in subshells.
+    blocked_match = _BLOCKED_PATTERNS.search(stripped)
+    if blocked_match:
+        return (
+            f"Command contains blocked pattern: '{blocked_match.group()}'. "
+            "Only safe read-only and news48 pipeline commands are allowed."
+        )
+
+    # Extract the first token (base command) after normalizing news48 prefix
+    normalized = stripped.replace("uv run news48", "news48")
+    first_token = normalized.split()[0] if normalized.split() else ""
+
+    # Handle absolute/relative paths — extract basename
+    base_cmd = os.path.basename(first_token)
+
+    # Allow news48 subcommands unconditionally
+    if base_cmd == "news48" or first_token == "news48":
+        return None
+
+    # Check against allowlist
+    if base_cmd not in _ALLOWED_BASE_COMMANDS:
+        return (
+            f"Command '{base_cmd}' is not in the allowlist. "
+            f"Allowed: {', '.join(sorted(_ALLOWED_BASE_COMMANDS))}"
+        )
+
+    return None
 
 
 def _prepare_shell_command(command: str) -> tuple[list[str], str]:
@@ -43,15 +162,14 @@ def run_shell_command(reason: str, command: str, timeout: Optional[int] = 120) -
     Prefer using specific file tools when available.
 
     ## Why to Use
-    - Run build or deployment scripts
-    - Execute git commands (clone, pull, status, etc.)
+    - Run news48 CLI commands (fetch, parse, download, etc.)
     - Search files with grep, find, or similar tools
-    - Run Python scripts or other executables
-    - Access command-line tools not available as functions
+    - Check file listings and system state
+    - Run git commands (status, log, diff)
 
     ## Parameters
     - `reason` (str): Why you need to run this command
-    - `command` (str): Shell command to execute (supports pipes, redirects)
+    - `command` (str): Shell command to execute (must be in allowlist)
     - `timeout` (int): Max seconds to wait (default: 120)
 
     ## Returns
@@ -61,14 +179,30 @@ def run_shell_command(reason: str, command: str, timeout: Optional[int] = 120) -
     - `result.stderr`: Standard error
     - `result.return_code`: Exit code (0 = success)
     - `result.execution_time`: Time taken in seconds
-    - `error`: Empty on success, "Operation Timeout" or exception message
+    - `error`: Empty on success, "Operation Timeout" or error message
+
+    ## Security
+    Only commands in the allowlist are permitted. Blocked patterns include
+    network tools (curl, wget), privilege escalation (sudo), and destructive
+    operations (rm -rf, chmod).
     """
+    # Validate command before execution
+    validation_error = _validate_command(command)
+    if validation_error:
+        logger.warning("Blocked shell command: %s — %s", command, validation_error)
+        return _safe_json({"result": "", "error": validation_error})
+
     env_vars = dict(os.environ)
     start_time = time.time()
     working_dir = os.getcwd()
 
     try:
         argv, resolved_command = _prepare_shell_command(command)
+        logger.info(
+            "Executing shell command: reason=%s command=%s",
+            reason,
+            command,
+        )
         result = subprocess.run(
             argv,
             cwd=working_dir,

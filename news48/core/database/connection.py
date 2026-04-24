@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import create_engine
 from sqlalchemy.inspection import inspect
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
 class Base(DeclarativeBase):
@@ -54,8 +54,3 @@ else:
     )
 
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
-
-
-def get_session() -> Session:
-    """Get a new database session. Caller is responsible for closing."""
-    return SessionLocal()

@@ -18,13 +18,12 @@ from news48.core.database import (
     reset_article_download,
     update_article,
 )
-from news48.core.helpers import (
+from news48.core.helpers.bypass import (
     fetch_url_content,
-    get_base_url,
     get_byparr_solution,
     strip_html_noise,
 )
-from news48.core.helpers.url import extract_og_image
+from news48.core.helpers.url import extract_og_image, get_base_url
 from news48.core.models import ByparrSolution
 
 from ._common import emit_error, emit_json, require_db

@@ -52,12 +52,15 @@ def revoke_key(api_key: str) -> bool:
 
 
 def list_keys() -> list[dict]:
-    """List all active MCP API keys with metadata."""
+    """List all active MCP API keys with metadata.
+
+    Returns masked keys only — full keys are never exposed.
+    """
     r = _get_redis()
     keys = r.smembers(MCP_KEYS_SET)
     result = []
     for key in sorted(keys):
         meta = r.hgetall(f"mcp:key:{key}") or {}
         masked = f"{key[:8]}...{key[-4:]}" if len(key) > 12 else key
-        result.append({"key": masked, "full_key": key, **meta})
+        result.append({"key": masked, **meta})
     return result

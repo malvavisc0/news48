@@ -2,16 +2,88 @@
 
 Provides a unified read_file tool that replaces the previous
 get_file_info, get_file_content, read_file_chunk, and list_directory tools.
+
+Security: File reads are restricted to the project root and data directory
+to prevent access to sensitive system files, credentials, etc.
 """
 
+import logging
 import stat
 from datetime import datetime
 from itertools import islice
 from pathlib import Path
 
+from news48.core import config
+
 from ._helpers import _is_binary, _safe_json
 
+logger = logging.getLogger(__name__)
+
 _BINARY_SAMPLE_SIZE = 4096
+
+# Allowed root directories for file reads.
+_PROJECT_ROOT = Path(__file__).resolve().parents[4]
+_DATA_ROOT = Path(config.DataDir.root).resolve()
+
+_ALLOWED_ROOTS = [_PROJECT_ROOT, _DATA_ROOT]
+
+# Sensitive file patterns that are always blocked.
+_SENSITIVE_PATTERNS = (
+    ".env",
+    ".env.",
+    "id_rsa",
+    "id_ed25519",
+    ".pem",
+    ".key",
+    "credentials",
+    "secret",
+    "password",
+    ".htpasswd",
+    "shadow",
+    "passwd",
+)
+
+
+def _validate_file_path(file_path: str) -> Path | str:
+    """Validate that a file path is within allowed directories.
+
+    Returns the resolved Path on success, or error message on failure.
+    """
+    try:
+        resolved = Path(file_path).resolve()
+    except (OSError, ValueError) as exc:
+        return f"Invalid path: {exc}"
+
+    # Check if the resolved path is within any allowed root
+    allowed = False
+    for root in _ALLOWED_ROOTS:
+        try:
+            resolved.relative_to(root)
+            allowed = True
+            break
+        except ValueError:
+            continue
+
+    if not allowed:
+        return (
+            f"Access denied: '{file_path}' is outside allowed directories. "
+            f"Allowed roots: {', '.join(str(r) for r in _ALLOWED_ROOTS)}"
+        )
+
+    # Check for sensitive file patterns in the filename
+    name_lower = resolved.name.lower()
+    for pattern in _SENSITIVE_PATTERNS:
+        if pattern in name_lower:
+            return (
+                f"Access denied: '{resolved.name}' matches " "a sensitive file pattern"
+            )
+
+    # Block access to /proc, /sys, /dev via symlink resolution
+    resolved_str = str(resolved)
+    if any(resolved_str.startswith(p) for p in ("/proc/", "/sys/", "/dev/", "/etc/")):
+        return "Access denied: system directory access is not permitted"
+
+    return resolved
 
 
 def read_file(
@@ -36,9 +108,9 @@ def read_file(
 
     ## Parameters
     - `reason` (str): Why you need to read this file
-    - `file_path` (str): Path to the file
-    - `offset` (int | None): Line offset for partial reads (default: None = start from beginning)
-    - `limit` (int | None): Max lines for partial reads (default: None = read all)
+    - `file_path` (str): Path to the file (must be within allowed dirs)
+    - `offset` (int | None): Line offset for partial reads
+    - `limit` (int | None): Max lines for partial reads
     - `metadata_only` (bool): Return only file metadata (default: False)
 
     ## Behavior
@@ -46,14 +118,24 @@ def read_file(
     - offset=None and limit=None: Read entire file
     - offset and limit provided: Read a chunk of lines
 
+    ## Security
+    File reads are restricted to the project root and data directory.
+    Sensitive files (.env, credentials, keys) are blocked.
+
     ## Returns
     JSON with:
     - `result`: File content, metadata dict, or chunk depending on mode
     - `error`: Empty on success, or error description
     """
-    try:
-        file = Path(file_path)
+    # Validate path before any file operations
+    validated = _validate_file_path(file_path)
+    if isinstance(validated, str):
+        logger.warning("Blocked file read: %s — %s", file_path, validated)
+        return _safe_json({"result": "", "error": validated})
 
+    file = validated
+
+    try:
         if not file.exists():
             return _safe_json({"result": "", "error": "File not found"})
 

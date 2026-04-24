@@ -2,6 +2,8 @@
 
 from sqlalchemy.exc import IntegrityError
 
+from news48.core.helpers.security import escape_like
+
 from .connection import SessionLocal, _utcnow
 from .models import Feed
 
@@ -43,7 +45,7 @@ def get_all_feeds(feed_domain: str | None = None) -> list[dict]:
     with SessionLocal() as session:
         query = session.query(Feed)
         if feed_domain:
-            query = query.filter(Feed.url.like(f"%{feed_domain}%"))
+            query = query.filter(Feed.url.like(f"%{escape_like(feed_domain)}%"))
         feeds = query.all()
         return [feed.to_dict() for feed in feeds]
 

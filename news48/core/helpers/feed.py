@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import re
 from datetime import datetime, timedelta, timezone
 from typing import Callable, List
 
@@ -17,16 +16,10 @@ from news48.core.database import (
     insert_articles,
     update_feed_metadata,
 )
+from news48.core.helpers.text import strip_html_tags as _strip_html_tags
 from news48.core.models import FeedEntry, FeedResult, FeedSummary
 
 logger = logging.getLogger(__name__)
-
-
-def _strip_html_tags(text: str | None) -> str | None:
-    """Remove any HTML tags from text."""
-    if not text:
-        return text
-    return re.sub(r"<[^>]+>", "", text).strip()
 
 
 def is_article_from_last_48_hours(published_at: str | None) -> bool:

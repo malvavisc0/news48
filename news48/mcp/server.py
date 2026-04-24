@@ -125,9 +125,22 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             return await _parse_article(arguments)
         else:
             return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
-    except Exception as e:
+    except Exception:
         logger.exception("Tool %s failed", name)
-        return [types.TextContent(type="text", text=f"Error: {e}")]
+        return [
+            types.TextContent(
+                type="text",
+                text="An internal error occurred.",
+            )
+        ]
+
+
+def _clamp_int(value, default: int, lo: int, hi: int) -> int:
+    """Clamp an integer argument to [lo, hi] range."""
+    try:
+        return max(lo, min(hi, int(value)))
+    except (TypeError, ValueError):
+        return default
 
 
 async def _fetch_feeds(args: dict) -> list[types.TextContent]:
@@ -145,7 +158,7 @@ async def _fetch_feeds(args: dict) -> list[types.TextContent]:
 async def _list_feeds(args: dict) -> list[types.TextContent]:
     from news48.core.database import get_all_feeds
 
-    limit = args.get("limit", 50)
+    limit = _clamp_int(args.get("limit"), 50, 1, 200)
     feeds = get_all_feeds()[:limit]
     return [
         types.TextContent(type="text", text=json.dumps(feeds, default=str, indent=2))
@@ -155,8 +168,10 @@ async def _list_feeds(args: dict) -> list[types.TextContent]:
 async def _search_articles(args: dict) -> list[types.TextContent]:
     from news48.core.database import search_articles
 
-    query = args["query"]
-    limit = args.get("limit", 10)
+    query = args.get("query", "")
+    if not query:
+        return [types.TextContent(type="text", text="query is required")]
+    limit = _clamp_int(args.get("limit"), 10, 1, 100)
     results = search_articles(query, limit=limit)
     return [
         types.TextContent(type="text", text=json.dumps(results, default=str, indent=2))
@@ -166,7 +181,9 @@ async def _search_articles(args: dict) -> list[types.TextContent]:
 async def _get_article_detail(args: dict) -> list[types.TextContent]:
     from news48.core.database import get_article_by_id, get_claims_for_article
 
-    article_id = args["article_id"]
+    article_id = _clamp_int(args.get("article_id"), 0, 1, 999999999)
+    if article_id == 0:
+        return [types.TextContent(type="text", text="Invalid article_id")]
     article = get_article_by_id(article_id)
     if not article:
         return [types.TextContent(type="text", text=f"Article {article_id} not found")]
@@ -196,7 +213,9 @@ async def _get_stats(args: dict) -> list[types.TextContent]:
 async def _parse_article(args: dict) -> list[types.TextContent]:
     from news48.core.agents import run_parser
 
-    article_id = args["article_id"]
+    article_id = _clamp_int(args.get("article_id"), 0, 1, 999999999)
+    if article_id == 0:
+        return [types.TextContent(type="text", text="Invalid article_id")]
     result = await run_parser(article_id)
     return [
         types.TextContent(type="text", text=json.dumps(result, default=str, indent=2))

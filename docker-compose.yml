@@ -9,7 +9,7 @@ services:
     volumes:
       - news48-data:/data
     environment:
-      - DATABASE_URL=mysql+mysqlconnector://news48:news48@mysql:3306/news48
+      - DATABASE_URL=mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
       - DATA_DIR=/data
       - REDIS_URL=redis://redis:6379/0
       - WEB_HOST=${WEB_HOST:-0.0.0.0}
@@ -32,8 +32,10 @@ services:
 
   mysql:
     image: mysql:8.0
-    ports:
-      - "3306:3306"
+    # MySQL port is NOT exposed to host in production.
+    # Uncomment below for local development access only.
+    # ports:
+    #   - "127.0.0.1:3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
     environment:
@@ -61,7 +63,7 @@ services:
       target: worker
     entrypoint: [ "alembic", "upgrade", "head" ]
     environment:
-      - DATABASE_URL=mysql+mysqlconnector://news48:news48@mysql:3306/news48
+      - DATABASE_URL=mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
     depends_on:
       mysql:
         condition: service_healthy
@@ -147,8 +149,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - dozzle-data:/data
     environment:
-      - DOZZLE_ENABLE_ACTIONS=true
-      - DOZZLE_ENABLE_SHELL=true
+      # Shell and actions disabled for security — enable only for debugging.
+      - DOZZLE_ENABLE_ACTIONS=false
+      - DOZZLE_ENABLE_SHELL=false
     networks:
       - news48-net
 
@@ -159,7 +162,9 @@ services:
     image: redis/redis-stack:latest
     ports:
       # - "6379:6379" # Redis API
-      - "8001:8001" # RedisInsight dashboard
+      # RedisInsight NOT exposed in production.
+      # Uncomment below for local development access only.
+      # - "127.0.0.1:8001:8001"
     volumes:
       - redis-data:/data
     environment:
@@ -184,7 +189,7 @@ services:
     volumes:
       - news48-data:/data
     environment:
-      - DATABASE_URL=mysql+mysqlconnector://news48:news48@mysql:3306/news48
+      - DATABASE_URL=mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
       - DATA_DIR=/data
       - REDIS_URL=redis://redis:6379/0
       - API_BASE=${API_BASE}
@@ -223,7 +228,7 @@ services:
     volumes:
       - news48-data:/data
     environment:
-      - DATABASE_URL=mysql+mysqlconnector://news48:news48@mysql:3306/news48
+      - DATABASE_URL=mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
       - DATA_DIR=/data
       - REDIS_URL=redis://redis:6379/0
     depends_on:

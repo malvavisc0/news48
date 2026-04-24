@@ -5,7 +5,7 @@ import asyncio
 import typer
 
 from news48.core.database import get_all_feeds
-from news48.core.helpers import get_fetch_summary
+from news48.core.helpers.feed import get_fetch_summary
 
 from ._common import DEFAULT_DELAY, emit_error, emit_json, require_db, status_msg
 

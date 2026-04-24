@@ -1,11 +1,13 @@
 """Article CRUD, search, stats, and query operations using SQLAlchemy ORM."""
 
 import logging
-import re
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import or_, text
 from sqlalchemy.exc import IntegrityError
+
+from news48.core.helpers.security import escape_like
+from news48.core.helpers.text import strip_html_tags as _strip_html_tags
 
 from .connection import SessionLocal, _hours_ago_iso, _utcnow
 from .models import Article, Feed
@@ -18,13 +20,6 @@ _CLAIM_TIMEOUT_MINUTES = 30
 def _claim_cutoff(minutes: int = _CLAIM_TIMEOUT_MINUTES) -> str:
     """Return the cutoff timestamp for stale processing claims."""
     return (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
-
-
-def _strip_html_tags(text: str | None) -> str | None:
-    """Remove any HTML tags from text."""
-    if not text:
-        return text
-    return re.sub(r"<[^>]+>", "", text).strip()
 
 
 def insert_articles(
@@ -268,7 +263,7 @@ def get_unparsed_articles(
             .limit(fetch_limit)
         )
         if feed_domain:
-            query = query.filter(Feed.url.like(f"%{feed_domain}%"))
+            query = query.filter(Feed.url.like(f"%{escape_like(feed_domain)}%"))
 
         rows = query.all()
 
@@ -305,7 +300,7 @@ def get_parse_failed_articles(
             .limit(limit)
         )
         if feed_domain:
-            query = query.filter(Feed.url.like(f"%{feed_domain}%"))
+            query = query.filter(Feed.url.like(f"%{escape_like(feed_domain)}%"))
 
         rows = query.all()
         return [
@@ -327,7 +322,7 @@ def get_empty_articles(limit: int = 50, feed_domain: str | None = None) -> list[
             .limit(limit)
         )
         if feed_domain:
-            query = query.filter(Feed.url.like(f"%{feed_domain}%"))
+            query = query.filter(Feed.url.like(f"%{escape_like(feed_domain)}%"))
 
         rows = query.all()
         return [
@@ -348,7 +343,7 @@ def get_download_failed_articles(
             .limit(limit)
         )
         if feed_domain:
-            query = query.filter(Feed.url.like(f"%{feed_domain}%"))
+            query = query.filter(Feed.url.like(f"%{escape_like(feed_domain)}%"))
 
         rows = query.all()
         return [
@@ -398,8 +393,8 @@ def get_articles_paginated(
     params: dict = {}
 
     if feed_domain:
-        where_clauses.append("feeds.url LIKE :feed_domain")
-        params["feed_domain"] = f"%{feed_domain}%"
+        where_clauses.append("feeds.url LIKE :feed_domain ESCAPE '\\'")
+        params["feed_domain"] = f"%{escape_like(feed_domain)}%"
 
     if status and status in status_conditions:
         where_clauses.append(status_conditions[status])
@@ -409,8 +404,8 @@ def get_articles_paginated(
         params["language"] = language
 
     if category:
-        where_clauses.append("articles.categories LIKE :category")
-        params["category"] = f"%{category}%"
+        where_clauses.append("articles.categories LIKE :category ESCAPE '\\'")
+        params["category"] = f"%{escape_like(category)}%"
 
     if sentiment:
         where_clauses.append("articles.sentiment = :sentiment")
@@ -774,8 +769,8 @@ def search_articles(
         params["sentiment"] = sentiment
 
     if category:
-        where_clauses.append("a.categories LIKE :category")
-        params["category"] = f"%{category}%"
+        where_clauses.append("a.categories LIKE :category ESCAPE '\\'")
+        params["category"] = f"%{escape_like(category)}%"
 
     where_sql = " AND ".join(where_clauses)
 
@@ -993,7 +988,7 @@ def get_articles_by_category(
 
     with SessionLocal() as session:
         params: dict = {
-            "category": f"%{category}%",
+            "category": f"%{escape_like(category)}%",
             "threshold": threshold,
         }
         if sentiment:
@@ -1002,7 +997,7 @@ def get_articles_by_category(
         total = session.execute(
             text(f"""
             SELECT COUNT(*) FROM articles a
-            WHERE a.categories LIKE :category
+            WHERE a.categories LIKE :category ESCAPE '\\'
               AND a.created_at >= :threshold
               {parsed_filter}
               {sentiment_filter}
@@ -1021,7 +1016,7 @@ def get_articles_by_category(
                    f.favicon_url as feed_favicon_url
             FROM articles a
             JOIN feeds f ON a.feed_id = f.id
-            WHERE a.categories LIKE :category
+            WHERE a.categories LIKE :category ESCAPE '\\'
               AND a.created_at >= :threshold
               {parsed_filter}
               {sentiment_filter}
@@ -1050,11 +1045,11 @@ def get_articles_by_tag(
         total = session.execute(
             text(f"""
             SELECT COUNT(*) FROM articles a
-            WHERE a.tags LIKE :tag
+            WHERE a.tags LIKE :tag ESCAPE '\\'
               AND a.created_at >= :threshold
               {parsed_filter}
         """),
-            {"tag": f"%{tag}%", "threshold": threshold},
+            {"tag": f"%{escape_like(tag)}%", "threshold": threshold},
         ).scalar()
 
         rows = session.execute(
@@ -1065,14 +1060,14 @@ def get_articles_by_tag(
                    f.title as feed_source_name
             FROM articles a
             JOIN feeds f ON a.feed_id = f.id
-            WHERE a.tags LIKE :tag
+            WHERE a.tags LIKE :tag ESCAPE '\\'
               AND a.created_at >= :threshold
               {parsed_filter}
             ORDER BY a.parsed_at DESC
             {limit_clause}
         """),
             {
-                "tag": f"%{tag}%",
+                "tag": f"%{escape_like(tag)}%",
                 "threshold": threshold,
                 **({"limit": limit, "offset": offset} if limit is not None else {}),
             },
@@ -1110,9 +1105,10 @@ def get_related_articles(
         params: dict = {"article_id": article_id}
         for i, token in enumerate(tokens[:10]):
             conditions.append(
-                f"(a.categories LIKE :token_{i} OR a.tags LIKE :token_{i})"
+                f"(a.categories LIKE :token_{i} ESCAPE '\\'"
+                f" OR a.tags LIKE :token_{i} ESCAPE '\\')"
             )
-            params[f"token_{i}"] = f"%{token}%"
+            params[f"token_{i}"] = f"%{escape_like(token)}%"
 
         where_sql = " OR ".join(conditions)
         parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""

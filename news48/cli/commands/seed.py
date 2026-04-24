@@ -7,7 +7,7 @@ import typer
 
 from news48.core import config
 from news48.core.database import seed_feeds
-from news48.core.helpers import load_urls
+from news48.core.helpers.feed import load_urls
 
 from ._common import emit_error, emit_json, require_db, status_msg
 

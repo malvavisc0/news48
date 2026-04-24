@@ -74,6 +74,12 @@ def _is_substantive_result(output: dict) -> bool:
     return True
 
 
+# Maximum characters to accumulate in agent response buffers
+# to prevent unbounded memory growth in long-running sessions.
+_MAX_RESPONSE_CHARS = 500_000  # ~500KB of text
+_MAX_BUFFER_CHARS = 100_000  # ~100KB stream buffer
+
+
 async def run_agent(
     get_agent_fn,
     task: str,
@@ -159,8 +165,11 @@ async def run_agent(
             summary = _summarize_tool_result(event.tool_name, output)
             logger.info(f"Completed execution of tool: {event.tool_name} | {summary}")
         elif isinstance(event, AgentStream):
-            final_response += event.delta
-            stream_buffer, _ = emit_stream_delta(stream_buffer, event.delta)
+            # Guard against unbounded memory growth
+            if len(final_response) < _MAX_RESPONSE_CHARS:
+                final_response += event.delta
+            if len(stream_buffer) < _MAX_BUFFER_CHARS:
+                stream_buffer, _ = emit_stream_delta(stream_buffer, event.delta)
 
     flush_remaining_stream(stream_buffer)
     return final_response

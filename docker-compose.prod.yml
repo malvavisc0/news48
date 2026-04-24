@@ -32,7 +32,9 @@ services:
       - WEB_WORKERS=4
       - WEB_LOG_LEVEL=info
       - WEB_RELOAD=0
-      - FORWARDED_ALLOW_IPS=*
+      # Restrict to the reverse proxy IP(s) only — accepting "*" allows
+      # clients to spoof X-Forwarded-For and bypass IP-based rate limiting.
+      - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1}
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]

@@ -26,10 +26,6 @@ from news48.web.mcp.auth import verify_key
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# MCP Server + tool definitions
-# ---------------------------------------------------------------------------
-
 mcp_app = Server("news48-web")
 
 TOOLS = [
@@ -121,20 +117,25 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             return await _web_stats(arguments)
         else:
             return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
-    except Exception as e:
+    except Exception:
         logger.exception("Web MCP tool %s failed", name)
-        return [types.TextContent(type="text", text=f"Error: {e}")]
+        return [types.TextContent(type="text", text="An internal error occurred.")]
 
 
-# -- Tool implementations ---------------------------------------------------
+def _clamp_int(value, default: int, lo: int, hi: int) -> int:
+    """Clamp an integer argument to [lo, hi] range."""
+    try:
+        return max(lo, min(hi, int(value)))
+    except (TypeError, ValueError):
+        return default
 
 
 async def _browse_articles(args: dict) -> list[types.TextContent]:
     from news48.core.database.articles import get_articles_paginated
 
-    hours = args.get("hours", 48)
+    hours = _clamp_int(args.get("hours"), 48, 1, 168)
     category = args.get("category")
-    limit = args.get("limit", 20)
+    limit = _clamp_int(args.get("limit"), 20, 1, 100)
     articles, _ = get_articles_paginated(limit=limit, hours=hours, category=category)
     return [
         types.TextContent(
@@ -147,7 +148,7 @@ async def _browse_articles(args: dict) -> list[types.TextContent]:
 async def _get_topic_clusters(args: dict) -> list[types.TextContent]:
     from news48.core.database.articles import get_topic_clusters
 
-    hours = args.get("hours", 48)
+    hours = _clamp_int(args.get("hours"), 48, 1, 168)
     clusters = get_topic_clusters(hours=hours)
     return [
         types.TextContent(
@@ -160,7 +161,9 @@ async def _get_topic_clusters(args: dict) -> list[types.TextContent]:
 async def _article_detail(args: dict) -> list[types.TextContent]:
     from news48.core.database import get_article_by_id, get_claims_for_article
 
-    article_id = args["article_id"]
+    article_id = _clamp_int(args.get("article_id"), 0, 1, 999999999)
+    if article_id == 0:
+        return [types.TextContent(type="text", text="Invalid article_id")]
     article = get_article_by_id(article_id)
     if not article:
         return [
@@ -185,7 +188,7 @@ async def _article_detail(args: dict) -> list[types.TextContent]:
 async def _web_stats(args: dict) -> list[types.TextContent]:
     from news48.core.database.articles import get_web_stats
 
-    hours = args.get("hours", 48)
+    hours = _clamp_int(args.get("hours"), 48, 1, 168)
     stats = get_web_stats(hours=hours)
     return [
         types.TextContent(
@@ -193,11 +196,6 @@ async def _web_stats(args: dict) -> list[types.TextContent]:
             text=json.dumps(stats, default=str, indent=2),
         )
     ]
-
-
-# ---------------------------------------------------------------------------
-# ASGI app: auth middleware + transport passthrough
-# ---------------------------------------------------------------------------
 
 
 class MCPEndpoint:
