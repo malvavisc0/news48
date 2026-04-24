@@ -10,6 +10,7 @@ from .articles import (
     get_article_stats,
     get_articles_older_than_hours,
     get_articles_paginated,
+    get_articles_with_missing_fields,
     get_download_failed_articles,
     get_empty_articles,
     get_expiring_articles,

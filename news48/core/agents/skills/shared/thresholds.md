@@ -14,6 +14,7 @@ Always active for sentinel agent — single source of truth for all health thres
 | Download failure rate | 10% | 25% |
 | Parse failure rate | 10% | 25% |
 | Malformed parsed articles | ≥ 1 | ≥ 10 |
+| Articles with missing fields | ≥ 5 | ≥ 20 |
 | Articles older than 48h | present | 100+ |
 
 ## Self-Healing Metrics (Do NOT Create Plans)

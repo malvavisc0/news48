@@ -39,6 +39,8 @@ flowchart TD
 
 - **Fact-check retry plan** — Trigger: `fact-unchecked` articles exist for more than 30 minutes and no equivalent active plan exists. Step: `news48 fact-check --json`. This catches articles that were missed because the parser-triggered fact-check failed or the agent errored.
 
+- **Patch missing fields plan** — Trigger: `missing_fields` count ≥ 5 (WARNING) or ≥ 20 (CRITICAL) and no equivalent active plan exists. Step: `news48 articles patch-missing --limit 20 --json`. This fixes parsed articles that are missing summary, categories, sentiment, or tags without re-parsing.
+
 ## Reporting Requirements
 
 - For every breached threshold, record whether the result was `planned`, `suppressed`, or `report-only`.

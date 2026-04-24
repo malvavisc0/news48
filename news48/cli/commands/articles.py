@@ -51,7 +51,8 @@ def _resolve_status(status: str, as_json: bool = False) -> str:
     }
     if status not in valid:
         emit_error(
-            f"Invalid status '{status}'. " f"Valid: {', '.join(sorted(valid))}",
+            f"Invalid status '{status}'. "
+            f"Valid: {', '.join(sorted(valid))}",
             as_json=as_json,
         )
     return status
@@ -205,7 +206,9 @@ def article_info(
         "title": article["title"],
         "url": article["url"],
         "feed_url": feed_url,
-        "content_length": (len(article["content"]) if article.get("content") else 0),
+        "content_length": (
+            len(article["content"]) if article.get("content") else 0
+        ),
         "status": status,
         "published_at": article.get("published_at"),
         "parsed_at": article.get("parsed_at"),
@@ -269,7 +272,9 @@ def article_info(
 @articles_app.command(name="delete")
 def delete_article_cmd(
     identifier: str = typer.Argument(..., help="Article ID or URL to delete"),
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Skip confirmation prompt"
+    ),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Delete an article by ID or URL."""
@@ -296,7 +301,9 @@ def delete_article_cmd(
     # Ask for confirmation when not forced (human mode)
     if not force and not output_json:
         title = article["title"] or "Untitled"
-        confirm = typer.confirm(f"Delete article '{title}' (ID: {article_id})?")
+        confirm = typer.confirm(
+            f"Delete article '{title}' (ID: {article_id})?"
+        )
         if not confirm:
             print("Deletion cancelled")
             return
@@ -327,7 +334,9 @@ def reset_article_cmd(
     download: bool = typer.Option(
         False, "--download", help="Reset download failure flag"
     ),
-    parse: bool = typer.Option(False, "--parse", help="Reset parse failure flag"),
+    parse: bool = typer.Option(
+        False, "--parse", help="Reset parse failure flag"
+    ),
     all_flags: bool = typer.Option(
         False, "--all", help="Reset both download and parse failure flags"
     ),
@@ -552,14 +561,18 @@ def check_article(
             normalized = {
                 "claim_text": c.get("claim_text", c.get("text", "")),
                 "verdict": c.get("verdict", "unverifiable"),
-                "evidence_summary": c.get("evidence_summary", c.get("evidence", "")),
+                "evidence_summary": c.get(
+                    "evidence_summary", c.get("evidence", "")
+                ),
                 "sources": c.get("sources", []),
             }
             normalized_claims.append(normalized)
 
         insert_claims(article["id"], normalized_claims)
         final_status = (
-            status.lower() if status else compute_overall_verdict(normalized_claims)
+            status.lower()
+            if status
+            else compute_overall_verdict(normalized_claims)
         )
     else:
         final_status = status.lower()
@@ -611,7 +624,9 @@ def check_article(
 @articles_app.command(name="feature")
 def feature_article(
     identifier: str = typer.Argument(..., help="Article ID or URL"),
-    remove: bool = typer.Option(False, "--remove", help="Remove featured status"),
+    remove: bool = typer.Option(
+        False, "--remove", help="Remove featured status"
+    ),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Mark an article as featured."""
@@ -650,7 +665,9 @@ def feature_article(
 @articles_app.command(name="breaking")
 def breaking_article(
     identifier: str = typer.Argument(..., help="Article ID or URL"),
-    remove: bool = typer.Option(False, "--remove", help="Remove breaking status"),
+    remove: bool = typer.Option(
+        False, "--remove", help="Remove breaking status"
+    ),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Mark an article as breaking news."""
@@ -733,7 +750,9 @@ def article_claims(
         print(f"  ID: {article['id']}")
         print(f"  Total claims: {len(claims)}")
         if verdict_counts:
-            counts = ", ".join(f"{v}: {c}" for v, c in sorted(verdict_counts.items()))
+            counts = ", ".join(
+                f"{v}: {c}" for v, c in sorted(verdict_counts.items())
+            )
             print(f"  Verdicts: {counts}")
         print()
         for c in claims:
@@ -764,8 +783,12 @@ def update_article_cmd(
         None, "--sentiment", help="positive|negative|neutral"
     ),
     image_url: str = typer.Option(None, "--image-url", help="Image URL"),
-    language: str = typer.Option(None, "--language", help="ISO 639-1 language code"),
-    published_at: str = typer.Option(None, "--published-at", help="Publication date"),
+    language: str = typer.Option(
+        None, "--language", help="ISO 639-1 language code"
+    ),
+    published_at: str = typer.Option(
+        None, "--published-at", help="Publication date"
+    ),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Update article with parsed content and metadata.
@@ -848,3 +871,170 @@ def fail_article_cmd(
         emit_json(data)
     else:
         print(f"Marked article {article_id} as parse-failed: {error}")
+
+
+@articles_app.command(name="patch-missing")
+def patch_missing_cmd(
+    limit: int = typer.Option(
+        20, "--limit", "-l", help="Maximum articles to patch"
+    ),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Patch parsed articles that are missing required fields.
+
+    Reads existing article content and uses the LLM to extract only
+    the missing fields (summary, categories, sentiment, tags) without
+    re-doing a full parse.
+    """
+    import asyncio
+
+    require_db()
+
+    from news48.core.database.articles import get_articles_with_missing_fields
+
+    candidates = get_articles_with_missing_fields(limit=limit)
+    if not candidates:
+        data = {"patched": 0, "failed": 0, "total": 0, "results": []}
+        if output_json:
+            emit_json(data)
+        else:
+            print("No articles with missing fields found")
+        return
+
+    async def _patch_all() -> dict:
+        from news48.core.config import Parser
+
+        sem = asyncio.Semaphore(Parser.concurrency)
+        results = []
+
+        async def _patch_one(article: dict) -> dict:
+            async with sem:
+                return await _patch_article_fields(article)
+
+        results = await asyncio.gather(*(_patch_one(a) for a in candidates))
+        patched = sum(1 for r in results if r.get("success"))
+        failed = sum(1 for r in results if not r.get("success"))
+        return {
+            "patched": patched,
+            "failed": failed,
+            "total": len(candidates),
+            "results": list(results),
+        }
+
+    data = asyncio.run(_patch_all())
+
+    if output_json:
+        emit_json(data)
+    else:
+        print(
+            f"Patched {data['patched']} of {data['total']} "
+            f"articles, {data['failed']} failed"
+        )
+
+
+async def _patch_article_fields(article: dict) -> dict:
+    """Extract and update only the missing fields for one article."""
+    from os import getenv
+
+    from llama_index.llms.openai_like import OpenAILike
+
+    from news48.core.database.articles import update_article
+
+    missing = article.get("missing", [])
+    if not missing:
+        return {
+            "id": article["id"],
+            "success": True,
+            "skipped": True,
+            "reason": "no missing fields",
+        }
+
+    content = article.get("content") or ""
+    if not content.strip():
+        return {
+            "id": article["id"],
+            "success": False,
+            "error": "No content available",
+        }
+
+    # Build targeted extraction prompt
+    fields_desc = ", ".join(missing)
+    prompt = (
+        "Extract the following fields from the article content below. "
+        "Return ONLY a JSON object with these keys: "
+        f"{fields_desc}\n\n"
+        "Field formats:\n"
+        "- summary: 40-420 chars, 1-3 sentences, start with substantive "
+        "content (never 'This article...')\n"
+        "- categories: comma-separated from: world, politics, business, "
+        "technology, science, health, sports, travel, entertainment, others\n"
+        "- sentiment: positive, negative, or neutral\n"
+        "- tags: comma-separated lowercase, 2-8 tags\n\n"
+        "Return ONLY valid JSON, no markdown.\n\n"
+        f"Article content:\n{content[:8000]}"
+    )
+
+    api_base = getenv("API_BASE", "")
+    api_key = getenv("API_KEY", "")
+    model = getenv("MODEL", "")
+
+    if not api_base:
+        return {"id": article["id"], "success": False, "error": "No API_BASE"}
+
+    try:
+        llm = OpenAILike(
+            model=model,
+            api_base=api_base,
+            api_key=api_key,
+            is_chat_model=True,
+            is_function_calling_model=False,
+        )
+        response = await llm.acomplete(prompt)
+        raw = response.text.strip()
+
+        # Strip markdown code fences if present
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[-1]
+        if raw.endswith("```"):
+            raw = raw.rsplit("```", 1)[0]
+        raw = raw.strip()
+
+        extracted = json.loads(raw)
+
+        # Build update kwargs from extracted fields
+        kwargs = {}
+        if "summary" in missing and extracted.get("summary"):
+            kwargs["summary"] = extracted["summary"]
+        if "categories" in missing and extracted.get("categories"):
+            kwargs["categories"] = extracted["categories"]
+        if "sentiment" in missing and extracted.get("sentiment"):
+            kwargs["sentiment"] = extracted["sentiment"]
+        if "tags" in missing and extracted.get("tags"):
+            kwargs["tags"] = extracted["tags"]
+
+        if not kwargs:
+            return {
+                "id": article["id"],
+                "success": False,
+                "error": "LLM returned empty fields",
+            }
+
+        update_article(article["id"], content=content, **kwargs)
+        return {
+            "id": article["id"],
+            "success": True,
+            "patched_fields": list(kwargs.keys()),
+        }
+
+    except json.JSONDecodeError as e:
+        return {
+            "id": article["id"],
+            "success": False,
+            "error": f"LLM returned invalid JSON: {e}",
+        }
+    except Exception as e:
+        return {
+            "id": article["id"],
+            "success": False,
+            "error": str(e),
+        }
