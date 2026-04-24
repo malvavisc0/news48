@@ -16,8 +16,8 @@ from ._common import emit_error
 
 logs_app = typer.Typer(help="Inspect and search agent log files.")
 
-
 AGENT_CHOICES = ["executor", "sentinel", "fact_checker", "parser"]
+AGENT_CHOICES_STR = ", ".join(AGENT_CHOICES) + ", all"
 
 
 # Extract date/time from log filenames: executor-20260406-025724.log
@@ -184,7 +184,7 @@ def logs_list(
         "all",
         "--agent",
         "-a",
-        help="Filter by agent type: executor, sentinel, fact_checker, parser",
+        help=f"Filter by agent type ({AGENT_CHOICES_STR}). Default: all",
     ),
     date_str: str = typer.Option(
         "today",
@@ -289,7 +289,7 @@ def logs_files(
         "all",
         "--agent",
         "-a",
-        help="Filter by agent type: executor, sentinel, fact_checker, parser",
+        help=f"Filter by agent type ({AGENT_CHOICES_STR}). Default: all",
     ),
     date_str: str = typer.Option(
         None,

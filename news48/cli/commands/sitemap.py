@@ -14,9 +14,20 @@ def generate_sitemap_cmd(
     output: str = typer.Option(
         "sitemap.xml", "--output", "-o", help="Output file path"
     ),
-    site_url: str = typer.Option(..., "--site-url", help="Base URL of the website"),
+    site_url: str = typer.Option(
+        ...,
+        "--site-url",
+        help="Base URL of the website (e.g. https://example.com)",
+    ),
 ) -> None:
-    """Generate sitemap.xml for search engines."""
+    """Generate sitemap.xml for search engines.
+
+    Articles within the last 48 hours are included. The sitemap
+    follows the XML Sitemaps protocol (sitemaps.org).
+
+    Example:
+        news48 sitemap generate --site-url https://news.example.com
+    """
     require_db()
 
     try:

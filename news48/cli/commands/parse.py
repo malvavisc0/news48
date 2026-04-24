@@ -193,19 +193,15 @@ def parse(
     4. The agent updates the article via CLI commands
     5. Verifies the article was updated successfully
 
-    Articles must be fetched first using the 'fetch' command. This command
-    processes articles that haven't been parsed yet.
+    Articles must have content downloaded first (via 'news48 download').
+    Up to 5 articles are processed concurrently; --delay sets the
+    minimum pause between completions within each concurrent slot.
 
-    Use --retry to parse articles that previously failed parsing.
-    Use --article to target a specific article by ID.
-
-    Args:
-        limit: Maximum number of articles to parse.
-        delay: Delay between parse operations in seconds.
-        retry: Retry parsing failed articles.
-        feed: Optional domain to filter by.
-        article: Parse a specific article by ID.
-        output_json: Output as JSON instead of human-readable text.
+    Examples:
+        news48 parse
+        news48 parse --limit 25 --feed reuters.com
+        news48 parse --retry --limit 10
+        news48 parse --article 1234 --force
     """
     # Single article mode
     if article is not None:

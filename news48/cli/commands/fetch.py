@@ -82,15 +82,16 @@ def fetch(
     feed: str = typer.Option(None, "--feed", help="Filter by feed domain"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Fetch and parse RSS/Atom feeds from URLs stored in the database.
+    """Fetch RSS/Atom feeds and store new articles in the database.
 
-    Feeds must be seeded first using the 'seed' command. Results are
-    automatically saved to the database.
+    Feeds must be seeded first using 'news48 seed'. After fetching,
+    run 'news48 download' to get full article content, then
+    'news48 parse' to extract structured data.
 
-    Args:
-        delay: Delay between requests in seconds.
-        feed: Optional domain to filter feeds by.
-        output_json: Output as JSON instead of human-readable text.
+    Examples:
+        news48 fetch
+        news48 fetch --feed reuters.com --delay 1.0
+        news48 fetch --json
     """
     try:
         data = asyncio.run(_fetch(delay, feed_domain=feed))

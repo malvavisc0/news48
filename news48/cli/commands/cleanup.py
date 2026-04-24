@@ -11,7 +11,13 @@ from news48.core.database import (
 
 from ._common import emit_error, emit_json, require_db
 
-cleanup_app = typer.Typer(help="Manage data retention and cleanup.")
+cleanup_app = typer.Typer(
+    help=(
+        "Manage data retention and cleanup.\n\n"
+        "news48 enforces a 48-hour retention window by default.\n"
+        "Articles older than this are candidates for purging."
+    ),
+)
 
 
 @cleanup_app.command(name="status")
@@ -50,7 +56,16 @@ def cleanup_purge(
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Purge articles older than specified hours (default: 48)."""
+    """Purge articles older than the retention threshold.
+
+    The default retention window is 48 hours. Use --dry-run to
+    preview what would be deleted without actually removing data.
+
+    Examples:
+        news48 cleanup purge
+        news48 cleanup purge --dry-run
+        news48 cleanup purge --hours 72 --force --json
+    """
     require_db()
 
     # Get articles that would be purged

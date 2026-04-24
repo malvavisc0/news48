@@ -6,20 +6,29 @@ from news48.core.database import search_articles
 
 from ._common import emit_error, emit_json, require_db
 
-search_app = typer.Typer(help="Search articles using full-text search.")
+search_app = typer.Typer(help="Full-text search across articles.")
 
 
-@search_app.command(name="search")
+@search_app.command(name="articles")
 def search_articles_cmd(
     query: str = typer.Argument(..., help="Search query"),
     hours: int = typer.Option(48, "--hours", help="Time window in hours"),
-    sentiment: str = typer.Option(None, "--sentiment", help="Filter by sentiment"),
+    sentiment: str = typer.Option(
+        None,
+        "--sentiment",
+        help="Filter by sentiment (positive, negative, neutral)",
+    ),
     category: str = typer.Option(None, "--category", help="Filter by category"),
     limit: int = typer.Option(20, "--limit", "-l"),
     offset: int = typer.Option(0, "--offset", "-o"),
     output_json: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Search articles using full-text search."""
+    """Search articles using full-text search.
+
+    Examples:
+        news48 search articles "climate change"
+        news48 search articles "election" --sentiment negative --limit 5
+    """
     require_db()
 
     try:

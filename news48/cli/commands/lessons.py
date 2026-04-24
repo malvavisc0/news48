@@ -11,8 +11,8 @@ from ._common import emit_error, emit_json
 
 lessons_app = typer.Typer(help="View and manage agent lessons.")
 
-
 AGENT_NAMES = ["executor", "parser", "sentinel", "fact_checker"]
+AGENT_NAMES_STR = ", ".join(AGENT_NAMES)
 
 
 @lessons_app.command(name="list")
@@ -21,7 +21,7 @@ def lessons_list(
         None,
         "--agent",
         "-a",
-        help="Filter by agent name.",
+        help=f"Filter by agent name ({AGENT_NAMES_STR}).",
     ),
     category: str = typer.Option(
         None,
@@ -82,7 +82,7 @@ def lessons_add(
         ...,
         "--agent",
         "-a",
-        help="Agent name (executor, parser, sentinel, fact_checker).",
+        help=f"Agent name ({AGENT_NAMES_STR}).",
     ),
     category: str = typer.Option(
         ...,

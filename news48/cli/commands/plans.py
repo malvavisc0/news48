@@ -17,7 +17,7 @@ from news48.core.agents.tools.planner import (
 
 from ._common import emit_error, emit_json
 
-plans_app = typer.Typer(help="Manage execution plans.")
+plans_app = typer.Typer(help="Inspect and manage agent execution plans.")
 
 
 def _iter_plans(status: str = "") -> list[dict]:
@@ -147,10 +147,19 @@ def _dedupe_active_plans(plans: list[dict[str, Any]]) -> list[tuple[str, str]]:
 
 @plans_app.command(name="list")
 def plans_list(
-    status: str = typer.Option("", "--status", "-s", help="Filter by status"),
+    status: str = typer.Option(
+        "",
+        "--status",
+        "-s",
+        help="Filter by status: pending, executing, completed, failed",
+    ),
     output_json: bool = typer.Option(False, "--json"),
 ) -> None:
-    """List all plans, optionally filtered by status."""
+    """List all plans, optionally filtered by status.
+
+    Plans are created by the sentinel agent to fix detected issues.
+    The executor agent claims and executes pending plans.
+    """
     data = [
         {
             "plan_id": plan["id"],

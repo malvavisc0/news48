@@ -267,7 +267,7 @@ async def _download(
     semaphore = asyncio.Semaphore(MAX_CONCURRENT)
 
     async def _throttled(article: dict) -> bool:
-        return await _download_article(
+        result = await _download_article(
             article=article,
             solutions=solutions,
             domain_sems=domain_sems,
@@ -275,6 +275,9 @@ async def _download(
             semaphore=semaphore,
             claim_owner=claim_owner,
         )
+        if delay > 0:
+            await asyncio.sleep(delay)
+        return result
 
     results = await asyncio.gather(*(_throttled(a) for a in articles))
 

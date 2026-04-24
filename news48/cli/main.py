@@ -1,16 +1,18 @@
-"""News feed fetcher and article parser CLI.
+"""News48 — Autonomous news ingestion and verification pipeline.
 
-This module provides a Typer-based CLI with commands:
+This CLI is the primary interface for the news48 pipeline. The typical
+workflow is:
 
-- fetch: Fetch and parse RSS/Atom feeds from URLs stored in the database
-  using feedparser.
-- parse: Parse unparsed articles from the database and extract structured
-  information using an LLM-based news parser agent.
-- seed: Seed the database with feed URLs from a file.
-- download: Download HTML content for articles.
-- stats: Show system statistics.
-- feeds: Manage feeds in the database (list, add, delete, info).
-- articles: Manage articles in the database (list, info).
+  1. seed    — Load feed URLs into the database from a seed file
+  2. fetch   — Pull RSS/Atom entries from those feeds
+  3. download— Fetch full article HTML (with bypass for anti-bot walls)
+  4. parse   — Extract structured data via an LLM parser agent
+  5. fact-check — Verify claims against external evidence
+
+Autonomous agents (sentinel, executor, parser, fact_checker) can run
+these steps automatically via Dramatiq workers.
+
+Run ``news48 <command> --help`` for details on any command.
 """
 
 import typer
@@ -34,7 +36,19 @@ from news48.cli.commands import (
 )
 from news48.cli.commands.fact_check import fact_check
 
-app = typer.Typer()
+app = typer.Typer(
+    help=(
+        "News48 — Autonomous news ingestion and verification pipeline.\n\n"
+        "WORKFLOW:\n"
+        "  1. news48 seed seed.txt     Load feed URLs\n"
+        "  2. news48 fetch             Pull RSS/Atom entries\n"
+        "  3. news48 download          Fetch full article content\n"
+        "  4. news48 parse             Extract structured data via LLM\n"
+        "  5. news48 fact-check        Verify claims against evidence\n\n"
+        "Run 'news48 <command> --help' for details on any command.\n"
+        "Most commands support '--json' for machine-readable output."
+    ),
+)
 app.command()(fetch)
 app.command()(parse)
 app.command()(seed)
@@ -53,7 +67,9 @@ app.add_typer(search_app, name="search")
 app.add_typer(sitemap_app, name="sitemap")
 
 # MCP subcommand group
-mcp_app = typer.Typer()
+mcp_app = typer.Typer(
+    help="Manage the MCP (Model Context Protocol) server and API keys."
+)
 
 
 @mcp_app.command("serve")

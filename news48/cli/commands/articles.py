@@ -86,7 +86,10 @@ def list_articles(
         None,
         "--status",
         "-s",
-        help="Filter: empty|downloaded|parsed|download-failed|parse-failed",
+        help=(
+            "Filter by status: empty, downloaded, parsed, "
+            "download-failed, parse-failed, fact-checked, fact-unchecked"
+        ),
     ),
     language: str = typer.Option(
         None, "--language", "-L", help="Filter by language code"

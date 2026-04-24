@@ -2,109 +2,201 @@
 
 # 🗞️ news48
 
-**Autonomous news ingestion and verification pipeline with self-learning AI agents**
+**Autonomous news ingestion & verification pipeline with self-learning AI agents**
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)](#prerequisites)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![uv](https://img.shields.io/badge/pkg-uv-DE5FE9?logo=uv&logoColor=white)](#quick-start)
 
+<br />
+
+Collect → Download → Parse → Fact-check — on repeat, with agents that learn.
+
 </div>
 
 ---
 
-news48 collects feed entries, downloads article pages, parses structured content with an LLM, applies retention policy, and continuously coordinates recurring work through scheduled agents — **agents that learn from their mistakes and get smarter over time**.
+## 📖 Table of Contents
 
-## Table of Contents
-
-- [Features](#-features)
-- [Architecture](#-architecture)
-- [Self-Learning Agents](#-self-learning-agents)
+- [What Is It?](#-what-is-it)
+- [Pipeline](#-pipeline)
+- [Agents](#-agents)
+- [CLI Reference](#-cli-reference)
 - [Quick Start](#-quick-start)
-- [Usage](#-usage)
-  - [Manual Pipeline](#manual-pipeline)
-  - [Agent Operations](#agent-operations)
 - [Docker](#-docker)
-  - [Seeding the Database](#seeding-the-database)
-  - [Development](#docker-development)
-  - [Production](#docker-production)
 - [MCP Integration](#-mcp-integration)
-  - [Local MCP Server](#local-mcp-server-stdio)
-  - [Remote MCP Endpoint](#remote-mcp-endpoint-streamable-http)
 - [Development](#-development)
 - [License](#-license)
 
-## ✨ Features
+---
 
-| | |
-|---|---|
-| 📡 **Feed Ingestion** | RSS and Atom sources with automatic deduplication |
-| 🔄 **Article Pipeline** | End-to-end lifecycle: fetch → download → parse |
-| 🧪 **Fact-Checking** | Integrated verification workflow with verdict storage |
-| 🧹 **Retention & Health** | Automated cleanup and database health tooling |
-| 🤖 **Autonomous Agents** | Sentinel, executor, parser, and fact-checker run on schedules |
-| 🧠 **Self-Learning** | Agents persist lessons across runs and improve over time |
+## 🔍 What Is It?
 
-## 🏗️ Architecture
+news48 is a self-hosted news pipeline that:
 
-Four scheduled agents run through Periodiq-scheduled Dramatiq actors backed by Redis:
+1. **Ingests** RSS/Atom feeds from sources you choose
+2. **Downloads** full article content (with anti-bot bypass)
+3. **Parses** unstructured HTML into structured data via LLM
+4. **Fact-checks** claims against external evidence
+5. **Purges** stale data on a 48-hour retention window
+
+All of this runs **autonomously** through four AI agents that schedule themselves via Dramatiq + Periodiq. The agents also **learn from mistakes** — saving lessons that carry across runs so they get smarter over time.
+
+---
+
+## 🔁 Pipeline
 
 ```
-                    ┌─────────────┐
-                    │  Periodiq   │
-                    │ cron enqueue│
-                    └──────┬──────┘
-           ┌───────┬───────┼───────┐
-            ▼       ▼       ▼       ▼
-        ┌────────┐┌────────┐┌─────┐┌────────────┐
-        │Sentinel││Executor││Parser││Fact-checker│
-        │observes││  runs  ││parses││  verifies  │
-        └───┬────┘└───┬────┘└──┬──┘└─────┬──────┘
-            └───────┬───────┘          │
-                    ▼                  ▼
-                Redis queues      .lessons.md
-                    │            (shared memory)
-                    ▼
-           Dramatiq workers + news48 CLI & tools
+ seed.txt ──► seed ──► fetch ──► download ──► parse ──► fact-check
+                │          │          │           │           │
+                ▼          ▼          ▼           ▼           ▼
+             DB feeds   DB articles  HTML → MD  structured   verdicts
+                                                    data
 ```
 
-| Agent | Role |
-|-------|------|
-| **Sentinel** | Observes system health, evaluates thresholds, creates fix plans |
-| **Executor** | Claims a plan, executes steps, verifies outcomes |
-| **Parser** | Claims downloaded articles and parses them autonomously |
-| **Fact-checker** | Verifies claims by searching evidence and recording verdicts |
+| Stage | Command | What it does |
+|-------|---------|-------------|
+| 🌱 Seed | `news48 seed seed.txt` | Load feed URLs into the database |
+| 📡 Fetch | `news48 fetch` | Pull RSS/Atom entries → store as articles |
+| ⬇️ Download | `news48 download` | Fetch full article HTML (with bypass) |
+| 🧩 Parse | `news48 parse` | Extract title, summary, categories, sentiment via LLM |
+| 🔬 Fact-check | `news48 fact-check` | Verify claims against evidence, record verdicts |
+| 🧹 Cleanup | `news48 cleanup purge` | Remove articles older than 48 hours |
 
-> **Source:** Dramatiq actors in [`news48/core/agents/actors.py`](news48/core/agents/actors.py), Periodiq cron schedules in [`news48/core/agents/actors.py`](news48/core/agents/actors.py), CLI entry points in [`news48/cli/commands/agents.py`](news48/cli/commands/agents.py).
+Most commands support `--json` for machine-readable output and `--limit` to control batch size.
 
-## 🧠 Self-Learning Agents
+---
 
-news48 agents **learn from their mistakes** and accumulate knowledge across runs. When an agent discovers something — correct command syntax, a process insight, a feed-specific quirk, or an error recovery technique — it saves the lesson to `.lessons.md`. On every subsequent run, all accumulated lessons are loaded into every agent's prompt.
+## 🤖 Agents
+
+Four agents run on schedules through **Periodiq → Redis → Dramatiq**:
+
+| Agent | Cron | What it does |
+|-------|------|-------------|
+| **Sentinel** | `*/5 * * * *` | Monitors health, creates fix plans, deletes bad feeds |
+| **Executor** | `* * * * *` | Claims a plan, runs its steps, verifies outcomes |
+| **Parser** | `* * * * *` | Claims articles, runs LLM parsing autonomously |
+| **Fact-checker** | `*/10 * * * *` | Verifies claims, searches evidence, records verdicts |
+
+### 🧠 Self-Learning
+
+Agents **save lessons** when they discover something useful. On the next run, all accumulated lessons are injected into every agent's prompt:
 
 ```
 Run 1:  Executor fails with wrong timeout → discovers 600s works → saves lesson
 Run 2:  Executor starts with "timeout for fact-check should be 600s" already loaded
 ```
 
-**How it works:**
+Lessons are stored in `data/lessons.json`, cross-pollinated across agents, and human-auditable.
 
-- **Save** — agents call `save_lesson` whenever they discover something worth remembering
-- **Load** — `compose_agent_instructions()` reads `.lessons.md` and injects lessons into the system prompt
-- **Cross-pollination** — all agents see all lessons (executor learns from sentinel, fact-checker learns from parser)
-- **Idempotent** — duplicate lessons are automatically skipped
-- **Human-auditable** — plain markdown, easy to read and prune
+```bash
+news48 lessons list                              # view all
+news48 lessons list --agent executor --json      # filter by agent
+news48 lessons add -a executor -c "Timing" -l "Use 600s timeout for fact-checks"
+```
 
-**What agents learn:**
+---
 
-| Category | Examples |
-|----------|----------|
-| Command Syntax | Correct flags, arguments, timeout values |
-| Process Insights | How workflows actually behave in practice |
-| Feed Quirks | Non-standard date formats, rate limits, HTML structures |
-| Error Recovery | What fixes specific error conditions |
-| Best Practices | Patterns that lead to better outcomes |
-| Timing & Thresholds | Correct batch sizes, intervals, limits |
+## 📋 CLI Reference
 
-> The lessons file is gitignored (instance-specific). See [`news48/core/agents/skills/shared/lessons-learned.md`](news48/core/agents/skills/shared/lessons-learned.md) for the agent-facing skill documentation.
+### Pipeline Commands
+
+```bash
+news48 seed <file>              # Load feed URLs from file
+news48 fetch                    # Pull RSS/Atom feeds
+news48 download                 # Download article content
+news48 parse                    # Parse articles with LLM
+news48 fact-check               # Fact-check parsed articles
+news48 stats                    # Show system statistics
+```
+
+### Resource Management
+
+```bash
+# Feeds
+news48 feeds list                          # List all feeds
+news48 feeds add <url>                     # Add a feed
+news48 feeds info <url-or-id>              # Feed details
+news48 feeds update <url-or-id> -t "Title" # Update metadata
+news48 feeds delete <url-or-id>            # Delete feed + articles
+news48 feeds rss --hours 48 --output feed.xml  # Generate RSS
+
+# Articles
+news48 articles list --status parsed       # List by status
+news48 articles info <id-or-url>           # Article details
+news48 articles content <id-or-url>        # Show content
+news48 articles update <id> --content-file <path>  # Update fields
+news48 articles delete <id-or-url>         # Delete article
+news48 articles reset <id> --all           # Reset failure flags
+news48 articles feature <id>               # Mark as featured
+news48 articles breaking <id>              # Mark as breaking
+news48 articles check <id> -s verified     # Set fact-check result
+news48 articles claims <id>                # Show per-claim verdicts
+
+# Fetches
+news48 fetches list                        # View fetch history
+```
+
+### Search
+
+```bash
+news48 search articles "climate change"                    # Full-text search
+news48 search articles "election" --sentiment negative -l 5  # Filtered
+```
+
+### Agents & Plans
+
+```bash
+news48 agents status                 # Queue depths + cron schedules
+news48 agents run -a parser          # Run one agent (enqueue to Dramatiq)
+news48 agents run -a parser --inline # Run inline (debug, no Redis needed)
+
+news48 plans list                    # List all plans
+news48 plans list -s pending         # Filter by status
+news48 plans show <plan-id>          # Show plan details
+news48 plans cancel <plan-id>        # Cancel a plan
+news48 plans remediate --apply       # Repair plan corruption
+```
+
+### Observability
+
+```bash
+news48 logs list                     # Recent log entries (all agents)
+news48 logs list -a executor -d today  # Filter by agent + date
+news48 logs files                    # List log files
+news48 logs show <filename>          # Display a log file
+
+news48 lessons list                  # View agent lessons
+```
+
+### Retention & Health
+
+```bash
+news48 cleanup status                # Retention policy stats
+news48 cleanup purge                 # Purge old articles (default: 48h)
+news48 cleanup purge --dry-run       # Preview without deleting
+news48 cleanup health                # Database connectivity check
+```
+
+### Web & MCP
+
+```bash
+news48 serve                         # Start web server
+news48 mcp serve                     # Start MCP server (stdio)
+news48 mcp create-key --label "Dev"  # Create API key
+news48 mcp list-keys                 # List active keys
+news48 mcp revoke-key <key>          # Revoke a key
+```
+
+### Sitemap
+
+```bash
+news48 sitemap generate --site-url https://example.com  # Generate sitemap.xml
+```
+
+> 💡 **Tip:** Append `--json` to any command for machine-readable output.
+
+---
 
 ## 🚀 Quick Start
 
@@ -113,19 +205,24 @@ Run 2:  Executor starts with "timeout for fact-check should be 600s" already loa
 - Python **3.12+**
 - [uv](https://docs.astral.sh/uv/) package manager
 - An OpenAI-compatible LLM endpoint
-- A [Byparr](https://github.com/TheBeastLT/Byparr) instance for downloading
+- A [Byparr](https://github.com/TheBeastLT/Byparr) instance
 
-### Installation
+### Install
 
 ```bash
-# 1. Install dependencies (CLI + web)
+# Clone & install
+git clone https://github.com/malvavisc0/news48.git && cd news48
 uv sync --extra all
 
-# 2. Configure environment
+# Configure
 cp .env.example .env
+# Edit .env with your API keys (see table below)
+
+# Verify
+uv run news48 --help
 ```
 
-**Install extras:**
+**Extras:**
 
 ```bash
 uv sync --extra cli    # CLI + agents only
@@ -133,228 +230,138 @@ uv sync --extra web    # Web server only
 uv sync --extra all    # Everything
 ```
 
-Edit `.env` and set the required variables:
+### Environment Variables
 
 | Variable | Required | Description |
 |----------|:--------:|-------------|
-| `DATABASE_URL` | ✅ | SQLAlchemy database URL for MySQL |
-| `REDIS_URL` | | Redis broker URL for Dramatiq + Periodiq |
+| `DATABASE_URL` | ✅ | SQLAlchemy database URL (MySQL) |
 | `BYPARR_API_URL` | ✅ | Byparr service URL |
 | `API_BASE` | ✅ | LLM API base URL |
 | `API_KEY` | ✅ | LLM API key |
 | `MODEL` | ✅ | Model identifier |
+| `REDIS_URL` | | Redis URL for Dramatiq (required for agents) |
+| `SEARXNG_URL` | | SearXNG for fact-checker evidence search |
 | `CONTEXT_WINDOW` | | Context window size (default: 1048576) |
-| `SEARXNG_URL` | | SearXNG instance for search |
-| `SMTP_HOST` | | SMTP server for sentinel email alerts |
+| `SMTP_HOST` | | SMTP host for sentinel email alerts |
 | `SMTP_PORT` | | SMTP port (default: 587) |
 | `SMTP_USER` | | SMTP username |
 | `SMTP_PASS` | | SMTP password |
 | `SMTP_FROM` | | Sender email address |
 | `MONITOR_EMAIL_TO` | | Recipient for sentinel alerts |
 
-```bash
-# 3. Verify installation
-uv run news48 --help
-```
-
-## 📖 Usage
-
-### Manual Pipeline
+### Run It
 
 ```bash
-# Seed feeds from a file
+# 1. Seed feeds
 uv run news48 seed seed.txt
 
-# Run pipeline stages
+# 2. Fetch articles
 uv run news48 fetch
+
+# 3. Download content
 uv run news48 download --limit 10
+
+# 4. Parse with LLM
 uv run news48 parse --limit 10
 
-# Inspect system state
-uv run news48 stats --json
-uv run news48 cleanup status --json
-uv run news48 cleanup health --json
-
-# Manage lessons learned
-uv run news48 lessons list                          # view all lessons
-uv run news48 lessons list --agent executor --json  # filter by agent
-uv run news48 lessons add --agent executor \
-  --category "Command Syntax" \
-  --lesson "Use timeout=600 for fact-check"         # add manually
+# 5. Check stats
+uv run news48 stats
 ```
 
-### Agent Operations
-
-**One-shot runs:**
-
-```bash
-uv run news48 agents run --agent sentinel
-uv run news48 agents run --agent executor
-uv run news48 agents run --agent parser
-uv run news48 agents run --agent fact_checker
-```
-
-**Continuous autonomous mode:**
-
-```bash
-dramatiq news48.core.agents.actors --processes 1 --threads 8  # run workers
-periodiq news48.core.agents.actors                               # enqueue cron tasks
-uv run news48 agents status --json                  # inspect queues and schedules
-```
-
-`agents start`, `agents stop`, and `agents dashboard` are no longer part of the operational model. Docker manages worker lifecycle, while Redis stores queue state.
+---
 
 ## 🐳 Docker
 
-news48 can run entirely in Docker with separate containers for the web interface, MySQL, Redis, Dramatiq workers, Periodiq scheduler, SearXNG, and Byparr.
+news48 runs entirely in Docker with separate containers for each service.
 
-### Prerequisites
+### Services
 
-- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
-- An OpenAI-compatible LLM endpoint
-- API keys configured in `.env`
+| Service | Port | Role |
+|---------|------|------|
+| `web` | 8000 | FastAPI web interface |
+| `mysql` | 3306 | Primary database |
+| `redis` | 6379 | Dramatiq broker + RedisInsight (8001) |
+| `dramatiq-worker` | — | Executes agents and pipeline actors |
+| `periodiq-scheduler` | — | Enqueues scheduled work |
+| `searxng` | 8080† | Meta-search engine |
+| `byparr` | 8191† | Anti-bot bypass |
+| `dozzle` | 9999 | Container log viewer (dev) |
 
-### Setup
+*† internal only*
 
-```bash
-# One-time setup
-cp .env.example .env
-# Edit .env with your API keys
-```
-
-### Seeding the Database
-
-Before the pipeline can fetch articles, the database needs feed URLs. Create a `seed.txt` file in the project root with one RSS/Atom URL per line:
-
-```bash
-# seed.txt
-https://feeds.arstechnica.com/arstechnica/index
-https://feeds.bbci.co.uk/news/rss.xml
-https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
-```
-
-When the worker stack starts, the sentinel agent automatically detects an empty database and creates a seed plan for the executor. The executor then runs `news48 seed seed.txt` — so seeding happens automatically as long as `seed.txt` is accessible inside the worker container.
-
-**Development** — the project root is mounted at `/app`, so `seed.txt` is automatically available at `/app/seed.txt`.
-
-**Production** — the project root is not mounted. Either:
-
-- Build the image with `seed.txt` present in the project root (it is not excluded by `.dockerignore` and gets copied via `COPY . .`), or
-- Mount it at runtime:
+### Development
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm \
-  -v ./seed.txt:/app/seed.txt:ro \
-  dramatiq-worker news48 seed /app/seed.txt
-```
-
-You can also seed manually at any time:
-
-```bash
-# Development
-docker compose exec dramatiq-worker news48 seed /app/seed.txt
-
-# Production
-docker compose -f docker-compose.yml -f docker-compose.prod.yml exec \
-  dramatiq-worker news48 seed /app/seed.txt
-```
-
-Verify feeds were added:
-
-```bash
-docker compose exec dramatiq-worker news48 feeds list
-```
-
-### Docker Development
-
-```bash
-# Start all services with live reload
+# Start with live reload
 docker compose up
 
-# Web UI available at http://localhost:8765
-# Code changes auto-reload via volume mount
-# RedisInsight available at http://localhost:8001
-# Dozzle logs UI available at http://localhost:9999
+# Web UI      → http://localhost:8765
+# RedisInsight → http://localhost:8001
+# Dozzle       → http://localhost:9999
 
-# Run CLI commands
+# Run CLI inside container
 docker compose exec dramatiq-worker news48 stats
 docker compose exec dramatiq-worker news48 feeds list
 
-# Run one-off commands
-docker compose run --rm dramatiq-worker news48 seed /app/seed.txt
-
-# View logs
+# Logs
 docker compose logs -f dramatiq-worker
-docker compose logs -f periodiq-scheduler
 docker compose logs -f web
-docker compose logs -f redis
 
-# Stop everything
-docker compose down
-
-# Fresh start (removes data)
-docker compose down -v
+# Stop
+docker compose down        # keep data
+docker compose down -v     # fresh start
 ```
 
-### Docker Production
+### Production
 
 ```bash
-# Start production stack
+# Start
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
-# Web UI available at http://localhost:8000
+# Web UI → http://localhost:8000
 
-# Check status
-docker compose ps
-docker compose logs -f web
-
-# Backup MySQL database
+# Backup
 docker compose exec mysql mysqldump -unews48 -pnews48 news48 > backup.sql
 
-# Update to new version
+# Update
 docker compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
-# Stop production
+# Stop
 docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+```
+
+### Seeding in Docker
+
+The sentinel agent auto-detects an empty database and creates a seed plan — so if `seed.txt` is in the image, seeding happens automatically.
+
+```bash
+# Manual seed
+docker compose exec dramatiq-worker news48 seed /app/seed.txt
+
+# Verify
+docker compose exec dramatiq-worker news48 feeds list
 ```
 
 ### Worker Observability
 
-There is **no dedicated Dramatiq admin UI** in the current stack. Use the included Docker and Redis tooling instead:
+- **RedisInsight** → `http://localhost:8001` — inspect queues and broker state
+- **Dozzle** → `http://localhost:9999` — container log viewer
+- **CLI** → `news48 agents status --json` — queue depths and cron schedules
 
-- **RedisInsight** at `http://localhost:8001` — inspect Redis keys, queues, and broker state
-- **Dozzle** at `http://localhost:9999` in development — inspect container logs for [`dramatiq-worker`](docker-compose.yml) and [`periodiq-scheduler`](docker-compose.yml)
-- [`uv run news48 agents status --json`](README.md:193) — inspect queue and schedule state from the CLI
-
-This means Dramatiq execution is currently observed through Redis, logs, and the CLI rather than through a standalone Dramatiq dashboard.
-
-### Architecture
-
-| Service | Image | Port | Role |
-|---------|-------|------|------|
-| `web` | news48-web (built) | 8000 | FastAPI web interface |
-| `mysql` | mysql:8.0 | 3306 | Primary relational database |
-| `redis` | redis/redis-stack | 6379 / 8001 | Dramatiq broker + RedisInsight |
-| `dramatiq-worker` | news48-worker (built) | none | Executes agents and pipeline actors |
-| `periodiq-scheduler` | news48-worker (built) | none | Enqueues scheduled agent and pipeline work |
-| `searxng` | searxng/searxng:latest | 8080 (internal) | Meta-search engine |
-| `dozzle` | amir20/dozzle:latest | 8080 | Container log viewer |
-| `byparr` | ghcr.io/thephaseless/byparr:main | 8191 (internal) | Anti-bot bypass |
+---
 
 ## 🔌 MCP Integration
 
-news48 exposes operations via the [Model Context Protocol](https://modelcontextprotocol.io/) so AI assistants can interact with your news pipeline. There are two MCP interfaces: a **local server** (stdio, no auth) for development, and a **remote endpoint** (Streamable HTTP, auth required) for production.
+news48 exposes tools via the [Model Context Protocol](https://modelcontextprotocol.io/) so AI assistants can interact with your pipeline.
 
-### Local MCP Server (stdio)
+### Local Server (stdio)
 
-The local MCP server communicates over stdio and requires no authentication — ideal for local AI assistants like Claude Desktop or Cursor:
+No auth required — ideal for Claude Desktop, Cursor, etc.
 
 ```bash
 uv run news48 mcp serve
 ```
-
-Configure your AI assistant to use it:
 
 ```json
 {
@@ -367,45 +374,24 @@ Configure your AI assistant to use it:
 }
 ```
 
-**Available tools:** `fetch_feeds`, `list_feeds`, `search_articles`, `get_article_detail`, `get_stats`, `parse_article`
+**Tools:** `fetch_feeds`, `list_feeds`, `search_articles`, `get_article_detail`, `get_stats`, `parse_article`
 
-### Remote MCP Endpoint (Streamable HTTP)
+### Remote Endpoint (HTTP)
 
-The web app exposes an authenticated MCP endpoint at `/mcp/` protected by API keys stored in Redis. Before connecting, you need to create a key.
-
-#### Creating an API Key
+The web app exposes an authenticated endpoint at `/mcp/`. Keys are stored in Redis.
 
 ```bash
-# Local development
+# Create a key
 uv run news48 mcp create-key --label "Claude Desktop"
-# Output: Created MCP API key: n48-aBcDeFgHiJkLmNoPqRsTuVwXyZ...
-# Store this key securely — it cannot be retrieved later.
+# → Created MCP API key: n48-aBcDeFgHiJkLmNoPqRsTuVwXyZ...
+# ⚠️  Copy it now — it can't be retrieved later
 
-# Inside Docker
-docker compose exec dramatiq-worker news48 mcp create-key --label "My Assistant"
-```
-
-> **Important:** The full key is only displayed once at creation time. Copy it immediately and store it securely. The `list-keys` command only shows masked keys (e.g., `n48-aBcD...vXyZ`).
-
-#### Managing API Keys
-
-```bash
-# List all active keys (masked)
+# List keys (masked)
 uv run news48 mcp list-keys
 
-# Revoke a key (takes effect immediately, no restart needed)
-uv run news48 mcp revoke-key n48-aBcDeFgHiJkLmNoPqRsTuVwXyZ...
-
-# In Docker
-docker compose exec dramatiq-worker news48 mcp list-keys
-docker compose exec dramatiq-worker news48 mcp revoke-key n48-...
+# Revoke a key
+uv run news48 mcp revoke-key n48-...
 ```
-
-Keys are stored in a Redis SET (`mcp:keys`) for O(1) lookup. Revoking a key removes it from Redis instantly — no application restart required. Keys persist across Redis restarts (Redis is configured with AOF + periodic snapshots).
-
-#### Connecting a Remote MCP Client
-
-Once you have a key, configure your AI assistant:
 
 ```json
 {
@@ -420,37 +406,24 @@ Once you have a key, configure your AI assistant:
 }
 ```
 
-**Available tools:** `browse_articles`, `get_topic_clusters`, `article_detail`, `web_stats`
+**Tools:** `browse_articles`, `get_topic_clusters`, `article_detail`, `web_stats`
 
-#### Testing the Endpoint
+> 🔒 All keys are prefixed `n48-` for secret scanner detection. If Redis is unreachable, all MCP requests are denied (fail-closed).
 
-```bash
-# Without auth — should return 401
-curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8000/mcp/ \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}'
-
-# With valid auth — should return 200
-curl -X POST http://localhost:8000/mcp/ \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer n48-your-key-here" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0.1"}}}'
-```
-
-> **Security:** All keys are prefixed `n48-` for easy detection in secret scanners. The web service requires `REDIS_URL` to verify keys — if Redis is unreachable, all MCP requests are denied (fail-closed).
+---
 
 ## 🧬 Development
 
 ```bash
-# Run test suite
+# Run tests
 uv run pytest
 
-# Format code
+# Format
 uv run black .
 uv run isort .
 ```
 
-Key test suites cover agent behavior, planner tools, lessons learned, streaming, and database claim paths.
+---
 
 ## 📄 License
 

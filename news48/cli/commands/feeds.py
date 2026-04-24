@@ -352,7 +352,9 @@ def update_feed_cmd(
 
 @feeds_app.command(name="rss")
 def generate_rss(
-    hours: int = typer.Option(48, "--hours", help="Time window"),
+    hours: int = typer.Option(
+        48, "--hours", help="Look-back window in hours for articles"
+    ),
     category: str = typer.Option(None, "--category", help="Filter by category"),
     output: str = typer.Option(None, "--output", "-o", help="Output file path"),
 ) -> None:

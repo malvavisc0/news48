@@ -16,7 +16,14 @@ import typer
 
 from ._common import emit_error, emit_json
 
-agents_app = typer.Typer(help="Manage autonomous agents.")
+agents_app = typer.Typer(
+    help=(
+        "Manage autonomous agents (sentinel, executor, parser, fact_checker).\n\n"
+        "Agents run as Dramatiq workers in Docker. Use 'agents status' to\n"
+        "inspect queue depths and cron schedules. Use 'agents run' to\n"
+        "enqueue a one-shot task or run an agent inline for debugging."
+    ),
+)
 
 VALID_AGENTS = ["sentinel", "executor", "parser", "fact_checker"]
 
@@ -138,10 +145,9 @@ def agents_run(
     if agent:
         if agent not in VALID_AGENTS:
             emit_error(
-                f"Unknown agent: {agent}. " f"Valid: {', '.join(VALID_AGENTS)}",
+                f"Unknown agent: {agent}. Valid: {', '.join(VALID_AGENTS)}",
                 as_json=output_json,
             )
-            return
 
         task_prompt = task or DEFAULT_TASKS[agent]
 
@@ -161,8 +167,7 @@ def agents_run(
 def _enqueue_agent(agent_name: str, task_prompt: str) -> None:
     """Enqueue an agent task to Dramatiq."""
     try:
-        import agents.broker  # noqa: F401
-
+        import news48.core.agents.broker  # noqa: F401
         from news48.core.agents.actors import (
             executor_cycle,
             fact_check_cycle,

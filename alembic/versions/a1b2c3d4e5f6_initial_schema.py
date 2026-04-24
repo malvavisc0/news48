@@ -59,6 +59,7 @@ def upgrade() -> None:
         sa.Column("feed_id", sa.Integer(), nullable=False),
         sa.Column("url", sa.String(length=2048), nullable=False),
         sa.Column("title", sa.String(length=1024), nullable=True),
+        sa.Column("slug", sa.String(length=1024), nullable=True),
         sa.Column("summary", sa.Text(), nullable=True),
         sa.Column("content", sa.Text(), nullable=True),
         sa.Column("author", sa.String(length=512), nullable=True),

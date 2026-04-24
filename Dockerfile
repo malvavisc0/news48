@@ -20,6 +20,7 @@ RUN uv sync --frozen --no-dev --extra web --no-install-project
 FROM python:3.12-slim AS worker-builder
 
 WORKDIR /app
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Install build tools (needed for Rust-based packages like html-to-markdown)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -43,6 +44,7 @@ RUN uv sync --frozen --no-dev --extra all --no-install-project
 FROM python:3.12-slim AS dev-builder
 
 WORKDIR /app
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Install build tools (needed for Rust-based packages like html-to-markdown)
 RUN apt-get update && apt-get install -y --no-install-recommends \
