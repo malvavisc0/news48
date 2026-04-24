@@ -131,24 +131,6 @@ def mcp_list_keys():
 app.add_typer(mcp_app, name="mcp")
 
 
-@app.command()
-def serve(
-    host: str | None = None,
-    port: int | None = None,
-):
-    """Start the web server."""
-    import uvicorn
-
-    from news48.core.config import Web
-    from news48.web.app import app as web_app
-
-    uvicorn.run(
-        web_app,
-        host=host or Web.host,
-        port=port or Web.get_port(),
-    )
-
-
 def main():
     app()
 

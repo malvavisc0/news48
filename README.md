@@ -176,17 +176,10 @@ news48 cleanup health                # Database connectivity check
 ### Web & MCP
 
 ```bash
-news48 serve                         # Start web server
 news48 mcp serve                     # Start MCP server (stdio)
 news48 mcp create-key --label "Dev"  # Create API key
 news48 mcp list-keys                 # List active keys
 news48 mcp revoke-key <key>          # Revoke a key
-```
-
-### Sitemap
-
-```bash
-news48 sitemap generate --site-url https://example.com  # Generate sitemap.xml
 ```
 
 > 💡 **Tip:** Append `--json` to any command for machine-readable output.
