@@ -114,7 +114,7 @@ def build_website_schema(site_url: str) -> dict:
         "name": "news48",
         "url": site_url.rstrip("/"),
         "description": (
-            "Live AI-verified news from the last 48 hours with "
+            "AI-verified news from the last 48 hours with "
             "source transparency, fact-check signals, and topic clusters."
         ),
         "publisher": {

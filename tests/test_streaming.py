@@ -13,23 +13,17 @@ class TestStripPrefix:
 
     def test_removes_prefix_and_strips(self):
         """Should remove prefix and strip whitespace."""
-        result = _strip_prefix(
-            "Executing tool: update_plan", "Executing tool:"
-        )
+        result = _strip_prefix("Executing tool: update_plan", "Executing tool:")
         assert result == "update_plan"
 
     def test_strips_leading_whitespace(self):
         """Should strip leading whitespace after prefix removal."""
-        result = _strip_prefix(
-            "Executing tool:   update_plan", "Executing tool:"
-        )
+        result = _strip_prefix("Executing tool:   update_plan", "Executing tool:")
         assert result == "update_plan"
 
     def test_strips_trailing_whitespace(self):
         """Should strip trailing whitespace."""
-        result = _strip_prefix(
-            "Executing tool: update_plan  ", "Executing tool:"
-        )
+        result = _strip_prefix("Executing tool: update_plan  ", "Executing tool:")
         assert result == "update_plan"
 
     def test_empty_after_prefix(self):
@@ -53,17 +47,11 @@ class TestFormatLogLine:
             "Executing tool: update_plan. Reason: No downloaded articles found"
         )
         result = format_log_line(line)
-        assert (
-            result
-            == "12:38 ⚙ Executing: update_plan (No downloaded articles found)"
-        )
+        assert result == "12:38 ⚙ Executing: update_plan (No downloaded articles found)"
 
     def test_executing_tool_without_reason(self):
         """Should format 'Executing tool' without reason."""
-        line = (
-            "2026-04-04 12:38:42 [agents._run] "
-            "Executing tool: run_shell_command"
-        )
+        line = "2026-04-04 12:38:42 [agents._run] " "Executing tool: run_shell_command"
         result = format_log_line(line)
         assert result == "12:38 ⚙ Executing: run_shell_command"
 
@@ -128,10 +116,7 @@ class TestFormatLogLine:
 
     def test_different_logger_names(self):
         """Should work with different logger names."""
-        line = (
-            "2026-04-04 12:38:42 [agents.orchestrator] "
-            "Executing tool: check"
-        )
+        line = "2026-04-04 12:38:42 [agents.orchestrator] " "Executing tool: check"
         result = format_log_line(line)
         assert result == "12:38 ⚙ Executing: check"
 

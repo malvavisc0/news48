@@ -9,6 +9,7 @@ Ensure ALL are true before writing content:
 ### Title Checks
 - [ ] Title is non-empty, factual, 8-140 characters
 - [ ] **Title uses sentence case** — capitalize only the first word and proper nouns. Do NOT use Title Case, ALL CAPS, or camelCase.
+- [ ] **Proper nouns are always capitalized** — country names (Pakistan, Iran, US), city names (Gaza, Washington), people's names, organizations (NATO, WHO), acronyms (UK, EU, UN), and languages must never be lowercased. Sentence case means sentence case, not lowercase-everything.
 - [ ] **Title differs from the source article title** — this is non-negotiable. The output title must always be transformed from the original. See title transformation rules below.
 - [ ] Title is descriptive and specific — it must tell the reader what happened
 - [ ] Title is insight-driven — a reader can look at it and immediately understand what the article covers

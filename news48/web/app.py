@@ -44,7 +44,7 @@ def _default_meta(request: Request) -> dict[str, object]:
     site_url = _site_url(request)
     canonical_url = build_canonical_url(site_url, str(request.url.path))
     seo = build_seo_meta(
-        title="Live AI-Verified News and Fact-Checked Stories | news48",
+        title="AI-Verified News and Fact-Checked Stories | news48",
         description=(
             "Browse live news from the last 48 hours with AI-rewritten "
             "summaries, source links, fact-check signals, and topic clusters."
@@ -111,7 +111,7 @@ async def homepage(request: Request):
     seo["json_ld"] = [
         build_website_schema(site_url),
         build_collection_schema(
-            name="Live AI-verified news in the last 48 hours",
+            name="AI-verified news in the last 48 hours",
             description=(
                 "Fresh live news with AI-rewritten summaries, topic clusters, "
                 "and source transparency."

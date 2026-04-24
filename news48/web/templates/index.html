@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ seo.title if seo is defined and seo else 'Live AI-Verified News and Fact-Checked Stories | news48'
+{% block title %}{{ seo.title if seo is defined and seo else 'AI-Verified News and Fact-Checked Stories | news48'
 }}{% endblock %}
 
 {% block json_ld %}
@@ -15,9 +15,8 @@
 
 {% block content %}
 <header>
-    <h1 class="masthead">Live AI-verified news from the last 48 hours</h1>
-    <div class="tagline">Rewritten summaries, source transparency, fact-check signals, and fast topic discovery in one
-        live feed.</div>
+    <h1 class="masthead">AI-verified news from the last 48 hours</h1>
+    <div class="tagline">Rewritten in plain english, fact-check, and fast topic discovery in one live feed</div>
     <div class="status-line">
         <span><span class="live-dot"></span><strong>{{ stats.live_stories }}</strong> live stories</span>
         <span><strong>{{ stats.verified }}</strong> verified</span>
@@ -85,7 +84,7 @@
                     </span>
                 </div>
                 <div class="story-links">
-                    <a href="/article/{{ story.id }}">Read {{ story.title }} on news48 →</a>
+                    <a href="/article/{{ story.id }}">Read more →</a>
                     <a href="{{ story.url }}" target="_blank" rel="noopener"
                         title="Opens the original source in a new tab">Open original source ↗</a>
                 </div>
