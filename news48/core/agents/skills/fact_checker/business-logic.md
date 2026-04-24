@@ -5,11 +5,11 @@
 ```mermaid
 flowchart TD
     A[Start fact-check cycle] --> B[Read article info + content]
-    B --> C[Extract 3-7 material claims]
+    B --> C[Extract 2-3 key claims]
     C --> D[For each claim: search web evidence]
     D --> E[Assign per-claim verdict]
     E --> F[Build claims JSON array]
-    F --> G[articles check --claims-json ...]
+    F --> G[articles check --claims-json-file ...]
     G --> H[articles claims <id> --json]
     H --> I{Verification ok?}
     I -->|No| J[Report failure]
@@ -18,12 +18,12 @@ flowchart TD
 
 ## Skills
 
-- **fc-extract-claims** — Extract 3–7 material,
+- **fc-extract-claims** — Extract 2–3 key,
   externally verifiable claims from the article.
 - **fc-search-evidence** — Search the web for
   supporting or refuting evidence and assign a per-claim verdict.
 - **fc-record-verdict** — Persist the claims via
-  `articles check --claims-json` and verify with `articles claims`.
+  `articles check --claims-json-file` and verify with `articles claims`.
 - **cli-reference-fact-checker** —
   Authoritative reference for `articles check` and `articles claims`.
 
@@ -39,7 +39,7 @@ the normal flow.
 ## Invariants
 
 - Exactly one article per run (the one in the task input).
-- Submitting a new `--claims-json` **replaces** all previous claims for that
+- Submitting a new `--claims-json-file` **replaces** all previous claims for that
   article (idempotent re-check).
 - A `verified` per-claim verdict requires ≥ 2 independent reputable sources
   in its `sources` array.

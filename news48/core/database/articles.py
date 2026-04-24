@@ -1099,7 +1099,7 @@ def get_web_stats(hours: int = 48, parsed: bool = False) -> dict:
             text(f"""
             SELECT
                 COUNT(*) AS live_stories,
-                SUM(CASE WHEN fact_check_status = 'verified'
+                SUM(CASE WHEN fact_check_status IS NOT NULL
                          THEN 1 ELSE 0 END) AS verified,
                 COUNT(DISTINCT feed_id) AS sources,
                 {last_updated_column} AS last_updated

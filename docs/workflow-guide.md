@@ -630,7 +630,7 @@ The four active runtime agents are:
 | `sentinel` | Health monitoring, threshold evaluation, feed curation | Every 5 minutes |
 | `executor` | Claims and executes plans from the queue | Every 1 minute (up to 5 concurrent) |
 | `parser` | Claims and parses downloaded articles from the database | Every 1 minute (up to 5 concurrent) |
-| `fact_checker` | Claims and fact-checks parsed articles | Every 5 minutes (up to 3 concurrent) |
+| `fact_checker` | Claims and fact-checks parsed articles | Triggered after parsing (sentinel retries after 30 min) |
 
 ### Check Agent Status
 
@@ -686,11 +686,11 @@ uv run news48 agents run --agent fact_checker --json
 - Prevents duplicate parse work across concurrent parser processes
 
 #### Fact-Checker Agent
-- Runs on its own schedule, independent of plan files
+- Triggered automatically after articles are parsed (or manually via `news48 fact-check`)
 - Claims fact-unchecked articles directly from the database
 - Searches for evidence using SearXNG
 - Records verdicts (verified, false, unverified, mixed)
-- Prevents duplicate fact-check work across concurrent processes
+- Sentinel creates retry plans if articles stay fact-unchecked for 30+ minutes
 
 ### Agent Architecture
 
@@ -721,7 +721,7 @@ uv run news48 agents run --agent fact_checker --json
 | Operation | Manual CLI Command | Autonomous Agent |
 |-----------|-------------------|------------------|
 | Run recurring pipeline cycle | `uv run news48 fetch && uv run news48 download --limit 10 && uv run news48 parse --limit 10` | Periodiq-scheduled feed/download/parser actors + executor plans |
-| Fact-check articles | `uv run news48 fact-check` | Fact-checker agent on schedule |
+| Fact-check articles | `uv run news48 fact-check` | Triggered after parsing (sentinel retries after 30 min) |
 | Check database health | `uv run news48 cleanup health` | Sentinel Agent (every 5m) |
 | View retention status | `uv run news48 cleanup status` | Sentinel Agent (alerts) |
 | View system stats | `uv run news48 stats` | Sentinel Agent report context |

@@ -9,7 +9,7 @@ Extract the material factual claims from the article that need verification.
    news48 articles info <id> --json
    news48 articles content <id> --json
    ```
-2. Identify 3–7 material factual claims.
+2. Identify 2–3 key factual claims.
 3. Focus on verifiable statements: specific numbers, events, named entities,
    direct quotes, dates, and attributions. Skip opinion, prediction, and
    rhetorical framing.

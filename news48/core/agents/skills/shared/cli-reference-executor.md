@@ -11,7 +11,7 @@ Evidence commands are loaded separately in the shared evidence commands referenc
 
 ## Article Mutation Commands
 - `news48 articles info IDENTIFIER --json` — inspect one article state.
-- `news48 articles check IDENTIFIER --claims-json '<JSON_ARRAY>' --result "..." --json` — persist fact-check claims.
+- `news48 articles check IDENTIFIER --claims-json-file /tmp/fc-claims-<id>.json --result "..." --json` — persist fact-check claims from a JSON file.
 - `news48 articles fail ARTICLE_ID --json` — mark article as failed.
 - `news48 articles delete IDENTIFIER --json` — delete an article.
 - `news48 articles feature IDENTIFIER --json` — mark article as featured.

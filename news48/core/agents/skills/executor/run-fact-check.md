@@ -10,7 +10,7 @@ Active when plan family is fact-check.
 4. **Extract claims**: 3–7 factual claims per article (numbers, events, quotes, dates).
 5. **Search evidence**: `perform_web_search` with neutral language.
 6. **Fetch verification pages**: `fetch_webpage_content` on promising sources.
-7. **Record verdict**: `news48 articles check <id> --claims-json '<claims_array>' --result "<summary>" --json`
+7. **Record verdict**: Write claims JSON to `/tmp/fc-claims-<id>.json`, then run `news48 articles check <id> --claims-json-file /tmp/fc-claims-<id>.json --result "<summary>" --json`
 
 ## Verdict Values
 | Status | When to Use |

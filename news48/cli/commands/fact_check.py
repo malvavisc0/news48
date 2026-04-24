@@ -6,7 +6,7 @@ import typer
 
 from news48.core.agents.fact_checker import run_cycle
 
-from ._common import emit_error, emit_json, status_msg
+from ._common import emit_error, emit_json
 
 
 def fact_check(

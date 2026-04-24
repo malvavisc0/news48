@@ -451,12 +451,12 @@ def check_article(
         "-r",
         help="Free-text summary of the fact-check assessment",
     ),
-    claims_json: str = typer.Option(
+    claims_json_file: str = typer.Option(
         None,
-        "--claims-json",
+        "--claims-json-file",
         "-c",
-        help="JSON array of claims: "
-        '[{"claim_text", "verdict", "evidence_summary", "sources"}]',
+        help="Path to a JSON file containing a claims array: "
+        '[{"text", "verdict", "evidence", "sources"}]',
     ),
     force: bool = typer.Option(
         False,
@@ -469,21 +469,27 @@ def check_article(
     """Set the fact-check status and result for an article."""
     require_db()
 
-    # Parse claims if provided
+    # Parse claims from file if provided
     claims = None
-    if claims_json:
+    if claims_json_file:
         try:
-            claims = json.loads(claims_json)
+            with open(claims_json_file, "r") as f:
+                claims = json.load(f)
+        except FileNotFoundError:
+            emit_error(
+                f"Claims file not found: {claims_json_file}",
+                as_json=output_json,
+            )
         except json.JSONDecodeError as e:
             emit_error(
-                f"Invalid JSON for --claims-json: {e}",
+                f"Invalid JSON in {claims_json_file}: {e}",
                 as_json=output_json,
             )
 
     # Validate status: required when no claims provided
     if status is None and claims is None:
         emit_error(
-            "Must specify --status or --claims-json",
+            "Must specify --status or --claims-json-file",
             as_json=output_json,
         )
 

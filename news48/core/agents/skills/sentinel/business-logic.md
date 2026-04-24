@@ -37,7 +37,7 @@ flowchart TD
 - **Fetch plan** — Trigger: fetch freshness threshold breached or `articles_today` is 0 for more than 1 hour, and no equivalent active plan exists. Step: `news48 fetch --json`.
 - **Human review plan** — Trigger: a feed or system condition appears harmful, but evidence is not strong enough for direct destructive action. Include the exact evidence to verify.
 
-> **⚠ Do NOT create fact-check recovery plans.** The fact-check backlog is self-healing — the `fact_checker` agent runs on its own 5-minute schedule with up to 3 concurrent instances. Executor plans for fact-check work will always exceed the 30-minute runtime limit, causing an infinite timeout→requeue loop.
+- **Fact-check retry plan** — Trigger: `fact-unchecked` articles exist for more than 30 minutes and no equivalent active plan exists. Step: `news48 fact-check --json`. This catches articles that were missed because the parser-triggered fact-check failed or the agent errored.
 
 ## Reporting Requirements
 

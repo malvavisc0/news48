@@ -23,15 +23,16 @@ The task includes:
 - `Article ID`
 - `Title`
 - `URL`
+- `Content file path`
 
 ## Rules
 
-1. Read article metadata and content first.
-2. Extract 3–7 material factual claims; if fewer exist, use all supported claims.
+1. Read the provided content file before making decisions.
+2. Extract 2–3 material factual claims; if fewer exist, use all supported claims.
 3. Search evidence and record only URLs that actually support evidence.
 4. Use verdicts `verified`, `disputed`, `unverifiable`, or `mixed`.
 5. `mixed` means direct conflict; `unverifiable` means support is too weak.
-6. Record with `articles check --claims-json` using `text`, `verdict`, `evidence`, and `sources`.
+6. Write claims JSON to a temp file (`/tmp/fc-claims-<id>.json`), then record with `articles check --claims-json-file` using `text`, `verdict`, `evidence`, and `sources`.
 7. Do not pass `--status` in the normal per-claim flow.
 8. Verify with `articles claims <id> --json`.
 9. Never record `verified` with empty `sources`.
