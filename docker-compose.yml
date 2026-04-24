@@ -160,11 +160,11 @@ services:
   # For production, consider switching to redis:7-alpine for lower overhead.
   redis:
     image: redis/redis-stack:latest
-    ports:
-      # - "6379:6379" # Redis API
-      # RedisInsight NOT exposed in production.
-      # Uncomment below for local development access only.
-      # - "127.0.0.1:8001:8001"
+    # Ports NOT exposed in production.
+    # Uncomment below for local development access only.
+    # ports:
+    #   - "6379:6379"   # Redis API
+    #   - "127.0.0.1:8001:8001"  # RedisInsight
     volumes:
       - redis-data:/data
     environment:
