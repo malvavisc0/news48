@@ -19,7 +19,6 @@ Use these commands to observe system state. All agents that load this skill may 
 - `news48 cleanup status --json` — retention policy state.
 - `news48 cleanup health --json` — database health metrics.
 - `news48 agents status --json` — scheduler state and running agents.
-- `news48 logs list --json` — recent agent log entries.
 
 ## Core Rules
 1. Only use evidence commands listed here or action commands from your agent-specific CLI reference. Do not invent commands, subcommands, flags, fields, or statuses.

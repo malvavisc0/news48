@@ -22,7 +22,6 @@ class DataDir:
 
 # Path constants derived from DataDir.root
 FILES_DIR = DataDir.root / "files"
-LOGS_DIR = DataDir.root / "logs"
 PLANS_DIR = DataDir.root / "plans"
 MONITOR_DIR = DataDir.root / "monitor"
 CACHE_DIR = DataDir.root / "cache"

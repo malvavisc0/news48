@@ -476,134 +476,15 @@ Expected: `{"error": "Article not found: 99999"}`, exit code 1
 
 ---
 
-## 13. Logs
+## 13. Error Handling
 
-Note: logs commands require agent activity. Run agents first to generate logs.
-
-### 13.1 Logs list -- text output
-```bash
-uv run news48 logs list
-```
-Expected: list of structured log entries with timestamp, module, message
-
-### 13.2 Logs list -- JSON output
-```bash
-uv run news48 logs list --json
-```
-Expected: JSON array of log entries with timestamp, module, message, source_file
-
-### 13.3 Logs list -- filter by agent
-```bash
-uv run news48 logs list --agent executor --json
-uv run news48 logs list --agent sentinel --json
-uv run news48 logs list --agent fact_checker --json
-uv run news48 logs list --agent parser --json
-```
-Expected: entries only from specified agent
-
-### 13.4 Logs list -- filter by date
-```bash
-uv run news48 logs list --date today --json
-uv run news48 logs list --date yesterday --json
-uv run news48 logs list --date 2026-04-06 --json
-```
-Expected: entries only from specified date
-
-### 13.5 Logs list -- filter by plan-id
-```bash
-uv run news48 logs list --plan-id plan-20260406-123456 --json
-```
-Expected: entries containing the plan ID in message or continuation
-
-### 13.6 Logs list -- filter by module
-```bash
-uv run news48 logs list --module agents._run --json
-```
-Expected: entries from specified module
-
-### 13.7 Logs list -- include prose
-```bash
-uv run news48 logs list --include-prose --json
-```
-Expected: includes free-form agent output lines
-
-### 13.8 Logs list -- with limit and reverse
-```bash
-uv run news48 logs list --limit 10 --reverse --json
-```
-Expected: oldest 10 entries first
-
-### 13.9 Logs list -- invalid agent
-```bash
-uv run news48 logs list --agent bogus --json
-```
-Expected: `{"error": "Invalid agent type 'bogus'. Choose from: executor, sentinel, fact_checker, parser"}`, exit code 1
-
-### 13.10 Logs list -- invalid date
-```bash
-uv run news48 logs list --date notadate --json
-```
-Expected: `{"error": "Invalid date 'notadate'. Use YYYY-MM-DD, 'today', or 'yesterday'."}`, exit code 1
-
-### 13.11 Logs files -- text output
-```bash
-uv run news48 logs files
-```
-Expected: list of log files with size and modified date
-
-### 13.12 Logs files -- JSON output
-```bash
-uv run news48 logs files --json
-```
-Expected: `[{"name": "...", "size": N, "modified": "..."}]`
-
-### 13.13 Logs files -- filter by agent
-```bash
-uv run news48 logs files --agent executor --json
-```
-Expected: only executor log files
-
-### 13.14 Logs files -- filter by date
-```bash
-uv run news48 logs files --date today --json
-```
-Expected: only log files from today
-
-### 13.15 Logs show -- text output
-```bash
-uv run news48 logs show executor-20260406-025724
-```
-Expected: formatted log file content
-
-### 13.16 Logs show -- JSON output
-```bash
-uv run news48 logs show executor-20260406-025724 --json
-```
-Expected: parsed log entries as JSON array
-
-### 13.17 Logs show -- raw output
-```bash
-uv run news48 logs show executor-20260406-025724 --raw
-```
-Expected: raw log file content without formatting
-
-### 13.18 Logs show -- not found
-```bash
-uv run news48 logs show nonexistent --json
-```
-Expected: `{"error": "Log file not found: nonexistent"}`, exit code 1
-
----
-
-## 14. Error Handling
-
-### 14.1 No database configured
+### 13.1 No database configured
 ```bash
 DATABASE_URL="" uv run news48 stats
 ```
 Expected: `Error: DATABASE_URL not configured` to stderr, exit code 1
 
-### 14.2 Invalid database path
+### 13.2 Invalid database path
 ```bash
 DATABASE_URL=mysql+mysqlconnector://bad:bad@localhost:3306/does_not_exist uv run news48 stats --json
 ```
@@ -611,97 +492,97 @@ Expected: `{"error": "..."}` to stdout, exit code 1
 
 ---
 
-## 15. Lessons
+## 14. Lessons
 
-### 15.1 Lessons list -- empty (no data/lessons.md)
+### 14.1 Lessons list -- empty (no data/lessons.md)
 ```bash
 rm -f data/lessons.md
 uv run news48 lessons list
 ```
 Expected: `No lessons found (data/lessons.md does not exist).`
 
-### 15.2 Lessons list -- JSON empty
+### 14.2 Lessons list -- JSON empty
 ```bash
 uv run news48 lessons list --json
 ```
 Expected: `{"lessons": [], "total": 0}`
 
-### 15.3 Lessons add -- add a lesson
+### 14.3 Lessons add -- add a lesson
 ```bash
 uv run news48 lessons add --agent executor --category "Command Syntax" --lesson "Use timeout=600 for fact-check" --json
 ```
 Expected: `{"result": "Lesson saved for executor/Command Syntax: ...", "error": ""}`
 
-### 15.4 Lessons add -- second lesson, different agent
+### 14.4 Lessons add -- second lesson, different agent
 ```bash
 uv run news48 lessons add --agent parser --category "Feed Quirks" --lesson "Some feeds use non-standard dates" --json
 ```
 Expected: `{"result": "Lesson saved for parser/Feed Quirks: ...", "error": ""}`
 
-### 15.5 Lessons list -- shows all lessons
+### 14.5 Lessons list -- shows all lessons
 ```bash
 uv run news48 lessons list
 ```
 Expected: Human-readable grouped output with executor and parser sections.
 
-### 15.6 Lessons list -- JSON with all lessons
+### 14.6 Lessons list -- JSON with all lessons
 ```bash
 uv run news48 lessons list --json
 ```
 Expected: `{"lessons": [...], "total": 2}`
 
-### 15.7 Lessons list -- filter by agent
+### 14.7 Lessons list -- filter by agent
 ```bash
 uv run news48 lessons list --agent executor --json
 ```
 Expected: Only executor lessons returned (total: 1).
 
-### 15.8 Lessons list -- filter by category
+### 14.8 Lessons list -- filter by category
 ```bash
 uv run news48 lessons list --category "Feed" --json
 ```
 Expected: Only "Feed Quirks" lessons returned (substring match).
 
-### 15.9 Lessons add -- idempotent (duplicate skipped)
+### 14.9 Lessons add -- idempotent (duplicate skipped)
 ```bash
 uv run news48 lessons add --agent executor --category "Command Syntax" --lesson "Use timeout=600 for fact-check" --json
 ```
 Expected: `{"result": "Lesson already exists for executor/Command Syntax", "error": ""}`
 
-### 15.10 Lessons add -- invalid agent
+### 14.10 Lessons add -- invalid agent
 ```bash
 uv run news48 lessons add --agent badname --category "Test" --lesson "test" --json
 ```
 Expected: `{"error": "Invalid agent 'badname'. Must be one of: ..."}`, exit code 1.
 
-### 15.11 Cleanup
+### 14.11 Cleanup
 ```bash
 rm -f data/lessons.md
 ```
 
 ---
 
-## 16. Fact-check
+## 15. Fact-check
 
-### 16.1 Fact-check -- text output
+### 15.1 Fact-check -- text output
 ```bash
 uv run news48 fact-check
 ```
 Expected: `Fact-checked N articles`
 
-### 16.2 Fact-check -- JSON output
+### 15.2 Fact-check -- JSON output
 ```bash
 uv run news48 fact-check --json
 ```
 Expected: `{"checked": N, ...}` JSON object
 
-### 16.3 Fact-check -- with limit
+### 15.3 Fact-check -- with limit
 ```bash
 uv run news48 fact-check --limit 3 --json
 ```
 Expected: at most 3 articles processed
 
-### 16.4 Fact-check -- nothing to check
+### 15.4 Fact-check -- nothing to check
 ```bash
 uv run news48 fact-check --json
 ```
@@ -709,27 +590,27 @@ Expected (when no parsed articles exist): `{"checked": 0, ...}`
 
 ---
 
-## 17. Search
+## 16. Search
 
-### 17.1 Search -- text output
+### 16.1 Search -- text output
 ```bash
 uv run news48 search search "climate"
 ```
 Expected: list of matching articles with title and URL
 
-### 17.2 Search -- JSON output
+### 16.2 Search -- JSON output
 ```bash
 uv run news48 search search "climate" --json
 ```
 Expected: `{"query": "climate", "total": N, "articles": [...]}` JSON object
 
-### 17.3 Search -- with filters
+### 16.3 Search -- with filters
 ```bash
 uv run news48 search search "technology" --hours 24 --limit 5 --json
 ```
 Expected: at most 5 articles from the last 24 hours
 
-### 17.4 Search -- no results
+### 16.4 Search -- no results
 ```bash
 uv run news48 search search "xyznonexistent" --json
 ```
@@ -737,66 +618,66 @@ Expected: `{"query": "xyznonexistent", "total": 0, "articles": []}`
 
 ---
 
-## 18. Sitemap
+## 17. Sitemap
 
-### 18.1 Sitemap generate
+### 17.1 Sitemap generate
 ```bash
 uv run news48 sitemap generate --site-url https://example.com --output /tmp/sitemap.xml
 ```
 Expected: `Generated sitemap.xml with N articles`, file created at output path
 
-### 18.2 Sitemap generate -- cleanup
+### 17.2 Sitemap generate -- cleanup
 ```bash
 rm -f /tmp/sitemap.xml
 ```
 
 ---
 
-## 19. Plans
+## 18. Plans
 
-### 19.1 Plans list -- text output
+### 18.1 Plans list -- text output
 ```bash
 uv run news48 plans list
 ```
 Expected: table of plans with ID, status, task, family
 
-### 19.2 Plans list -- JSON output
+### 18.2 Plans list -- JSON output
 ```bash
 uv run news48 plans list --json
 ```
 Expected: JSON array of plan objects
 
-### 19.3 Plans list -- filter by status
+### 18.3 Plans list -- filter by status
 ```bash
 uv run news48 plans list --status pending --json
 ```
 Expected: only plans with status "pending"
 
-### 19.4 Plans show -- text output
+### 18.4 Plans show -- text output
 ```bash
 uv run news48 plans show <plan-id>
 ```
 Expected: full plan details including steps and success conditions
 
-### 19.5 Plans show -- not found
+### 18.5 Plans show -- not found
 ```bash
 uv run news48 plans show nonexistent --json
 ```
 Expected: `{"error": "..."}`, exit code 1
 
-### 19.6 Plans cancel
+### 18.6 Plans cancel
 ```bash
 uv run news48 plans cancel <plan-id> --json
 ```
 Expected: plan status updated to cancelled
 
-### 19.7 Plans remediate -- preview
+### 18.7 Plans remediate -- preview
 ```bash
 uv run news48 plans remediate --json
 ```
 Expected: JSON list of remediable issues without applying fixes
 
-### 19.8 Plans remediate -- apply
+### 18.8 Plans remediate -- apply
 ```bash
 uv run news48 plans remediate --apply --json
 ```
@@ -804,34 +685,34 @@ Expected: remediations applied, confirmation output
 
 ---
 
-## 20. Feeds RSS
+## 19. Feeds RSS
 
-### 20.1 Feeds rss -- stdout
+### 19.1 Feeds rss -- stdout
 ```bash
 uv run news48 feeds rss
 ```
 Expected: RSS XML printed to stdout
 
-### 20.2 Feeds rss -- to file
+### 19.2 Feeds rss -- to file
 ```bash
 uv run news48 feeds rss --output /tmp/feed.xml
 ```
 Expected: `Generated RSS feed: /tmp/feed.xml (N articles)`, file created
 
-### 20.3 Feeds rss -- with filters
+### 19.3 Feeds rss -- with filters
 ```bash
 uv run news48 feeds rss --hours 24 --category technology --output /tmp/feed.xml
 ```
 Expected: RSS feed filtered by time window and category
 
-### 20.4 Feeds rss -- cleanup
+### 19.4 Feeds rss -- cleanup
 ```bash
 rm -f /tmp/feed.xml
 ```
 
 ---
 
-## 21. Full Pipeline Walkthrough (stage by stage)
+## 20. Full Pipeline Walkthrough (stage by stage)
 
 ```bash
 # 1. Start fresh

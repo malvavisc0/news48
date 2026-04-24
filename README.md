@@ -161,11 +161,6 @@ news48 plans remediate --apply       # Repair plan corruption
 ### Observability
 
 ```bash
-news48 logs list                     # Recent log entries (all agents)
-news48 logs list -a executor -d today  # Filter by agent + date
-news48 logs files                    # List log files
-news48 logs show <filename>          # Display a log file
-
 news48 lessons list                  # View agent lessons
 ```
 

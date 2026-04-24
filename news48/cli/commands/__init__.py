@@ -8,7 +8,6 @@ from .feeds import feeds_app
 from .fetch import fetch
 from .fetches import fetches_app
 from .lessons import lessons_app
-from .logs import logs_app
 from .parse import parse
 from .plans import plans_app
 from .search import search_app
