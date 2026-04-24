@@ -19,6 +19,7 @@ Collect → Download → Parse → Fact-check — on repeat, with agents that le
 ## 📖 Table of Contents
 
 - [What Is It?](#-what-is-it)
+- [Web Interface](#-web-interface)
 - [Pipeline](#-pipeline)
 - [Agents](#-agents)
 - [CLI Reference](#-cli-reference)
@@ -41,6 +42,37 @@ news48 is a self-hosted news pipeline that:
 5. **Purges** stale data on a 48-hour retention window
 
 All of this runs **autonomously** through four AI agents that schedule themselves via Dramatiq + Periodiq. The agents also **learn from mistakes** — saving lessons that carry across runs so they get smarter over time.
+
+---
+
+## 🌐 Web Interface
+
+news48 ships a FastAPI web interface that displays the last 48 hours of verified news. In Docker it's available at `http://localhost:8765` (dev) or `http://localhost:8000` (prod).
+
+### Pages
+
+| Route | Description |
+|-------|-------------|
+| `/` | Homepage — top 10 stories, trending topics, expiring articles |
+| `/all` | All stories with optional tone filter (`?sentiment=positive\|neutral\|negative`) |
+| `/category/{slug}` | Category view with tone filter (e.g. `/category/politics?sentiment=negative`) |
+| `/article/{id}/{slug}` | Article detail with fact-check breakdown and related coverage |
+| `/cluster/{slug}` | Topic cluster — all stories sharing a tag |
+| `/sitemap.xml` | Auto-generated XML sitemap |
+| `/health` | Health check endpoint |
+
+### Features
+
+- **AI-rewritten summaries** — clear, plain-English summaries for every parsed story
+- **Fact-check breakdown** — per-claim verdicts (verified, disputed, mixed, unverifiable) with evidence
+- **Tone filter** — filter stories by sentiment (positive, neutral, negative) across all pages
+- **Trending topics** — auto-generated topic clusters from article tags
+- **Expiring stories** — catch time-sensitive reporting before it leaves the 48-hour window
+- **Deduplication** — same story from multiple sources is shown once per category
+- **Category normalization** — consistent category names (e.g. `artificial-intelligence` and `artificial intelligence` are merged)
+- **SEO-friendly** — canonical URLs, Open Graph tags, JSON-LD structured data, XML sitemap
+- **Rate limiting** — 120 req/min general, 20 req/min for search
+- **Security headers** — X-Content-Type-Options, X-Frame-Options, CSP, Referrer-Policy
 
 ---
 
