@@ -15,13 +15,13 @@
 {% block content %}
 <a class="back-link" href="/">← back to all stories</a>
 
-<header>
+<header class="page-hero">
     <h1 class="page-title">{{ cluster_name }}</h1>
     <div class="tagline">{{ total }} related stories grouped by topic so readers can compare angles, developments, and
         source reporting quickly.</div>
 </header>
 
-<nav class="category-nav" aria-label="Categories">
+<nav class="category-nav filter-panel" aria-label="Categories">
     <a href="/all" class="category-pill">all</a>
     {% for cat in categories %}
     <a href="/category/{{ cat.slug }}" class="category-pill{% if active_category == cat.slug %} active{% endif %}">{{
@@ -33,9 +33,10 @@
     <h2 class="section-label" id="cluster-stories-label">latest {{ cluster_name }} coverage</h2>
     <div class="story-list">
         {% for story in articles %}
-        <article class="story{% if story.is_breaking %} is-breaking{% endif %}">
+        <article
+            class="story{% if story.sentiment %} sentiment-{{ story.sentiment }}{% endif %}{% if story.is_breaking %} is-breaking{% endif %}">
             <div class="story-index">[{{ "%02d" | format(loop.index) }}]</div>
-            <div>
+            <div class="story-body">
                 <h3 class="story-headline">
                     <a href="/article/{{ story.id }}/{{ story.slug or '' }}">{{ story.title }}</a>
                 </h3>

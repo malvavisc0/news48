@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from news48.core.helpers.security import escape_like
 from news48.core.helpers.text import strip_html_tags as _strip_html_tags
 
-from .connection import SessionLocal, _hours_ago_iso, _utcnow
+from .connection import SessionLocal, _hours_ago_db, _hours_ago_iso, _utcnow
 from .models import Article, Feed
 
 # Constants from original connection.py
@@ -393,7 +393,7 @@ def get_articles_paginated(
     params: dict = {}
 
     if feed_domain:
-        where_clauses.append("feeds.url LIKE :feed_domain ESCAPE '\\'")
+        where_clauses.append("feeds.url LIKE :feed_domain ESCAPE '|'")
         params["feed_domain"] = f"%{escape_like(feed_domain)}%"
 
     if status and status in status_conditions:
@@ -404,7 +404,7 @@ def get_articles_paginated(
         params["language"] = language
 
     if category:
-        where_clauses.append("articles.categories LIKE :category ESCAPE '\\'")
+        where_clauses.append("articles.categories LIKE :category ESCAPE '|'")
         params["category"] = f"%{escape_like(category)}%"
 
     if sentiment:
@@ -769,7 +769,7 @@ def search_articles(
         params["sentiment"] = sentiment
 
     if category:
-        where_clauses.append("a.categories LIKE :category ESCAPE '\\'")
+        where_clauses.append("a.categories LIKE :category ESCAPE '|'")
         params["category"] = f"%{escape_like(category)}%"
 
     where_sql = " AND ".join(where_clauses)
@@ -838,7 +838,7 @@ def increment_view_count(article_id: int) -> None:
 
 def get_all_categories(hours: int = 48, parsed: bool = False) -> list[dict]:
     """Get distinct categories with article counts within time window."""
-    threshold = _hours_ago_iso(hours)
+    threshold = _hours_ago_db(hours)
     parsed_filter = "AND parsed_at IS NOT NULL" if parsed else ""
 
     with SessionLocal() as session:
@@ -880,7 +880,7 @@ def get_topic_clusters(
     parsed: bool = False,
 ) -> list[dict]:
     """Build lightweight topic clusters from recent article tags."""
-    threshold = _hours_ago_iso(hours)
+    threshold = _hours_ago_db(hours)
     ignored = {
         "news",
         "breaking",
@@ -981,7 +981,7 @@ def get_articles_by_category(
     sentiment: str | None = None,
 ) -> tuple[list[dict], int]:
     """Get articles matching a category within the time window."""
-    threshold = _hours_ago_iso(hours)
+    threshold = _hours_ago_db(hours)
     parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
     sentiment_filter = "AND a.sentiment = :sentiment" if sentiment else ""
     limit_clause = "LIMIT :limit OFFSET :offset" if limit is not None else ""
@@ -997,7 +997,7 @@ def get_articles_by_category(
         total = session.execute(
             text(f"""
             SELECT COUNT(*) FROM articles a
-            WHERE a.categories LIKE :category ESCAPE '\\'
+            WHERE a.categories LIKE :category ESCAPE '|'
               AND a.created_at >= :threshold
               {parsed_filter}
               {sentiment_filter}
@@ -1016,7 +1016,7 @@ def get_articles_by_category(
                    f.favicon_url as feed_favicon_url
             FROM articles a
             JOIN feeds f ON a.feed_id = f.id
-            WHERE a.categories LIKE :category ESCAPE '\\'
+            WHERE a.categories LIKE :category ESCAPE '|'
               AND a.created_at >= :threshold
               {parsed_filter}
               {sentiment_filter}
@@ -1037,7 +1037,7 @@ def get_articles_by_tag(
     parsed: bool = False,
 ) -> tuple[list[dict], int]:
     """Get articles with a specific tag within the time window."""
-    threshold = _hours_ago_iso(hours)
+    threshold = _hours_ago_db(hours)
     parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
     limit_clause = "LIMIT :limit OFFSET :offset" if limit is not None else ""
 
@@ -1045,7 +1045,7 @@ def get_articles_by_tag(
         total = session.execute(
             text(f"""
             SELECT COUNT(*) FROM articles a
-            WHERE a.tags LIKE :tag ESCAPE '\\'
+            WHERE a.tags LIKE :tag ESCAPE '|'
               AND a.created_at >= :threshold
               {parsed_filter}
         """),
@@ -1060,7 +1060,7 @@ def get_articles_by_tag(
                    f.title as feed_source_name
             FROM articles a
             JOIN feeds f ON a.feed_id = f.id
-            WHERE a.tags LIKE :tag ESCAPE '\\'
+            WHERE a.tags LIKE :tag ESCAPE '|'
               AND a.created_at >= :threshold
               {parsed_filter}
             ORDER BY a.parsed_at DESC
@@ -1105,8 +1105,7 @@ def get_related_articles(
         params: dict = {"article_id": article_id}
         for i, token in enumerate(tokens[:10]):
             conditions.append(
-                f"(a.categories LIKE :token_{i} ESCAPE '\\'"
-                f" OR a.tags LIKE :token_{i} ESCAPE '\\')"
+                f"(a.categories LIKE :token_{i}" f" OR a.tags LIKE :token_{i})"
             )
             params[f"token_{i}"] = f"%{escape_like(token)}%"
 

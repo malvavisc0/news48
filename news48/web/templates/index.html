@@ -14,7 +14,7 @@
 {% block body_class %}page-index{% endblock %}
 
 {% block content %}
-<header>
+<header class="page-hero page-hero--home">
     <h1 class="masthead">AI-verified news from the last 48 hours</h1>
     <div class="tagline">Rewritten in plain english, fact-check, and fast topic discovery in one live feed</div>
     <div class="status-line">
@@ -28,47 +28,51 @@
     </div>
 </header>
 
-<nav class="category-nav" aria-label="Categories">
-    <div style="width: 100%;">
-        <h2 class="section-label" id="homepage-categories-label">browse by category</h2>
-    </div>
-    <a href="/all{% if active_sentiment %}?sentiment={{ active_sentiment }}{% endif %}" class="category-pill">all</a>
-    {% for cat in categories %}
-    <a href="/category/{{ cat.slug }}{% if active_sentiment %}?sentiment={{ active_sentiment }}{% endif %}"
-        class="category-pill{% if active_category == cat.slug %} active{% endif %}">{{
-        cat.name | format_category_name }}</a>
-    {% endfor %}
-</nav>
+<section class="filter-stack" aria-labelledby="homepage-categories-label homepage-mood-label">
+    <nav class="category-nav filter-panel" aria-label="Categories">
+        <div class="filter-panel__header">
+            <h2 class="section-label" id="homepage-categories-label">browse by category</h2>
+        </div>
+        <a href="/all{% if active_sentiment %}?sentiment={{ active_sentiment }}{% endif %}"
+            class="category-pill">all</a>
+        {% for cat in categories %}
+        <a href="/category/{{ cat.slug }}{% if active_sentiment %}?sentiment={{ active_sentiment }}{% endif %}"
+            class="category-pill{% if active_category == cat.slug %} active{% endif %}">{{
+            cat.name | format_category_name }}</a>
+        {% endfor %}
+    </nav>
 
-<nav class="sentiment-filter" aria-label="Filter by mood">
-    <div style="width: 100%;">
-        <h2 class="section-label" id="homepage-mood-label">filter by mood</h2>
-    </div>
-    {% set base_url = "/" %}
-    {% if active_sentiment == "positive" %}
-    <a href="{{ base_url }}" class="sentiment-pill active-positive">positive</a>
-    {% else %}
-    <a href="{{ base_url }}?sentiment=positive" class="sentiment-pill">positive</a>
-    {% endif %}
-    {% if active_sentiment == "neutral" %}
-    <a href="{{ base_url }}" class="sentiment-pill active-neutral">neutral</a>
-    {% else %}
-    <a href="{{ base_url }}?sentiment=neutral" class="sentiment-pill">neutral</a>
-    {% endif %}
-    {% if active_sentiment == "negative" %}
-    <a href="{{ base_url }}" class="sentiment-pill active-negative">negative</a>
-    {% else %}
-    <a href="{{ base_url }}?sentiment=negative" class="sentiment-pill">negative</a>
-    {% endif %}
-</nav>
+    <nav class="sentiment-filter filter-panel" aria-label="Filter by mood">
+        <div class="filter-panel__header">
+            <h2 class="section-label" id="homepage-mood-label">filter by mood</h2>
+        </div>
+        {% set base_url = "/" %}
+        {% if active_sentiment == "positive" %}
+        <a href="{{ base_url }}" class="sentiment-pill active-positive">positive</a>
+        {% else %}
+        <a href="{{ base_url }}?sentiment=positive" class="sentiment-pill">positive</a>
+        {% endif %}
+        {% if active_sentiment == "neutral" %}
+        <a href="{{ base_url }}" class="sentiment-pill active-neutral">neutral</a>
+        {% else %}
+        <a href="{{ base_url }}?sentiment=neutral" class="sentiment-pill">neutral</a>
+        {% endif %}
+        {% if active_sentiment == "negative" %}
+        <a href="{{ base_url }}" class="sentiment-pill active-negative">negative</a>
+        {% else %}
+        <a href="{{ base_url }}?sentiment=negative" class="sentiment-pill">negative</a>
+        {% endif %}
+    </nav>
+</section>
 
 <section class="section" aria-labelledby="now-label">
     <h2 class="section-label" id="now-label">latest verified and developing stories</h2>
     <div class="story-list">
         {% for story in stories %}
-        <article class="story{% if story.is_breaking %} is-breaking{% endif %}">
+        <article
+            class="story{% if story.sentiment %} sentiment-{{ story.sentiment }}{% endif %}{% if story.is_breaking %} is-breaking{% endif %}">
             <div class="story-index">[{{ "%02d" | format(loop.index) }}]</div>
-            <div>
+            <div class="story-body">
                 <h3 class="story-headline">
                     <a href="/article/{{ story.id }}/{{ story.slug or '' }}">{{ story.title }}</a>
                 </h3>
@@ -123,7 +127,7 @@
     <div class="cluster-list">
         {% for cluster in clusters %}
         <a class="cluster" href="/cluster/{{ cluster.slug }}">
-            <div>
+            <div class="cluster-main">
                 <div class="cluster-name">{{ cluster.name }}</div>
                 <div class="cluster-desc">
                     {% if cluster.articles and cluster.articles[0].summary %}
@@ -134,7 +138,7 @@
                 <div class="cluster-lead">→ {{ cluster.articles[0].title }}</div>
                 {% endif %}
             </div>
-            <div style="text-align: right;">
+            <div class="cluster-meta">
                 <div class="cluster-count">{{ cluster.article_count }} stories</div>
                 <span class="cluster-bar">{{ cluster.article_count | cluster_bar(max_cluster_count, 20) }}</span>
             </div>

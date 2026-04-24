@@ -15,31 +15,34 @@
 {% block content %}
 <a class="back-link" href="/">← back to live feed</a>
 <article class="article-shell">
-    <h2 class="headline">{{ article.title }}</h2>
-    {% if article.summary %}
-    <p class="standfirst">{{ article.summary }}</p>
-    {% endif %}
-    <div class="reading-meta">
-        {% set wc = article.content | word_count %}
-        <span>{{ wc | read_time }} min read · {{ wc }} words</span>
-        {% for tag in article.tags | parse_tags %}
-        <span class="pill">{{ tag }}</span>
-        {% endfor %}
-        {% if article.sentiment %}
-        <span
-            class="sentiment {{ 'positive' if article.sentiment == 'positive' else 'negative' if article.sentiment == 'negative' else 'neutral' }}">
-            {% if article.sentiment == 'positive' %}▲{% elif article.sentiment == 'negative' %}▼{% else %}—{% endif %}
-            {{ article.sentiment }}
-        </span>
+    <header class="page-hero page-hero--article">
+        <h2 class="headline">{{ article.title }}</h2>
+        {% if article.summary %}
+        <p class="standfirst">{{ article.summary }}</p>
         {% endif %}
-        <span class="freshness" title="Available for 48 hours from ingestion"
-            aria-label="{{ article.created_at | hours_remaining }} hours remaining. Available for 48 hours from ingestion.">
-            {{ article.created_at | hours_remaining }}h left
-            <span class="freshness-bar {{ article.created_at | hours_remaining | freshness_class }}"></span>
-        </span>
-    </div>
+        <div class="reading-meta">
+            {% set wc = article.content | word_count %}
+            <span>{{ wc | read_time }} min read · {{ wc }} words</span>
+            {% for tag in article.tags | parse_tags %}
+            <span class="pill">{{ tag }}</span>
+            {% endfor %}
+            {% if article.sentiment %}
+            <span
+                class="sentiment {{ 'positive' if article.sentiment == 'positive' else 'negative' if article.sentiment == 'negative' else 'neutral' }}">
+                {% if article.sentiment == 'positive' %}▲{% elif article.sentiment == 'negative' %}▼{% else %}—{% endif
+                %}
+                {{ article.sentiment }}
+            </span>
+            {% endif %}
+            <span class="freshness" title="Available for 48 hours from ingestion"
+                aria-label="{{ article.created_at | hours_remaining }} hours remaining. Available for 48 hours from ingestion.">
+                {{ article.created_at | hours_remaining }}h left
+                <span class="freshness-bar {{ article.created_at | hours_remaining | freshness_class }}"></span>
+            </span>
+        </div>
+    </header>
 
-    <div class="meta-bar">
+    <div class="meta-bar content-panel">
         <span><strong>source</strong> {{ article.source_name or "Unknown" }}</span>
         <span><strong>published</strong> {{ article.published_at | relative_time if article.published_at else
             article.created_at | relative_time }}</span>
@@ -77,7 +80,7 @@
         </div>
     </div>
 
-    <div class="body">
+    <div class="body content-panel content-panel--article-body">
         {% for paragraph in (article.content or '').split('\n\n') %}
         {% if paragraph.strip() %}
         <p>{{ paragraph.strip() }}</p>
@@ -91,34 +94,33 @@
     <h2 class="section-label" id="claims-label">fact-check breakdown</h2>
     <p class="section-hint">Each claim shows its verdict and supporting evidence.</p>
     <div class="claims-rollup" role="status" aria-live="polite">
-        <span><strong>{{ claims_summary.total }}</strong> claims checked</span>
+        <span class="claims-rollup__item"><strong>{{ claims_summary.total }}</strong> claims checked</span>
         {% if claims_summary.verified > 0 %}
-        <span class="sep">·</span>
-        <span class="count-verified"><strong>{{ claims_summary.verified }}</strong> verified</span>
+        <span class="claims-rollup__item count-verified"><strong>{{ claims_summary.verified }}</strong> verified</span>
         {% endif %}
         {% if claims_summary.mixed > 0 %}
-        <span class="sep">·</span>
-        <span class="count-mixed"><strong>{{ claims_summary.mixed }}</strong> mixed</span>
+        <span class="claims-rollup__item count-mixed"><strong>{{ claims_summary.mixed }}</strong> mixed</span>
         {% endif %}
         {% if claims_summary.disputed > 0 %}
-        <span class="sep">·</span>
-        <span class="count-disputed"><strong>{{ claims_summary.disputed }}</strong> disputed</span>
+        <span class="claims-rollup__item count-disputed"><strong>{{ claims_summary.disputed }}</strong> disputed</span>
         {% endif %}
         {% if claims_summary.unverifiable > 0 %}
-        <span class="sep">·</span>
-        <span class="count-unverifiable"><strong>{{ claims_summary.unverifiable }}</strong> unverifiable</span>
+        <span class="claims-rollup__item count-unverifiable"><strong>{{ claims_summary.unverifiable }}</strong>
+            unverifiable</span>
         {% endif %}
     </div>
     <div class="claims-list">
         {% for claim in claims %}
         <div class="claim-row">
-            <div class="claim-text">{{ claim.claim_text }}</div>
-            <div class="claim-verdict v-{{ claim.verdict }}">
-                {% if claim.verdict == "verified" %}✓ verified
-                {% elif claim.verdict == "disputed" %}✗ disputed
-                {% elif claim.verdict == "mixed" %}~ mixed
-                {% else %}? unverifiable
-                {% endif %}
+            <div class="claim-row__header">
+                <div class="claim-text">{{ claim.claim_text }}</div>
+                <div class="claim-verdict v-{{ claim.verdict }}">
+                    {% if claim.verdict == "verified" %}✓ verified
+                    {% elif claim.verdict == "disputed" %}✗ disputed
+                    {% elif claim.verdict == "mixed" %}~ mixed
+                    {% else %}? unverifiable
+                    {% endif %}
+                </div>
             </div>
             {% if claim.evidence_summary %}
             <div class="claim-evidence">{{ claim.evidence_summary }}</div>
@@ -168,7 +170,7 @@
 
 <section class="section" aria-labelledby="article-categories-label">
     <h2 class="section-label" id="article-categories-label">explore more live news by category</h2>
-    <nav class="category-nav" aria-label="Categories">
+    <nav class="category-nav filter-panel" aria-label="Categories">
         <a href="/all" class="category-pill">all</a>
         {% for cat in categories %}
         <a href="/category/{{ cat.slug }}"

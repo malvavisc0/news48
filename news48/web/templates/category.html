@@ -15,50 +15,53 @@
 {% block content %}
 <a class="back-link" href="/">← back to all stories</a>
 
-<header>
+<header class="page-hero">
     <h1 class="page-title">{{ category_name }}</h1>
     <div class="tagline">{{ total }} live stories in {{ category_name }}</div>
 </header>
 
-<nav class="category-nav" aria-label="Categories">
-    <a href="/all{% if active_sentiment %}?sentiment={{ active_sentiment }}{% endif %}"
-        class="category-pill{% if not active_category or active_category == 'all' %} active{% endif %}">all</a>
-    {% for cat in categories %}
-    <a href="/category/{{ cat.slug }}{% if active_sentiment %}?sentiment={{ active_sentiment }}{% endif %}"
-        class="category-pill{% if active_category == cat.slug %} active{% endif %}">{{
-        cat.name | format_category_name }}</a>
-    {% endfor %}
-</nav>
+<section class="filter-stack" aria-labelledby="category-mood-label">
+    <nav class="category-nav filter-panel" aria-label="Categories">
+        <a href="/all{% if active_sentiment %}?sentiment={{ active_sentiment }}{% endif %}"
+            class="category-pill{% if not active_category or active_category == 'all' %} active{% endif %}">all</a>
+        {% for cat in categories %}
+        <a href="/category/{{ cat.slug }}{% if active_sentiment %}?sentiment={{ active_sentiment }}{% endif %}"
+            class="category-pill{% if active_category == cat.slug %} active{% endif %}">{{
+            cat.name | format_category_name }}</a>
+        {% endfor %}
+    </nav>
 
-<nav class="sentiment-filter" aria-label="Filter by mood">
-    <div style="width: 100%;">
-        <h2 class="section-label" id="category-mood-label">filter by mood</h2>
-    </div>
-    {% set base_url = "/category/" ~ category_slug %}
-    {% if active_sentiment == "positive" %}
-    <a href="{{ base_url }}" class="sentiment-pill active-positive">positive</a>
-    {% else %}
-    <a href="{{ base_url }}?sentiment=positive" class="sentiment-pill">positive</a>
-    {% endif %}
-    {% if active_sentiment == "neutral" %}
-    <a href="{{ base_url }}" class="sentiment-pill active-neutral">neutral</a>
-    {% else %}
-    <a href="{{ base_url }}?sentiment=neutral" class="sentiment-pill">neutral</a>
-    {% endif %}
-    {% if active_sentiment == "negative" %}
-    <a href="{{ base_url }}" class="sentiment-pill active-negative">negative</a>
-    {% else %}
-    <a href="{{ base_url }}?sentiment=negative" class="sentiment-pill">negative</a>
-    {% endif %}
-</nav>
+    <nav class="sentiment-filter filter-panel" aria-label="Filter by mood">
+        <div class="filter-panel__header">
+            <h2 class="section-label" id="category-mood-label">filter by mood</h2>
+        </div>
+        {% set base_url = "/category/" ~ category_slug %}
+        {% if active_sentiment == "positive" %}
+        <a href="{{ base_url }}" class="sentiment-pill active-positive">positive</a>
+        {% else %}
+        <a href="{{ base_url }}?sentiment=positive" class="sentiment-pill">positive</a>
+        {% endif %}
+        {% if active_sentiment == "neutral" %}
+        <a href="{{ base_url }}" class="sentiment-pill active-neutral">neutral</a>
+        {% else %}
+        <a href="{{ base_url }}?sentiment=neutral" class="sentiment-pill">neutral</a>
+        {% endif %}
+        {% if active_sentiment == "negative" %}
+        <a href="{{ base_url }}" class="sentiment-pill active-negative">negative</a>
+        {% else %}
+        <a href="{{ base_url }}?sentiment=negative" class="sentiment-pill">negative</a>
+        {% endif %}
+    </nav>
+</section>
 
 <section class="section" aria-labelledby="category-stories-label">
     <h2 class="section-label" id="category-stories-label">latest {{ category_name }} stories</h2>
     <div class="story-list">
         {% for story in articles %}
-        <article class="story{% if story.is_breaking %} is-breaking{% endif %}">
+        <article
+            class="story{% if story.sentiment %} sentiment-{{ story.sentiment }}{% endif %}{% if story.is_breaking %} is-breaking{% endif %}">
             <div class="story-index">[{{ "%02d" | format(loop.index) }}]</div>
-            <div>
+            <div class="story-body">
                 <h3 class="story-headline">
                     <a href="/article/{{ story.id }}/{{ story.slug or '' }}">{{ story.title }}</a>
                 </h3>

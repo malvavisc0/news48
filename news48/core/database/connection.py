@@ -34,6 +34,11 @@ def _hours_ago_iso(hours: int = 48) -> str:
     return (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
 
 
+def _hours_ago_db(hours: int = 48) -> datetime:
+    """Return a naive UTC datetime for database timestamp comparisons."""
+    return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=hours)
+
+
 # Module-level engine and session factory
 _database_url = _get_database_url()
 _is_sqlite = _database_url.startswith("sqlite")

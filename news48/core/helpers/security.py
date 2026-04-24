@@ -68,6 +68,8 @@ def validate_url_not_private(url: str) -> None:
 def escape_like(value: str) -> str:
     """Escape SQL LIKE wildcard characters in a value.
 
-    Escapes \\, %, and _ so they are treated as literals in LIKE patterns.
+    Escapes |, %, and _ so they are treated as literals in LIKE patterns.
+    Uses ``|`` as the ESCAPE character (cross-database safe; pair with
+    ``ESCAPE '|'`` in every LIKE clause).
     """
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return value.replace("|", "||").replace("%", "|%").replace("_", "|_")
