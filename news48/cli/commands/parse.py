@@ -89,10 +89,12 @@ async def _parse(article_id: int, *, force: bool = False) -> dict:
         task = "\n".join(
             [
                 "Parse the following article.",
+                "--------------------------------------",
                 "Article ID: " + str(article["id"]),
                 "Title: " + str(article["title"]),
                 "HTML file path: " + tmp_path,
                 "URL: " + str(article["url"]),
+                "--------------------------------------",
             ]
         )
         status_msg(f"Parsing: {article['title']}")
@@ -280,7 +282,9 @@ def parse(
         is_retry: bool,
     ) -> dict:
         """Parse multiple articles concurrently."""
-        sem = asyncio.Semaphore(5)
+        from news48.core.config import Parser
+
+        sem = asyncio.Semaphore(Parser.concurrency)
 
         async def _parse_one(candidate: dict) -> dict:
             async with sem:

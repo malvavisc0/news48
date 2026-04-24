@@ -102,8 +102,8 @@ services:
       - LLAMACPP_PORT=${LLAMACPP_PORT:-8080}
       - LLAMACPP_HOST=0.0.0.0
       - LLAMACPP_N_GPU_LAYERS=${LLAMACPP_N_GPU_LAYERS:-999}
-      - LLAMACPP_PARALLEL=${LLAMACPP_PARALLEL:-4}
-      - LLAMACPP_THREADS=${LLAMACPP_THREADS:-8}
+      - LLAMACPP_PARALLEL=${LLAMACPP_PARALLEL:-12}
+      - LLAMACPP_THREADS=${LLAMACPP_THREADS:-16}
       - LLAMACPP_CACHE_TYPE_K=${LLAMACPP_CACHE_TYPE_K:-q8_0}
       - LLAMACPP_CACHE_TYPE_V=${LLAMACPP_CACHE_TYPE_V:-q8_0}
       - LLAMACPP_FLASH_ATTN=${LLAMACPP_FLASH_ATTN:-on}
@@ -199,6 +199,7 @@ services:
       - SMTP_PASS=${SMTP_PASS}
       - SMTP_FROM=${SMTP_FROM}
       - MONITOR_EMAIL_TO=${MONITOR_EMAIL_TO}
+      - PARSER_CONCURRENCY=${PARSER_CONCURRENCY:-12}
     depends_on:
       redis:
         condition: service_healthy
@@ -243,7 +244,6 @@ volumes:
   llamacpp-models:
   dozzle-data:
   redis-data:
-
 
 networks:
   news48-net:

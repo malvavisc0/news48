@@ -57,6 +57,12 @@ class Web:
             return 8000
 
 
+class Parser:
+    """Parser agent concurrency settings."""
+
+    concurrency: int = int(getenv("PARSER_CONCURRENCY", "12"))
+
+
 class Redis:
     """Redis configuration for Dramatiq."""
 

@@ -133,7 +133,9 @@ async def run_cycle(limit: int = 1, feed_domain: str | None = None) -> dict:
         return {"parsed": 0, "failed": 0, "claimed": 0, "results": []}
 
     # Process concurrently with semaphore
-    sem = asyncio.Semaphore(5)
+    from news48.core.config import Parser
+
+    sem = asyncio.Semaphore(Parser.concurrency)
     results: list[dict] = []
 
     async def _parse_one(article: dict) -> dict:
