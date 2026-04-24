@@ -17,6 +17,7 @@ services:
     entrypoint: [ "sh", "-c", "echo 'Skipping model download — using external LLM' && exit 0" ]
     volumes: []
     environment: []
+    deploy: {} # clear GPU reservation from base compose
 
   # No-op: skip Docker llama.cpp server (using external LLM endpoint)
   llamacpp:
@@ -30,6 +31,7 @@ services:
       start_period: 1s
     volumes: []
     environment: []
+    deploy: {} # clear GPU reservation from base compose
     depends_on:
       llamacpp-init:
         condition: service_completed_successfully

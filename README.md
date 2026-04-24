@@ -229,16 +229,28 @@ news48 mcp revoke-key <key>          # Revoke a key
 
 ### Install
 
+**Option A — Docker (recommended):**
+
+One-liner install:
 ```bash
-# Clone & install
+curl -fsSL https://raw.githubusercontent.com/malvavisc0/news48/main/scripts/install.sh | bash
+```
+
+Or clone first:
+```bash
+git clone https://github.com/malvavisc0/news48.git && cd news48
+./scripts/install.sh
+```
+
+The interactive installer downloads only the required files (no git clone needed), checks prerequisites, prompts for deployment mode (GPU or external LLM), generates secure passwords, and launches all services.
+
+**Option B — Local (uv):**
+
+```bash
 git clone https://github.com/malvavisc0/news48.git && cd news48
 uv sync --extra all
-
-# Configure
 cp .env.example .env
 # Edit .env with your API keys (see table below)
-
-# Verify
 uv run news48 --help
 ```
 
