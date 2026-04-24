@@ -404,8 +404,11 @@ def get_articles_paginated(
         params["language"] = language
 
     if category:
-        where_clauses.append("articles.categories LIKE :category ESCAPE '|'")
-        params["category"] = f"%{escape_like(category)}%"
+        where_clauses.append(
+            "REPLACE(REPLACE(articles.categories, '-', ' '), '_', ' ') "
+            "LIKE :category ESCAPE '|'"
+        )
+        params["category"] = f"%{escape_like(_normalize_category(category))}%"
 
     if sentiment:
         where_clauses.append("articles.sentiment = :sentiment")
@@ -422,12 +425,18 @@ def get_articles_paginated(
     if where_clauses:
         where_sql = "WHERE " + " AND ".join(where_clauses)
 
+    # Deduplicate by title: pick one article per unique title
+    dedup_sub = (
+        f"SELECT MIN(articles.id) as min_id "
+        f"FROM articles "
+        f"JOIN feeds ON articles.feed_id = feeds.id "
+        f"{where_sql} "
+        f"GROUP BY articles.title"
+    )
+
     with SessionLocal() as session:
-        # Get total count
-        count_sql = (
-            f"SELECT COUNT(*) FROM articles "
-            f"JOIN feeds ON articles.feed_id = feeds.id {where_sql}"
-        )
+        # Get total count (deduplicated)
+        count_sql = f"SELECT COUNT(*) FROM ({dedup_sub}) _dedup"
         total = session.execute(text(count_sql), params).scalar()
 
         # Build select columns
@@ -451,12 +460,13 @@ def get_articles_paginated(
                 "articles.created_at, articles.published_at"
             )
 
-        # Get paginated results
+        # Get paginated results (deduplicated)
         limit_clause = "LIMIT :limit OFFSET :offset" if limit is not None else ""
         results_sql = (
             f"SELECT {select_cols} FROM articles "
             f"JOIN feeds ON articles.feed_id = feeds.id "
-            f"{where_sql} "
+            f"INNER JOIN ({dedup_sub}) _dedup "
+            f"ON articles.id = _dedup.min_id "
             f"ORDER BY articles.parsed_at DESC "
             f"{limit_clause}"
         )
@@ -836,18 +846,34 @@ def increment_view_count(article_id: int) -> None:
         session.commit()
 
 
+def _normalize_category(cat: str) -> str:
+    """Normalize a category name: lowercase, replace hyphens/underscores
+    with spaces, and collapse whitespace."""
+    return " ".join(cat.strip().lower().replace("-", " ").replace("_", " ").split())
+
+
 def get_all_categories(hours: int = 48, parsed: bool = False) -> list[dict]:
-    """Get distinct categories with article counts within time window."""
+    """Get distinct categories with article counts within time window.
+
+    Deduplicates by title so that the same story from multiple sources
+    is only counted once per category.  Normalizes separators (hyphens,
+    underscores) to spaces so that e.g. 'artificial-intelligence' and
+    'artificial intelligence' are merged.
+    """
     threshold = _hours_ago_db(hours)
-    parsed_filter = "AND parsed_at IS NOT NULL" if parsed else ""
+    parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
 
     with SessionLocal() as session:
         rows = session.execute(
             text(f"""
-            SELECT categories FROM articles
-            WHERE created_at >= :threshold AND categories IS NOT NULL
-              AND categories != ''
-              {parsed_filter}
+            SELECT a.categories FROM articles a
+            INNER JOIN (
+                SELECT MIN(id) as min_id FROM articles
+                WHERE created_at >= :threshold
+                  AND categories IS NOT NULL AND categories != ''
+                  {"AND parsed_at IS NOT NULL" if parsed else ""}
+                GROUP BY title
+            ) _dedup ON a.id = _dedup.min_id
         """),
             {"threshold": threshold},
         ).fetchall()
@@ -857,7 +883,7 @@ def get_all_categories(hours: int = 48, parsed: bool = False) -> list[dict]:
             cats = row[0]
             if cats:
                 for cat in cats.split(","):
-                    cat = cat.strip().lower()
+                    cat = _normalize_category(cat)
                     if cat:
                         counts[cat] = counts.get(cat, 0) + 1
 
@@ -980,28 +1006,51 @@ def get_articles_by_category(
     parsed: bool = False,
     sentiment: str | None = None,
 ) -> tuple[list[dict], int]:
-    """Get articles matching a category within the time window."""
+    """Get articles matching a category within the time window.
+
+    Deduplicates by title so that the same story from multiple sources
+    only appears once.  Normalizes separators so that e.g. the slug
+    'artificial-intelligence' matches articles stored with
+    'artificial intelligence'.
+    """
     threshold = _hours_ago_db(hours)
     parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
     sentiment_filter = "AND a.sentiment = :sentiment" if sentiment else ""
     limit_clause = "LIMIT :limit OFFSET :offset" if limit is not None else ""
 
+    # Normalize the incoming slug: hyphens → spaces so LIKE works
+    # against both "artificial-intelligence" and "artificial intelligence"
+    norm_cat = _normalize_category(category)
+
+    # Normalize stored categories on-the-fly for the comparison
+    cat_condition = (
+        "REPLACE(REPLACE(a.categories, '-', ' '), '_', ' ') "
+        "LIKE :category ESCAPE '|'"
+    )
+
+    dedup_where = f"""
+        WHERE {cat_condition}
+          AND a.created_at >= :threshold
+          {parsed_filter}
+          {sentiment_filter}
+    """
+    dedup_sub = f"""
+        SELECT MIN(a.id) as min_id
+        FROM articles a
+        {dedup_where}
+        GROUP BY a.title
+    """
+
     with SessionLocal() as session:
         params: dict = {
-            "category": f"%{escape_like(category)}%",
+            "category": f"%{escape_like(norm_cat)}%",
             "threshold": threshold,
         }
         if sentiment:
             params["sentiment"] = sentiment
 
         total = session.execute(
-            text(f"""
-            SELECT COUNT(*) FROM articles a
-            WHERE a.categories LIKE :category ESCAPE '|'
-              AND a.created_at >= :threshold
-              {parsed_filter}
-              {sentiment_filter}
-        """),
+            text(f"SELECT COUNT(*) FROM ({dedup_sub}) _dedup"),
             params,
         ).scalar()
 
@@ -1016,10 +1065,7 @@ def get_articles_by_category(
                    f.favicon_url as feed_favicon_url
             FROM articles a
             JOIN feeds f ON a.feed_id = f.id
-            WHERE a.categories LIKE :category ESCAPE '|'
-              AND a.created_at >= :threshold
-              {parsed_filter}
-              {sentiment_filter}
+            INNER JOIN ({dedup_sub}) _dedup ON a.id = _dedup.min_id
             ORDER BY a.parsed_at DESC
             {limit_clause}
         """),
@@ -1036,22 +1082,39 @@ def get_articles_by_tag(
     offset: int = 0,
     parsed: bool = False,
 ) -> tuple[list[dict], int]:
-    """Get articles with a specific tag within the time window."""
+    """Get articles with a specific tag within the time window.
+
+    Deduplicates by title so that the same story from multiple
+    sources only appears once.
+    """
     threshold = _hours_ago_db(hours)
     parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
     limit_clause = "LIMIT :limit OFFSET :offset" if limit is not None else ""
 
+    dedup_sub = f"""
+        SELECT MIN(a.id) as min_id
+        FROM articles a
+        WHERE a.tags LIKE :tag ESCAPE '|'
+          AND a.created_at >= :threshold
+          {parsed_filter}
+        GROUP BY a.title
+    """
+
     with SessionLocal() as session:
+        params = {
+            "tag": f"%{escape_like(tag)}%",
+            "threshold": threshold,
+        }
+
         total = session.execute(
-            text(f"""
-            SELECT COUNT(*) FROM articles a
-            WHERE a.tags LIKE :tag ESCAPE '|'
-              AND a.created_at >= :threshold
-              {parsed_filter}
-        """),
-            {"tag": f"%{escape_like(tag)}%", "threshold": threshold},
+            text(f"SELECT COUNT(*) FROM ({dedup_sub}) _dedup"),
+            params,
         ).scalar()
 
+        query_params = {
+            **params,
+            **({"limit": limit, "offset": offset} if limit is not None else {}),
+        }
         rows = session.execute(
             text(f"""
             SELECT a.id, a.title, a.slug, a.summary, a.url,
@@ -1060,17 +1123,11 @@ def get_articles_by_tag(
                    f.title as feed_source_name
             FROM articles a
             JOIN feeds f ON a.feed_id = f.id
-            WHERE a.tags LIKE :tag ESCAPE '|'
-              AND a.created_at >= :threshold
-              {parsed_filter}
+            INNER JOIN ({dedup_sub}) _dedup ON a.id = _dedup.min_id
             ORDER BY a.parsed_at DESC
             {limit_clause}
         """),
-            {
-                "tag": f"%{escape_like(tag)}%",
-                "threshold": threshold,
-                **({"limit": limit, "offset": offset} if limit is not None else {}),
-            },
+            query_params,
         ).fetchall()
 
         return [dict(row._mapping) for row in rows], total or 0
