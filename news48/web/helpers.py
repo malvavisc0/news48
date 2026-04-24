@@ -89,10 +89,15 @@ def parse_categories(categories_str: str | None) -> list[str]:
     return [c.strip() for c in categories_str.split(",") if c.strip()]
 
 
-def parse_tags(tags_str: str | None) -> list[str]:
-    """Split comma-separated tags into a list of stripped strings."""
+def parse_tags(tags_str: str | list | None) -> list[str]:
+    """Split comma-separated tags into a list of stripped strings.
+
+    Accepts either a comma-separated string or an already-parsed list.
+    """
     if not tags_str:
         return []
+    if isinstance(tags_str, list):
+        return [str(t).strip() for t in tags_str if str(t).strip()]
     return [t.strip() for t in tags_str.split(",") if t.strip()]
 
 
