@@ -61,6 +61,7 @@ class Article(Base):
     feed_id: Mapped[int] = mapped_column(ForeignKey("feeds.id"), nullable=False)
     url: Mapped[str] = mapped_column(String(2048), nullable=False)
     title: Mapped[str | None] = mapped_column(String(1024))
+    slug: Mapped[str | None] = mapped_column(String(1024))
     summary: Mapped[str | None] = mapped_column(Text)
     content: Mapped[str | None] = mapped_column(Text)
     author: Mapped[str | None] = mapped_column(String(512))

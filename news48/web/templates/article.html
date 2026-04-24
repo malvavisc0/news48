@@ -148,7 +148,7 @@
     <div class="related-list">
         {% for item in related %}
         <article class="related-item">
-            <h3><a href="/article/{{ item.id }}">{{ item.title }}</a></h3>
+            <h3><a href="/article/{{ item.id }}/{{ item.slug or '' }}">{{ item.title }}</a></h3>
             {% if item.summary %}
             <p>{{ item.summary[:200] }}{% if item.summary|length > 200 %}...{% endif %}</p>
             {% endif %}

@@ -121,7 +121,8 @@ async def homepage(request: Request):
                 {
                     "title": story.get("title"),
                     "canonical_url": build_canonical_url(
-                        site_url, f"/article/{story['id']}"
+                        site_url,
+                        "/article/{}/{}".format(story["id"], story.get("slug") or ""),
                     ),
                 }
                 for story in stories
@@ -145,8 +146,8 @@ async def homepage(request: Request):
     )
 
 
-@app.get("/article/{article_id}")
-async def article_detail(request: Request, article_id: int):
+@app.get("/article/{article_id}/{slug}")
+async def article_detail(request: Request, article_id: int, slug: str):
     """Article detail page with fact-check claims and related stories."""
     from news48.core.database.articles import (
         get_all_categories,
@@ -178,7 +179,10 @@ async def article_detail(request: Request, article_id: int):
             claims_summary[verdict] += 1
 
     site_url = _site_url(request)
-    article["canonical_url"] = build_canonical_url(site_url, f"/article/{article_id}")
+    article["canonical_url"] = build_canonical_url(
+        site_url,
+        "/article/{}/{}".format(article_id, article.get("slug") or ""),
+    )
     seo = build_seo_meta(
         title=f"{article['title']} | news48",
         description=(
@@ -257,7 +261,8 @@ async def cluster_detail(request: Request, cluster_slug: str):
                 {
                     "title": item.get("title"),
                     "canonical_url": build_canonical_url(
-                        site_url, f"/article/{item['id']}"
+                        site_url,
+                        "/article/{}/{}".format(item["id"], item.get("slug") or ""),
                     ),
                 }
                 for item in articles
@@ -331,7 +336,8 @@ async def category_detail(request: Request, category_slug: str):
                 {
                     "title": item.get("title"),
                     "canonical_url": build_canonical_url(
-                        site_url, f"/article/{item['id']}"
+                        site_url,
+                        "/article/{}/{}".format(item["id"], item.get("slug") or ""),
                     ),
                 }
                 for item in articles
@@ -414,7 +420,8 @@ async def sitemap(request: Request):
 
     for article in articles:
         article["canonical_url"] = build_canonical_url(
-            site_url, f"/article/{article['id']}"
+            site_url,
+            "/article/{}/{}".format(article["id"], article.get("slug") or ""),
         )
 
     return generate_sitemap(articles, site_url, extra_urls=extra_urls)

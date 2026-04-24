@@ -36,7 +36,7 @@
             <div class="story-index">[{{ "%02d" | format(loop.index) }}]</div>
             <div>
                 <h3 class="story-headline">
-                    <a href="/article/{{ story.id }}">{{ story.title }}</a>
+                    <a href="/article/{{ story.id }}/{{ story.slug or '' }}">{{ story.title }}</a>
                 </h3>
                 {% if story.summary %}
                 <p class="standfirst">{{ story.summary }}</p>
@@ -55,7 +55,7 @@
                     {% endfor %}
                 </div>
                 <div class="story-links">
-                    <a href="/article/{{ story.id }}">Read {{ story.title }} →</a>
+                    <a href="/article/{{ story.id }}/{{ story.slug or '' }}">Read {{ story.title }} →</a>
                     <a href="{{ story.url }}" target="_blank" rel="noopener"
                         title="Opens the original source in a new tab">Open original source ↗</a>
                 </div>

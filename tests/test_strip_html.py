@@ -175,7 +175,7 @@ class TestStripHtmlTagsInUpdateArticle:
         from news48.core.database.articles import get_article_by_id
 
         article = get_article_by_id(article_id)
-        assert article["title"] == "Italic title"
+        assert article["title"] == "Italic Title"
 
     def test_strips_html_from_content(self, article_id: int) -> None:
         from news48.core.database.articles import update_article

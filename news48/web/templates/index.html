@@ -47,7 +47,7 @@
             <div class="story-index">[{{ "%02d" | format(loop.index) }}]</div>
             <div>
                 <h3 class="story-headline">
-                    <a href="/article/{{ story.id }}">{{ story.title }}</a>
+                    <a href="/article/{{ story.id }}/{{ story.slug or '' }}">{{ story.title }}</a>
                 </h3>
                 {% if story.summary %}
                 <p class="standfirst">{{ story.summary }}</p>
@@ -84,7 +84,7 @@
                     </span>
                 </div>
                 <div class="story-links">
-                    <a href="/article/{{ story.id }}">Read more →</a>
+                    <a href="/article/{{ story.id }}/{{ story.slug or '' }}">Read more →</a>
                     <a href="{{ story.url }}" target="_blank" rel="noopener"
                         title="Opens the original source in a new tab">Open original source ↗</a>
                 </div>
@@ -133,7 +133,7 @@
     <div class="expiring-list">
         {% for item in expiring %}
         <div class="expiring-item">
-            <a href="/article/{{ item.id }}">{{ item.title }}</a>
+            <a href="/article/{{ item.id }}/{{ item.slug or '' }}">{{ item.title }}</a>
             <span class="expiring-time">{{ item.created_at | hours_remaining }}h left</span>
         </div>
         {% endfor %}

@@ -27,28 +27,6 @@ def _strip_html_tags(text: str | None) -> str | None:
     return re.sub(r"<[^>]+>", "", text).strip()
 
 
-def _normalize_title_case(title: str | None) -> str | None:
-    """Convert a title to sentence case.
-
-    Ensures consistent capitalization: first word capitalized,
-    remaining words lowercase (except after sentence-ending punctuation).
-    Preserves words that contain non-ASCII characters unchanged.
-    """
-    if not title:
-        return title
-
-    result = title.lower()
-    # Capitalize first character
-    result = result[0].upper() + result[1:] if result else result
-    # Capitalize after sentence-ending punctuation followed by space
-    result = re.sub(
-        r"([.!?])\s+([a-z])",
-        lambda m: f"{m.group(1)} {m.group(2).upper()}",
-        result,
-    )
-    return result
-
-
 def insert_articles(
     fetch_id: int,
     feed_id: int,
@@ -84,9 +62,7 @@ def insert_articles(
                         fetch_id=fetch_id,
                         feed_id=feed_id,
                         url=entry["url"],
-                        title=_normalize_title_case(
-                            _strip_html_tags(entry.get("title"))
-                        ),
+                        title=_strip_html_tags(entry.get("title")),
                         summary=_strip_html_tags(entry.get("summary")),
                         author=entry.get("author"),
                         published_at=entry.get("published_at"),
@@ -130,7 +106,7 @@ def update_article(
 ) -> None:
     """Update an article with parsed content from the parser agent."""
     summary = _strip_html_tags(summary)
-    title = _normalize_title_case(_strip_html_tags(title))
+    title = _strip_html_tags(title)
     content = _strip_html_tags(content) or ""
 
     if sentiment:
@@ -163,7 +139,10 @@ def update_article(
             if countries:
                 article.countries = countries
             if title:
+                from news48.core.helpers.url import slugify
+
                 article.title = title
+                article.slug = f"{slugify(title)}-{article_id}"
             if image_url:
                 article.image_url = image_url
             if language:
@@ -821,7 +800,7 @@ def get_topic_clusters(
     with SessionLocal() as session:
         rows = session.execute(
             text(f"""
-            SELECT a.id, a.title, a.summary, a.url,
+            SELECT a.id, a.title, a.slug, a.summary, a.url,
                    a.published_at, a.created_at,
                    a.source_name, a.fact_check_status, a.tags,
                    f.title as feed_source_name
@@ -965,7 +944,7 @@ def get_articles_by_tag(
 
         rows = session.execute(
             text(f"""
-            SELECT a.id, a.title, a.summary, a.url,
+            SELECT a.id, a.title, a.slug, a.summary, a.url,
                    a.published_at, a.created_at,
                    a.source_name, a.fact_check_status, a.tags,
                    f.title as feed_source_name
@@ -1154,8 +1133,8 @@ def get_expiring_articles(within_hours: int = 6, parsed: bool = False) -> list[d
     with SessionLocal() as session:
         rows = session.execute(
             text(f"""
-            SELECT a.id, a.title, a.url, a.created_at, a.source_name,
-                   f.title as feed_source_name
+            SELECT a.id, a.title, a.slug, a.url, a.created_at,
+                   a.source_name, f.title as feed_source_name
             FROM articles a
             JOIN feeds f ON a.feed_id = f.id
             WHERE a.created_at >= :outer AND a.created_at < :inner

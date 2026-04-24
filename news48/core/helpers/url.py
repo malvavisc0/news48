@@ -1,6 +1,24 @@
 """URL utilities."""
 
 import re
+import unicodedata
+
+
+def slugify(title: str | None) -> str:
+    """Convert a title into a URL-safe slug.
+
+    Produces lowercase, hyphen-separated tokens with no special characters.
+    Example: "US and Iran Blockade Standoff" → "us-and-iran-blockade-standoff"
+    """
+    if not title:
+        return ""
+    # Normalize unicode characters
+    value = unicodedata.normalize("NFKD", title)
+    # Keep only alphanumeric, spaces, and hyphens
+    value = re.sub(r"[^\w\s-]", "", value)
+    # Collapse whitespace and hyphens into single hyphens
+    value = re.sub(r"[\s_]+", "-", value).strip("-")
+    return value.lower()
 
 
 def get_base_url(url: str) -> str:
