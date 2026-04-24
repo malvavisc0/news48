@@ -21,6 +21,7 @@ Ensure ALL are true before writing content:
 - [ ] Summary is 1-3 sentences, 40-420 characters
 - [ ] Summary is not equal to title
 - [ ] Summary is not equal to the first sentence of the content
+- [ ] Summary does not start with meta-references ("This article...", "This story...", "The article...", "In this article...", "This report...", etc.) — must start directly with substantive content
 
 ### Content Checks
 - [ ] **No HTML tags** in title, summary, or content — all output must be plain text. Strip HTML entities and tags completely.
@@ -79,3 +80,4 @@ Must use codes from the canonical error taxonomy:
 | `parse.verbatim_copy` | Content contains verbatim or near-verbatim passages from source |
 | `parse.shallow_content` | Content is too brief or lacks substantive depth (below 1200 chars or fewer than 3 substantive paragraphs) |
 | `parse.unchanged_title` | Output title is identical or near-identical to source title |
+| `parse.meta_summary` | Summary starts with meta-references instead of substantive content |

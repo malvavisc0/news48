@@ -50,3 +50,10 @@ The following are proper nouns and must always be capitalized in titles, regardl
 ### Size Bounds
 - Title: 8-140 characters
 - Summary: 40-420 characters, 1-3 sentences, not duplicate of title
+
+### Summary Style
+- Summaries must never start with meta-references about the article itself
+- Forbidden openings: "This article...", "This story...", "The article...", "In this article...", "According to this article...", "This report...", "The report..."
+- Summaries must start directly with the substantive content — what happened, who was involved, what the impact is
+- ✅ "Fed raises rates to 22-year high as inflation fight continues"
+- ❌ "This article discusses the Federal Reserve's decision to raise interest rates"
