@@ -119,26 +119,34 @@ if ! command -v openssl &>/dev/null; then
     exit 1
 fi
 
-# ─── Clone Repository ────────────────────────────────────────────────────────
+# ─── Download Repository ─────────────────────────────────────────────────────
 printf "\n${BOLD}Downloading news48 to $INSTALL_DIR...${RESET}\n"
 
-if [ -d "$INSTALL_DIR/.git" ]; then
-    info "Repository already exists — pulling latest changes..."
-    cd "$INSTALL_DIR"
-    git pull --ff-only 2>/dev/null || warn "git pull failed, continuing with existing files"
-else
-    if [ -d "$INSTALL_DIR" ] && [ "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
-        warn "$INSTALL_DIR is not empty."
-        read -rp "Overwrite with fresh clone? (y/N): " overwrite_dir <&3
-        if [[ "$overwrite_dir" =~ ^[Yy]$ ]]; then
-            rm -rf "$INSTALL_DIR"
-        else
-            error "Aborting. Choose a different directory or remove the existing one."
-            exit 1
-        fi
+TARBALL_URL="https://github.com/malvavisc0/news48/archive/refs/heads/master.tar.gz"
+TMP_TARBALL=$(mktemp)
+
+if [ -d "$INSTALL_DIR" ] && [ "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+    warn "$INSTALL_DIR is not empty."
+    read -rp "Overwrite with fresh download? (y/N): " overwrite_dir <&3
+    if [[ "$overwrite_dir" =~ ^[Yy]$ ]]; then
+        rm -rf "$INSTALL_DIR"
+    else
+        error "Aborting. Choose a different directory or remove the existing one."
+        exit 1
     fi
-    git clone https://github.com/malvavisc0/news48.git "$INSTALL_DIR"
 fi
+
+info "Downloading repository tarball..."
+if ! curl -fsSL "$TARBALL_URL" -o "$TMP_TARBALL"; then
+    error "Failed to download repository. Check your internet connection."
+    rm -f "$TMP_TARBALL"
+    exit 1
+fi
+
+mkdir -p "$INSTALL_DIR"
+info "Extracting files..."
+tar -xzf "$TMP_TARBALL" -C "$INSTALL_DIR" --strip-components=1
+rm -f "$TMP_TARBALL"
 
 cd "$INSTALL_DIR"
 
@@ -147,7 +155,7 @@ for f in "${REQUIRED_SCRIPTS[@]}"; do
     chmod +x "$f" 2>/dev/null || true
 done
 
-success "Repository ready at $INSTALL_DIR"
+success "All files downloaded to $INSTALL_DIR"
 
 # ─── Enter install directory ─────────────────────────────────────────────────
 cd "$INSTALL_DIR"
@@ -180,6 +188,27 @@ while true; do
             ;;
     esac
 done
+
+# ─── Strip GPU references for External LLM mode ────────────────────────────
+if [ "$DEPLOY_MODE" = "external" ]; then
+    printf "\n${BOLD}Removing GPU references from docker-compose.yml...${RESET}\n"
+    python3 -c "
+import re, sys
+with open('docker-compose.yml') as f:
+    content = f.read()
+# Remove deploy blocks containing nvidia GPU reservations
+content = re.sub(
+    r'    deploy:\n      resources:\n        reservations:\n          devices:\n            - driver: nvidia\n              count: all\n              capabilities: \[ gpu \]\n',
+    '',
+    content,
+)
+with open('docker-compose.yml', 'w') as f:
+    f.write(content)
+print('GPU references removed')
+" || warn "Could not strip GPU references — external-llm override will handle it"
+    # Use compose without external-llm override since GPU refs are stripped
+    COMPOSE_CMD=(docker compose -f docker-compose.yml -f docker-compose.prod.yml)
+fi
 
 # ─── NVIDIA Check (Standard mode only) ──────────────────────────────────────
 if [ "$DEPLOY_MODE" = "standard" ]; then
