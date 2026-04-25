@@ -206,8 +206,6 @@ with open('docker-compose.yml', 'w') as f:
     f.write(content)
 print('GPU references removed')
 " || warn "Could not strip GPU references — external-llm override will handle it"
-    # Use compose without external-llm override since GPU refs are stripped
-    COMPOSE_CMD=(docker compose -f docker-compose.yml -f docker-compose.prod.yml)
 fi
 
 # ─── NVIDIA Check (Standard mode only) ──────────────────────────────────────
