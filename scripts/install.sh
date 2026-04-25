@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ─── Terminal input ──────────────────────────────────────────────────────────
+# Open /dev/tty once so interactive prompts work even when piped (curl | bash).
+if [ -e /dev/tty ]; then
+    exec 3< /dev/tty
+else
+    exec 3<&0
+fi
+
 # ─── Configuration ───────────────────────────────────────────────────────────
 REPO_RAW="https://raw.githubusercontent.com/malvavisc0/news48/master"
 INSTALL_DIR="${NEWS48_DIR:-$HOME/news48}"
@@ -70,7 +78,7 @@ printf "\n"
 # Docker
 if ! command -v docker &>/dev/null; then
     warn "Docker is not installed."
-    read -rp "Install Docker now? (y/N): " install_docker < /dev/tty
+    read -rp "Install Docker now? (y/N): " install_docker <&3
     if [[ "$install_docker" =~ ^[Yy]$ ]]; then
         info "Installing Docker..."
         curl -fsSL https://get.docker.com | sh
@@ -140,7 +148,7 @@ printf "\n"
 DEPLOY_MODE=""
 COMPOSE_CMD=()
 while true; do
-    read -rp "Enter choice [1-2]: " choice < /dev/tty
+    read -rp "Enter choice [1-2]: " choice <&3
     case "$choice" in
         1)
             DEPLOY_MODE="standard"
@@ -178,7 +186,7 @@ if [ "$DEPLOY_MODE" = "standard" ]; then
     else
         warn "NVIDIA Container Toolkit test failed."
         warn "Install it: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html"
-        read -rp "Continue anyway? (y/N): " continue_no_gpu < /dev/tty
+        read -rp "Continue anyway? (y/N): " continue_no_gpu <&3
         if [[ ! "$continue_no_gpu" =~ ^[Yy]$ ]]; then
             error "Aborting. Please install NVIDIA Container Toolkit first."
             exit 1
@@ -186,7 +194,7 @@ if [ "$DEPLOY_MODE" = "standard" ]; then
     fi
 
     printf "\n"
-    read -rp "HuggingFace token (leave empty for public models): " hf_token < /dev/tty
+    read -rp "HuggingFace token (leave empty for public models): " hf_token <&3
 fi
 
 # ─── Environment Configuration ───────────────────────────────────────────────
@@ -194,7 +202,7 @@ printf "\n${BOLD}Configuring environment...${RESET}\n"
 
 if [ -f ".env" ]; then
     warn ".env file already exists."
-    read -rp "Overwrite with fresh configuration? (y/N): " overwrite_env < /dev/tty
+    read -rp "Overwrite with fresh configuration? (y/N): " overwrite_env <&3
     if [[ ! "$overwrite_env" =~ ^[Yy]$ ]]; then
         info "Keeping existing .env"
     else
@@ -238,9 +246,9 @@ if [ "$DEPLOY_MODE" = "external" ]; then
     printf "  Host llama:  http://localhost:8080/v1\n"
     printf "\n"
 
-    read -rp "API_BASE URL: " api_base < /dev/tty
-    read -rp "API_KEY (leave empty for local): " api_key < /dev/tty
-    read -rp "MODEL name (e.g. gpt-4o, llama3.1-8b): " model_name < /dev/tty
+    read -rp "API_BASE URL: " api_base <&3
+    read -rp "API_KEY (leave empty for local): " api_key <&3
+    read -rp "MODEL name (e.g. gpt-4o, llama3.1-8b): " model_name <&3
 
     if [ -z "$api_base" ]; then
         error "API_BASE is required for external LLM mode."
