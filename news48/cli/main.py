@@ -22,6 +22,7 @@ from news48.cli.commands import (
     articles_app,
     briefing,
     cleanup_app,
+    doctor,
     download,
     feeds_app,
     fetch,
@@ -54,6 +55,7 @@ app.command()(seed)
 app.command()(download)
 app.command(name="fact-check")(fact_check)
 app.command()(stats)
+app.command()(doctor)
 app.command()(briefing)
 app.add_typer(feeds_app, name="feeds")
 app.add_typer(fetches_app, name="fetches")

@@ -626,6 +626,13 @@ async def sitemap(request: Request):
     return generate_sitemap(articles, site_url, extra_urls=extra_urls)
 
 
+@app.get("/llms.txt", response_class=PlainTextResponse)
+async def llms_txt():
+    """Serve the llms.txt file for LLM consumption."""
+    llms_path = Path(__file__).parent / "llms.txt"
+    return llms_path.read_text(encoding="utf-8")
+
+
 @app.get("/health")
 async def health():
     """Health check endpoint."""

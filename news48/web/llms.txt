@@ -1,0 +1,105 @@
+# news48
+
+> news48 is a self-hosted autonomous news pipeline that ingests RSS/Atom feeds, downloads full article content with anti-bot bypass, parses unstructured HTML into structured data via LLM, fact-checks claims against external evidence, and purges stale data on a 48-hour retention window. Four self-learning AI agents run autonomously via Dramatiq + Periodiq scheduling, persisting lessons across runs to improve over time.
+
+## Pipeline
+
+The pipeline runs as: seed → fetch → download → parse → fact-check → cleanup.
+
+- **Seed**: Load RSS/Atom feed URLs from a text file into the database
+- **Fetch**: Pull RSS/Atom entries and store article metadata
+- **Download**: Fetch full article HTML using anti-bot bypass (Byparr)
+- **Parse**: Extract structured data (title, summary, content, categories, sentiment, tags, countries) via LLM
+- **Fact-check**: Extract claims from parsed articles, search for evidence via SearXNG, record verdicts
+- **Cleanup**: Purge articles older than 48 hours
+
+Most CLI commands support `--json` for machine-readable output and `--limit` to control batch size.
+
+## Agents
+
+Four agents run on schedules through Periodiq → Redis → Dramatiq. Each agent has a specific role, tool access, and schedule.
+
+### Sentinel (every 5 minutes)
+
+The Sentinel is the health monitoring agent. It gathers system metrics via CLI commands, evaluates thresholds for feed staleness and pipeline backlogs, and classifies the overall system status as HEALTHY, WARNING, or CRITICAL.
+
+**Capabilities:**
+- Runs health monitoring cycles and gathers metrics (article counts, feed health, plan status, database health)
+- Evaluates canonical thresholds for download backlog, parse backlog, feed staleness, and fact-check timing
+- Creates execution plans when feeds are stale or consistently problematic
+- Curates feeds by deleting those with consecutive empty fetches or high failure rates
+- Writes structured health reports to `data/monitor/latest-report.json`
+- Sends email alerts (only for WARNING/CRITICAL status, only when SMTP is configured)
+
+**Tools:** shell commands, file reading, system info, email, sentinel report writing, lesson saving
+
+### Executor (every minute, up to 5 concurrent)
+
+The Executor is the plan execution agent. It claims pending plans from the queue and drives their steps to completion or failure with verification evidence.
+
+**Capabilities:**
+- Claims the oldest eligible pending plan (exclusively, so no other executor grabs the same plan)
+- Executes plan steps by running shell commands with batch limits
+- Runs parallel waves of up to 4 processes for multi-domain work
+- Retries transient download failures with domain-level tracking (up to 3 attempts per domain)
+- Verifies plan success conditions after all steps complete
+- Performs fact-check evidence lookups when needed
+- Does NOT create plans — only executes them
+
+**Tools:** plan management (claim, update, list), shell commands, file reading, web search, webpage fetching, system info, lesson saving
+
+### Parser (every minute, up to 5 concurrent)
+
+The Parser is the article processing agent. It claims downloaded articles directly from the database and runs LLM parsing autonomously.
+
+**Capabilities:**
+- Claims eligible downloaded articles from the database (prevents duplicate work across concurrent parsers)
+- Reads article HTML content and prepares it for LLM processing
+- Extracts structured data: improved title, full content, publication date, sentiment, categories, tags, countries, summary
+- Rewrites content for clarity and plain-English readability
+- Normalizes fields (category deduplication, consistent formatting)
+- Enforces quality gates (minimum content length, canonical error codes)
+- Releases the processing claim when done
+
+**Tools:** shell commands, file reading, lesson saving
+
+### Fact-checker (every 10 minutes)
+
+The Fact-checker is the verification agent. It claims parsed articles that haven't been fact-checked and verifies their claims against external evidence.
+
+**Capabilities:**
+- Claims fact-unchecked articles directly from the database
+- Extracts verifiable claims from parsed article content
+- Searches the web for evidence using SearXNG
+- Evaluates claims against collected evidence
+- Records verdicts: verified, disputed, mixed, or unverifiable
+- Stores per-claim verdicts with supporting evidence
+
+**Tools:** shell commands, file reading, web search, webpage fetching, lesson saving
+
+## Self-Learning
+
+All four agents can save lessons when they discover something useful — correct command syntax, process insights, error recovery techniques, and feed-specific quirks. Lessons are persisted to `data/lessons.md` and injected into every agent's system prompt at startup, enabling cross-agent knowledge sharing. Lessons are human-auditable and carry across runs.
+
+## MCP Integration
+
+news48 exposes tools via the Model Context Protocol so AI assistants can interact with the pipeline. Available as a local stdio server (no auth) or remote HTTP endpoint (API key auth).
+
+**MCP Tools:** get_briefing, search_news, get_article, browse_category, list_categories, list_countries
+
+## Tech Stack
+
+- Python 3.12+, MySQL, Redis (Dramatiq message broker)
+- FastAPI web interface with Jinja2 templates
+- llama.cpp for LLM inference (Docker GPU or external endpoint)
+- Byparr for anti-bot bypass, SearXNG for meta-search
+- Dramatiq workers with Periodiq cron scheduling
+
+## Web Interface
+
+The web interface displays the last 48 hours of verified news. Routes include: homepage with top stories and trending topics, all stories with sentiment filtering, category views, article detail with fact-check claims and related coverage, topic clusters, auto-generated XML sitemap, and health check.
+
+## GitHub
+
+- Repository: https://github.com/malvavisc0/news48
+- License: MIT

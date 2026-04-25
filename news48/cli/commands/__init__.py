@@ -4,6 +4,7 @@ from .agents import agents_app
 from .articles import articles_app
 from .briefing import briefing
 from .cleanup import cleanup_app
+from .doctor import doctor
 from .download import download
 from .feeds import feeds_app
 from .fetch import fetch

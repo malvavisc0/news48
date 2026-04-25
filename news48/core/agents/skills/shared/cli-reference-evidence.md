@@ -19,6 +19,7 @@ Use these commands to observe system state. All agents that load this skill may 
 - `news48 cleanup status --json` — retention policy state.
 - `news48 cleanup health --json` — database health metrics.
 - `news48 agents status --json` — scheduler state and running agents.
+- `news48 doctor --json` — quick connectivity check of all external services (database, Redis, Byparr, SearXNG, LLM API) and environment variables. Use this as a first-step diagnostic when the system appears unhealthy or when services may be unreachable. Returns per-service status (ok/error/skipped) with error details and fix suggestions.
 
 ## Core Rules
 1. Only use evidence commands listed here or action commands from your agent-specific CLI reference. Do not invent commands, subcommands, flags, fields, or statuses.
