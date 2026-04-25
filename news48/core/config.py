@@ -60,7 +60,7 @@ class Web:
 class Parser:
     """Parser agent concurrency settings."""
 
-    concurrency: int = int(getenv("PARSER_CONCURRENCY", "12"))
+    concurrency: int = int(getenv("PARSER_CONCURRENCY", "8"))
 
 
 class Redis:
