@@ -136,6 +136,9 @@ if not _actors_already_registered():
         from .parser import run_autonomous
 
         result = asyncio.run(run_autonomous())
+        # Trigger fact-check immediately after successful parses
+        if result and result.get("parsed", 0) > 0:
+            fact_check_cycle.send()
         return result
 
     @dramatiq.actor(
