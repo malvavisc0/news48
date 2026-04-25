@@ -46,6 +46,9 @@ async def fetch_webpage_content(
 **Returns:** JSON string containing:
 - `result.results`: List of successful fetches with URL and content
 - `result.errors`: List of failed fetches with error details
+- `result.requested`: Total number of URLs requested
+- `result.succeeded`: Number of successful fetches
+- `result.failed`: Number of failed fetches
 - `error`: Empty on success, or summary message on failure
 
 ---
@@ -112,6 +115,11 @@ def read_file(
 - `metadata_only=True`: Returns file size, type, timestamps
 - `offset=None, limit=None`: Read entire file
 - `offset` and `limit` provided: Read a chunk of lines
+
+**Security:**
+- File reads are restricted to the project root and data directory
+- Sensitive files (`.env`, credentials, keys) are blocked
+- System directories (`/proc`, `/sys`, `/dev`, `/etc`) are blocked
 
 **Returns:** JSON string with:
 - `result`: File content dict, metadata dict, or chunk dict depending on mode
@@ -277,6 +285,9 @@ def perform_web_search(
 - `result.count`: Number of results
 - `result.findings`: Array of normalized results
 - `result.page_stats`: Requested/succeeded/failed page counts
+- `result.dropped_results`: Number of results dropped due to missing required fields
+- `result.page_errors`: Array of per-page error details (when applicable)
+- `error`: Empty on success, or partial failure message
 
 **Note:** Requires `SEARXNG_URL` environment variable.
 
@@ -299,8 +310,13 @@ def run_shell_command(
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | `reason` | `str` | Required | Why you need to run this command |
-| `command` | `str` | Required | Shell command to execute |
+| `command` | `str` | Required | Shell command to execute (must be in allowlist) |
 | `timeout` | `int` | `120` | Max seconds to wait |
+
+**Security:**
+- Only commands in the allowlist are permitted
+- Blocked patterns include: network tools (curl, wget), privilege escalation (sudo), interpreters (python, node), destructive operations (rm, chmod), and more
+- Shell operators (|, ;, &, >) are allowed for agent workflow patterns
 
 **Returns:** JSON string with:
 - `result.working_dir`: Current directory
@@ -315,7 +331,7 @@ def run_shell_command(
 
 #### `save_lesson`
 
-Save a lesson learned to the persistent `data/lessons.md` file. Agents use this to persist knowledge across runs — correct command syntax, process insights, error recovery techniques, and feed-specific quirks. Lessons are automatically loaded into every agent's system prompt at startup.
+Save a lesson learned to the persistent `data/lessons.json` file. Agents use this to persist knowledge across runs — correct command syntax, process insights, error recovery techniques, and feed-specific quirks. Lessons are automatically loaded into every agent's system prompt at startup.
 
 **Signature:**
 ```python
@@ -335,22 +351,61 @@ def save_lesson(
 | `category` | `str` | Required | Category for grouping (e.g., "Command Syntax", "Process Insights") |
 | `lesson` | `str` | Required | The lesson text — should be specific and actionable |
 
+**Validation:**
+- Minimum length: lessons shorter than 10 characters are rejected as too short
+- Status noise filtering: lessons matching common noise patterns (e.g., "No issues detected", "All feeds healthy") are rejected
+- Near-duplicate detection: lessons sharing their first 8 words with an existing lesson are rejected as near-duplicates
+- Exact idempotency: skips if the exact lesson text already exists for the same agent/category
+
 **Behavior:**
-- Creates `data/lessons.md` with header if file doesn't exist
-- Creates agent section and category subsection if they don't exist
-- Appends the lesson as a bullet point under the correct section
-- Idempotent: skips if the exact lesson text already exists
+- Creates `data/lessons.json` if file doesn't exist
+- Appends the lesson as a JSON object with `agent`, `category`, and `lesson` fields
 - All lessons are loaded for all agents at startup (cross-pollination)
 
 **Returns:** JSON string with:
 - `result`: Confirmation message with agent/category and lesson preview
 - `error`: Empty on success, or error description
 
-**Internal helper:** `_load_lessons()` reads the full `data/lessons.md` content and is called by `compose_agent_instructions()` to inject lessons into every agent's system prompt.
+**Internal helper:** `_load_lessons()` reads the full `data/lessons.json` content, formats it as markdown, and is called by `compose_agent_instructions()` to inject lessons into every agent's system prompt.
 
 ---
 
-### 8. System Module
+### 8. Sentinel Module
+
+#### `write_sentinel_report`
+
+Write a structured sentinel health report to `data/monitor/latest-report.json`. Called at the end of every sentinel cycle to persist findings.
+
+**Signature:**
+```python
+def write_sentinel_report(
+    status: str,
+    metrics: str,
+    alerts: str,
+    recommendations: str,
+) -> str
+```
+
+**Parameters:**
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `status` | `str` | Required | Overall status — one of `HEALTHY`, `WARNING`, `CRITICAL` |
+| `metrics` | `str` | Required | JSON string of metric key-value pairs |
+| `alerts` | `str` | Required | JSON array of alert strings (use `[]` when none) |
+| `recommendations` | `str` | Required | JSON array of recommendation strings (use `[]` when none) |
+
+**Behavior:**
+- Invalid status values default to `HEALTHY`
+- Non-JSON metrics/alerts/recommendations are gracefully handled (stored as raw values)
+- Status is normalized to uppercase
+
+**Returns:** JSON string with:
+- `result`: Confirmation message with file path and status
+- `error`: Empty on success, or error description
+
+---
+
+### 9. System Module
 
 #### `get_system_info`
 
@@ -372,9 +427,9 @@ def get_system_info() -> str
 - `result.current_datetime`: UTC timestamp
 - `result.local_datetime`: Local timestamp
 - `result.architecture`: Machine architecture
-- `result.news48.database_path`: Configured database path
-- `result.news48.database_exists`: Whether the database file exists
-- `result.news48.database_size_mb`: Database file size in MB
+- `result.news48.database_url`: Redacted database connection URL
+- `result.news48.database_connected`: Whether the database is reachable
+- `result.news48.database_size_mb`: Database size in MB
 - `result.news48.env_configured`: Whether `.env` file exists
 - `result.news48.byparr_configured`: Whether `BYPARR_API_URL` is set
 - `result.news48.searxng_configured`: Whether `SEARXNG_URL` is set
@@ -389,11 +444,11 @@ def get_system_info() -> str
 | Pipeline control | `run_shell_command` |
 | File access | `read_file` |
 | Web access | `perform_web_search`, `fetch_webpage_content` |
-| System | `get_system_info` |
+| System | `get_system_info`, `write_sentinel_report` |
 | Planning | `create_plan`, `update_plan`, `claim_plan`, `list_plans` |
 | Communication | `send_email` |
 | Learning | `save_lesson` |
-| **Total** | **11 tools** |
+| **Total** | **12 tools** |
 
 ---
 

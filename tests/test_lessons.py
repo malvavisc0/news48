@@ -222,3 +222,111 @@ def test_save_lesson_idempotency_no_false_positive(tmp_lessons):
     texts = [le["lesson"] for le in lessons]
     assert "Use --limit 50 for scoped downloads" in texts
     assert "Use --limit 50" in texts
+
+
+# ---------------------------------------------------------------------------
+# Near-duplicate detection
+# ---------------------------------------------------------------------------
+
+
+def test_save_lesson_rejects_near_duplicate(tmp_lessons):
+    """save_lesson rejects a lesson that shares its first N words."""
+    save_lesson(
+        reason="test",
+        agent_name="executor",
+        category="Command Syntax",
+        lesson="Always use --limit 50 when downloading articles from feeds to avoid overload",
+    )
+
+    result = save_lesson(
+        reason="test",
+        agent_name="executor",
+        category="Command Syntax",
+        lesson="Always use --limit 50 when downloading articles from feeds to prevent timeout",
+    )
+
+    data = json.loads(result)
+    assert "Near-duplicate" in data["result"]
+    lessons = json.loads(tmp_lessons.read_text())
+    assert len(lessons) == 1
+
+
+def test_is_near_duplicate_detects_prefix_match():
+    """_is_near_duplicate returns True when first N words match."""
+    from news48.core.agents.tools.lessons import _is_near_duplicate
+
+    existing = [
+        "Always use --limit 50 when downloading articles from feeds to avoid overload"
+    ]
+    new = (
+        "Always use --limit 50 when downloading articles from feeds to prevent timeout"
+    )
+    assert _is_near_duplicate(new, existing) is True
+
+
+def test_is_near_duplicate_ignores_short_lessons():
+    """_is_near_duplicate returns False for very short lessons."""
+    from news48.core.agents.tools.lessons import _is_near_duplicate
+
+    existing = ["Use --limit 50"]
+    new = "Use --limit 100"
+    # Short lessons fall back to exact match only
+    assert _is_near_duplicate(new, existing) is False
+
+
+# ---------------------------------------------------------------------------
+# Status noise filtering
+# ---------------------------------------------------------------------------
+
+
+def test_save_lesson_rejects_status_noise(tmp_lessons):
+    """save_lesson rejects status reports that look like noise."""
+    result = save_lesson(
+        reason="test",
+        agent_name="sentinel",
+        category="Process Insights",
+        lesson="No issues detected in the system",
+    )
+
+    data = json.loads(result)
+    assert "status report" in data["error"].lower()
+    # File should not have been created since lesson was rejected
+    assert not tmp_lessons.exists()
+
+
+def test_is_status_noise_detects_patterns():
+    """_is_status_noise detects common noise patterns."""
+    from news48.core.agents.tools.lessons import _is_status_noise
+
+    assert _is_status_noise("No issues detected") is True
+    assert _is_status_noise("All feeds are healthy") is True
+    assert _is_status_noise("No active plans") is True
+    assert _is_status_noise("System is empty") is True
+
+
+def test_is_status_noise_allows_real_lessons():
+    """_is_status_noise does not reject real actionable lessons."""
+    from news48.core.agents.tools.lessons import _is_status_noise
+
+    assert _is_status_noise("Always use --limit 50 for downloads") is False
+    assert _is_status_noise("Retry with exponential backoff on timeout") is False
+
+
+# ---------------------------------------------------------------------------
+# Minimum length validation
+# ---------------------------------------------------------------------------
+
+
+def test_save_lesson_rejects_too_short(tmp_lessons):
+    """save_lesson rejects lessons shorter than minimum length."""
+    result = save_lesson(
+        reason="test",
+        agent_name="executor",
+        category="Test",
+        lesson="short",
+    )
+
+    data = json.loads(result)
+    assert "too short" in data["error"].lower()
+    # File should not have been created since lesson was rejected
+    assert not tmp_lessons.exists()
