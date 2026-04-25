@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
     await mcp_endpoint.shutdown()
 
 
-app = FastAPI(title="news48", lifespan=lifespan)
+app = FastAPI(title="news48", lifespan=lifespan, docs_url=None, redoc_url=None)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
 
@@ -87,7 +87,9 @@ def _site_url(request: Request) -> str:
 @app.get("/")
 async def homepage_route(
     request: Request,
-    sentiment: str | None = Query(None, pattern="^(positive|negative|neutral)$"),
+    sentiment: str | None = Query(
+        None, pattern="^(positive|negative|neutral)$"
+    ),
 ):
     return await homepage(request, templates, filters, sentiment)
 
@@ -105,7 +107,9 @@ async def cluster_detail_route(request: Request, cluster_slug: str):
 @app.get("/all")
 async def all_stories_route(
     request: Request,
-    sentiment: str | None = Query(None, pattern="^(positive|negative|neutral)$"),
+    sentiment: str | None = Query(
+        None, pattern="^(positive|negative|neutral)$"
+    ),
 ):
     return await all_stories(request, templates, sentiment)
 
@@ -114,9 +118,13 @@ async def all_stories_route(
 async def category_detail_route(
     request: Request,
     category_slug: str,
-    sentiment: str | None = Query(None, pattern="^(positive|negative|neutral)$"),
+    sentiment: str | None = Query(
+        None, pattern="^(positive|negative|neutral)$"
+    ),
 ):
-    return await category_detail(request, templates, filters, category_slug, sentiment)
+    return await category_detail(
+        request, templates, filters, category_slug, sentiment
+    )
 
 
 # ---------------------------------------------------------------------------

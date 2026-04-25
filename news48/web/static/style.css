@@ -1686,7 +1686,7 @@ a.cluster:focus-visible {
 .docs__step {
     display: flex;
     gap: var(--space-md);
-    align-items: flex-start;
+    align-items: center;
 }
 
 .docs__step-num {
