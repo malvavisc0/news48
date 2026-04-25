@@ -119,7 +119,7 @@ Run 1:  Executor fails with wrong timeout → discovers 600s works → saves les
 Run 2:  Executor starts with "timeout for fact-check should be 600s" already loaded
 ```
 
-Lessons are stored in `data/lessons.json`, cross-pollinated across agents, and human-auditable.
+Lessons are stored in `data/lessons.db` (SQLite), cross-pollinated across agents, and human-auditable.
 
 ```bash
 news48 lessons list                              # view all

@@ -114,12 +114,11 @@ class TestPlannerExtensions:
 
         assert callable(release_plans_for_owner)
 
-    def test_release_plans_for_owner_empty(self, tmp_path, monkeypatch):
+    def test_release_plans_for_owner_empty(self, planner_db, monkeypatch):
         """Verify release_plans_for_owner returns dict with count."""
         from news48.core import config
         from news48.core.agents.tools.planner import release_plans_for_owner
 
-        monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
         result = release_plans_for_owner("test:owner")
         assert "released" in result
         assert "count" in result

@@ -344,7 +344,7 @@ def test_parser_business_logic_matches_caller_verification_model():
     assert "Do not run extra verification commands" in verify_skill
 
 
-def test_base_prompt_sizes_are_reasonable(tmp_path, monkeypatch):
+def test_base_prompt_sizes_are_reasonable(planner_db, monkeypatch):
     """Base prompts should be under 2000 chars after rewriting."""
     # This test verifies the base prompts are slim
     from news48.core.agents.skills import _SKILLS_DIR
@@ -361,9 +361,8 @@ def test_base_prompt_sizes_are_reasonable(tmp_path, monkeypatch):
             )
 
 
-def test_peek_next_plan_returns_family_for_pending_plan(tmp_path, monkeypatch):
+def test_peek_next_plan_returns_family_for_pending_plan(planner_db, monkeypatch):
     """peek_next_plan returns task family for oldest pending plan."""
-    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     # Create a simple pending plan (no parent, no dedup issues)
     payload = json.loads(
@@ -380,9 +379,8 @@ def test_peek_next_plan_returns_family_for_pending_plan(tmp_path, monkeypatch):
     assert family == "download", f"Expected 'download', got '{family}'"
 
 
-def test_peek_next_plan_skips_blocked_pending(tmp_path, monkeypatch):
+def test_peek_next_plan_skips_blocked_pending(planner_db, monkeypatch):
     """peek_next_plan skips pending plans whose parent is not completed."""
-    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     # Create a pending plan with non-existent parent
     json.loads(
@@ -399,9 +397,8 @@ def test_peek_next_plan_skips_blocked_pending(tmp_path, monkeypatch):
     assert family is None, f"Expected None for blocked plan, got '{family}'"
 
 
-def test_peek_next_plan_returns_none_when_no_pending(tmp_path, monkeypatch):
+def test_peek_next_plan_returns_none_when_no_pending(planner_db, monkeypatch):
     """peek_next_plan returns None when no eligible pending plans exist."""
-    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     # Create a plan with a non-existent parent (blocked)
     json.loads(
@@ -419,9 +416,8 @@ def test_peek_next_plan_returns_none_when_no_pending(tmp_path, monkeypatch):
     assert family is None, f"Expected None for blocked plan, got '{family}'"
 
 
-def test_peek_next_plan_orders_by_created_at(tmp_path, monkeypatch):
+def test_peek_next_plan_orders_by_created_at(planner_db, monkeypatch):
     """peek_next_plan returns oldest pending plan's family."""
-    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     # Create older pending plan first
     planner_tools.create_plan(

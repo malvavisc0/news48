@@ -6,7 +6,7 @@ import os
 
 import httpx
 import typer
-from html_to_markdown import convert as html_to_markdown
+from markdownify import markdownify
 
 from news48.core.config import Services
 from news48.core.database import (
@@ -122,7 +122,7 @@ async def _download_article(
                     )
                     image_url = extract_og_image(raw_html)
                     cleaned_html = strip_html_noise(raw_html)
-                    content = html_to_markdown(cleaned_html)["content"] or ""
+                    content = markdownify(cleaned_html) or ""
                     update_article(
                         article["id"],
                         content=content,

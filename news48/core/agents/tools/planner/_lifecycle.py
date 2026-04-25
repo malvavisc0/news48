@@ -1,12 +1,8 @@
-"""Plan lifecycle management: task families, dedup, normalization, staleness."""
+"""Plan lifecycle: task families, dedup, normalization, staleness."""
 
-import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
-
-from news48.core import config
 
 from ._constants import (
     _ACTIVE_PLAN_STATUSES,
@@ -16,7 +12,8 @@ from ._constants import (
     _TERMINAL_PLAN_STATUSES,
     _TERMINAL_STEP_STATUSES,
 )
-from ._storage import _ensure_plans_dir, _is_valid_uuid, _now, _write_plan
+from ._db import db_iter_plans, db_read_plan, db_write_plan
+from ._storage import _is_valid_uuid, _now
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +50,6 @@ def _find_active_duplicate_plan(
     plan_kind: str = "execution",
 ) -> dict | None:
     """Find an active plan in the same family to prevent duplicates."""
-    plans_dir = _ensure_plans_dir()
     family = _task_family(task)
     target_parent = parent_id or None
     target_scope_type = (scope_type or "").strip().lower()
@@ -61,15 +57,7 @@ def _find_active_duplicate_plan(
     target_plan_kind = (plan_kind or "execution").strip().lower()
     candidates = []
 
-    for plan_file in plans_dir.glob("*.json"):
-        try:
-            plan = json.loads(plan_file.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            continue
-
-        if plan.get("status") not in _ACTIVE_PLAN_STATUSES:
-            continue
-
+    for plan in db_iter_plans(status=_ACTIVE_PLAN_STATUSES):
         if _task_family(plan.get("task", "")) != family:
             continue
 
@@ -99,18 +87,9 @@ def _find_active_plan_by_family(family: str) -> dict | None:
 
     Used to infer pipeline dependencies when callers omit parent_id.
     """
-    plans_dir = _ensure_plans_dir()
     candidates = []
 
-    for plan_file in plans_dir.glob("*.json"):
-        try:
-            plan = json.loads(plan_file.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            continue
-
-        if plan.get("status") not in _ACTIVE_PLAN_STATUSES:
-            continue
-
+    for plan in db_iter_plans(status=_ACTIVE_PLAN_STATUSES):
         if plan.get("plan_kind", "execution") != "execution":
             continue
 
@@ -224,17 +203,13 @@ def _normalize_plan_for_consistency(plan: dict) -> bool:
     # parent_id pointing at a campaign would be permanently blocked.
     parent_id = plan.get("parent_id")
     if parent_id and status not in _TERMINAL_PLAN_STATUSES:
-        parent_file = config.PLANS_DIR / f"{parent_id}.json"
-        if parent_file.exists():
-            try:
-                parent = json.loads(parent_file.read_text(encoding="utf-8"))
-                if parent.get("plan_kind") == "campaign":
-                    plan["parent_id"] = None
-                    if not plan.get("campaign_id"):
-                        plan["campaign_id"] = parent_id
-                    changed = True
-            except (json.JSONDecodeError, OSError):
-                pass
+        parent = db_read_plan(parent_id)
+        if parent is not None:
+            if parent.get("plan_kind") == "campaign":
+                plan["parent_id"] = None
+                if not plan.get("campaign_id"):
+                    plan["campaign_id"] = parent_id
+                changed = True
         elif not _is_valid_uuid(parent_id):
             # Orphaned non-UUID parent_id
             plan["parent_id"] = None
@@ -366,7 +341,7 @@ def _requeue_stale_plan(plan: dict) -> None:
             "marked failed for automatic remediation"
         )
 
-    _write_plan(plan)
+    db_write_plan(plan)
     logger.info(
         "Requeued stale plan %s (requeue_count=%d)",
         plan["id"],
@@ -374,7 +349,7 @@ def _requeue_stale_plan(plan: dict) -> None:
     )
 
 
-def _auto_complete_campaigns(plans_dir: Path | None = None) -> int:
+def _auto_complete_campaigns() -> int:
     """Mark campaigns as completed when all children are terminal.
 
     Checks both ``campaign_id`` and ``parent_id`` links to find children.
@@ -385,17 +360,11 @@ def _auto_complete_campaigns(plans_dir: Path | None = None) -> int:
 
     Returns the number of campaigns auto-completed.
     """
-    plans_dir = plans_dir or _ensure_plans_dir()
-    all_plans: dict[str, dict] = {}
-    for plan_file in plans_dir.glob("*.json"):
-        try:
-            plan = json.loads(plan_file.read_text(encoding="utf-8"))
-            all_plans[plan["id"]] = plan
-        except (json.JSONDecodeError, OSError):
-            continue
+    all_plans = db_iter_plans()
+    plans_by_id = {p["id"]: p for p in all_plans}
 
     completed = 0
-    for plan_id, plan in all_plans.items():
+    for plan_id, plan in plans_by_id.items():
         if plan.get("plan_kind") != "campaign":
             continue
         if plan.get("status") != "pending":
@@ -403,7 +372,7 @@ def _auto_complete_campaigns(plans_dir: Path | None = None) -> int:
 
         children = [
             p
-            for p in all_plans.values()
+            for p in all_plans
             if p.get("id") != plan_id
             and (p.get("campaign_id") == plan_id or p.get("parent_id") == plan_id)
         ]
@@ -414,7 +383,7 @@ def _auto_complete_campaigns(plans_dir: Path | None = None) -> int:
             all_completed = all(c.get("status") == "completed" for c in children)
             plan["status"] = "completed" if all_completed else "failed"
             plan["updated_at"] = _now()
-            _write_plan(plan)
+            db_write_plan(plan)
             completed += 1
 
     return completed

@@ -359,15 +359,16 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm db-migr
 
 ## Data & Volumes
 
-The stack uses five named Docker volumes:
+The stack uses three named Docker volumes and one host bind mount:
 
-| Volume | Service | Contents |
-|--------|---------|----------|
-| `mysql-data` | mysql | Database files |
-| `redis-data` | redis | Redis AOF + RDB snapshots |
-| `llamacpp-models` | llamacpp-init, llamacpp | Downloaded GGUF model files |
-| `news48-data` | web, dramatiq-worker, periodiq-scheduler | Application data (downloaded articles, etc.) |
-| `dozzle-data` | dozzle | Dozzle UI state |
+| Mount | Type | Service | Contents |
+|-------|------|---------|----------|
+| `./data` | bind mount | web, dramatiq-worker, periodiq-scheduler, llamacpp-init, llamacpp | Application data, downloaded GGUF models (`./data/models/`) |
+| `mysql-data` | volume | mysql | Database files |
+| `redis-data` | volume | redis | Redis AOF + RDB snapshots |
+| `dozzle-data` | volume | dozzle | Dozzle UI state |
+
+> **Why a bind mount for data?** Models and application data live directly on the host at `./data/`. This means models survive `docker compose down -v`, and you can drop `.gguf` files into `./data/models/` without touching Docker at all.
 
 ### Backup MySQL
 
@@ -388,8 +389,9 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -i mysql \
 To switch to a different GGUF model:
 
 1. Update `LLAMACPP_MODEL_REPO`, `LLAMACPP_MODEL_FILE`, and `MODEL` in `.env`
-2. Remove the old model volume: `docker volume rm news48_llamacpp-models`
-3. Restart: the `llamacpp-init` container will download the new model
+2. Restart: the `llamacpp-init` container will download the new model to `/data/models/`
+
+To add a model manually without changing config, drop the `.gguf` file into the `data/models/` directory on the host.
 
 ---
 
@@ -447,9 +449,9 @@ The production compose file (`docker-compose.prod.yml`) applies these security m
 ```
                            ┌──────────────────┐
                            │   llamacpp-init   │  (one-shot: downloads model)
-                           └────────┬─────────┘
-                                    │ volume: llamacpp-models
-                                    ▼
+                            └────────┬─────────┘
+                                     │ bind mount: ./data (/data/models)
+                                     ▼
 ┌─────────────┐     ┌──────────┐  ┌──────────────┐  ┌──────────┐
 │  web :8000  │────▶│  mysql   │  │   llamacpp   │  │  redis   │
 └──────┬──────┘     │  :3306   │  │  :8080 (GPU) │  │  :6379   │

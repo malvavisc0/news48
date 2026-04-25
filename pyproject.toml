@@ -26,18 +26,13 @@ dependencies = [
 cli = [
     "typer",
     "rich",
-    "html-to-markdown",
+    "markdownify",
     "llama-index-llms-openai-like",
     "dramatiq",
     "periodiq",
     "mcp[cli]",
 ]
-web = [
-    "fastapi",
-    "uvicorn",
-    "Jinja2",
-    "mcp",
-]
+web = ["fastapi", "uvicorn", "Jinja2", "mcp"]
 all = ["news48[cli,web]"]
 
 [project.scripts]

@@ -1,11 +1,9 @@
 """Stats command - show system statistics."""
 
-import json
-
 import typer
 from sqlalchemy.exc import SQLAlchemyError
 
-from news48.core.agents.tools.planner import _ensure_plans_dir
+from news48.core.agents.tools.planner._db import db_iter_plans
 from news48.core.database import (
     check_database_health,
     get_article_stats,
@@ -54,11 +52,7 @@ def _collect_stats(stale_days: int) -> dict:
     health = check_database_health()
 
     plans = {"pending": 0, "executing": 0, "completed": 0, "failed": 0}
-    for plan_file in _ensure_plans_dir().glob("*.json"):
-        try:
-            plan = json.loads(plan_file.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            continue
+    for plan in db_iter_plans():
         status = plan.get("status", "")
         if status in plans:
             plans[status] += 1

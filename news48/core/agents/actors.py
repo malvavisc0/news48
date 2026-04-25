@@ -242,42 +242,22 @@ if not _actors_already_registered():
     )
     def heal_plan_deadlocks() -> Any:
         """Detect and repair campaign-parent deadlocks in pending plans."""
-        import fcntl
-        import json
-
         from .tools.planner import (
             _auto_complete_campaigns,
-            _ensure_plans_dir,
             _normalize_plan_for_consistency,
             _write_plan,
         )
+        from .tools.planner._db import db_iter_plans
 
-        plans_dir = _ensure_plans_dir()
         healed = 0
 
-        # Acquire exclusive lock to prevent racing with
-        # claim_plan / update_plan / other heal cycles.
-        lock_path = plans_dir / ".claim.lock"
-        lock_fd = None
-        try:
-            lock_fd = open(lock_path, "w")
-            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        for plan in db_iter_plans():
+            if _normalize_plan_for_consistency(plan):
+                _write_plan(plan)
+                healed += 1
 
-            for plan_file in plans_dir.glob("*.json"):
-                try:
-                    plan = json.loads(plan_file.read_text(encoding="utf-8"))
-                except (json.JSONDecodeError, OSError):
-                    continue
-                if _normalize_plan_for_consistency(plan):
-                    _write_plan(plan)
-                    healed += 1
-
-            auto_completed = _auto_complete_campaigns(plans_dir)
-            return {"healed": healed + auto_completed}
-        finally:
-            if lock_fd is not None:
-                fcntl.flock(lock_fd, fcntl.LOCK_UN)
-                lock_fd.close()
+        auto_completed = _auto_complete_campaigns()
+        return {"healed": healed + auto_completed}
 
 else:
     # Actors already registered — retrieve them from the broker

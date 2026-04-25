@@ -7,7 +7,7 @@ services:
     entrypoint: [ "/app/scripts/docker-entrypoint.sh" ]
     command: [ "uvicorn", "news48.web.app:app", "--host", "0.0.0.0", "--port", "8000" ]
     volumes:
-      - news48-data:/data
+      - ./data:/data
     environment:
       TZ: ${TZ:-Europe/Berlin}
       DATABASE_URL: mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
@@ -75,12 +75,12 @@ services:
       - news48-net
 
   # One-shot init container that downloads the GGUF model before the server starts.
-  # Shares the llamacpp-models volume so the model is immediately available.
+  # Stores models in the host data directory (./data/models) so they persist across rebuilds.
   llamacpp-init:
     image: ghcr.io/ggml-org/llama.cpp:server-cuda13
     entrypoint: [ "bash", "/app/download-model.sh" ]
     volumes:
-      - llamacpp-models:/models
+      - ./data:/data
       - ./scripts/download-model.sh:/app/download-model.sh:ro
     environment:
       TZ: ${TZ:-Europe/Berlin}
@@ -100,7 +100,7 @@ services:
     image: ghcr.io/ggml-org/llama.cpp:server-cuda13
     entrypoint: [ "bash", "/app/llamacpp-entrypoint.sh" ]
     volumes:
-      - llamacpp-models:/models
+      - ./data:/data
       - ./scripts/llamacpp-entrypoint.sh:/app/llamacpp-entrypoint.sh:ro
     environment:
       TZ: ${TZ:-Europe/Berlin}
@@ -198,7 +198,7 @@ services:
     entrypoint: [ "/app/scripts/docker-entrypoint.sh" ]
     command: [ "dramatiq", "news48.core.agents.actors", "--processes", "1", "--threads", "8" ]
     volumes:
-      - news48-data:/data
+      - ./data:/data
     environment:
       TZ: ${TZ:-Europe/Berlin}
       DATABASE_URL: mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
@@ -238,7 +238,7 @@ services:
     entrypoint: [ "/app/scripts/docker-entrypoint.sh" ]
     command: [ "periodiq", "news48.core.agents.actors" ]
     volumes:
-      - news48-data:/data
+      - ./data:/data
     environment:
       TZ: ${TZ:-Europe/Berlin}
       DATABASE_URL: mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
@@ -257,9 +257,7 @@ services:
       - news48-net
 
 volumes:
-  news48-data:
   mysql-data:
-  llamacpp-models:
   dozzle-data:
   redis-data:
 

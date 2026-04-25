@@ -64,20 +64,8 @@ def _seed(seed_file: str) -> dict:
     # Create initial files so agents don't fail on missing files
     if count > 0:
         _write_initial_monitor_report(result)
-        _ensure_lessons_file()
 
     return result
-
-
-def _ensure_lessons_file() -> None:
-    """Create data/lessons.json with an empty lessons array.
-
-    Ensures the lessons file is present from the start so agents
-    and CLI commands that read it don't encounter a missing file.
-    """
-    if not config.LESSONS_FILE.exists():
-        config.LESSONS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        config.LESSONS_FILE.write_text("[]\n", encoding="utf-8")
 
 
 def seed(

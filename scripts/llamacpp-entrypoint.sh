@@ -23,7 +23,7 @@ CACHE_TYPE_K="${LLAMACPP_CACHE_TYPE_K:-q8_0}"
 CACHE_TYPE_V="${LLAMACPP_CACHE_TYPE_V:-q8_0}"
 FLASH_ATTN="${LLAMACPP_FLASH_ATTN:-on}"
 
-MODEL_PATH="/models/${MODEL_FILE}"
+MODEL_PATH="/data/models/${MODEL_FILE}"
 HF_URL="https://huggingface.co/${MODEL_REPO}/resolve/main/${MODEL_FILE}"
 
 MAX_BACKOFF=60
@@ -70,7 +70,7 @@ download_model() {
     echo "[$(date -Iseconds)] Model not found at ${MODEL_PATH}, downloading from HuggingFace..."
     echo "[$(date -Iseconds)] URL: ${HF_URL}"
 
-    mkdir -p /models
+    mkdir -p /data/models
 
     # Verify URL is reachable before downloading (HEAD request with --fail)
     echo "[$(date -Iseconds)] Verifying URL is reachable..."

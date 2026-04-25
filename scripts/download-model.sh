@@ -8,7 +8,7 @@ set -euo pipefail
 MODEL_REPO="${LLAMACPP_MODEL_REPO:-mradermacher/claude-oss-i1-GGUF}"
 MODEL_FILE="${LLAMACPP_MODEL_FILE:-claude-oss.i1-Q6_K.gguf}"
 
-MODEL_PATH="/models/${MODEL_FILE}"
+MODEL_PATH="/data/models/${MODEL_FILE}"
 HF_URL="https://huggingface.co/${MODEL_REPO}/resolve/main/${MODEL_FILE}"
 
 # Validate that a file starts with the GGUF magic header (0x47 0x47 0x55 0x46)
@@ -37,7 +37,7 @@ download_model() {
     echo "[$(date -Iseconds)] Model not found at ${MODEL_PATH}, downloading from HuggingFace..."
     echo "[$(date -Iseconds)] URL: ${HF_URL}"
 
-    mkdir -p /models
+    mkdir -p /data/models
 
     # Verify URL is reachable before downloading (HEAD request with --fail)
     echo "[$(date -Iseconds)] Verifying URL is reachable..."

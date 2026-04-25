@@ -8,10 +8,8 @@ from news48.core import config
 runner = CliRunner()
 
 
-def test_plans_list_show_cancel(tmp_path, monkeypatch):
+def test_plans_list_show_cancel(planner_db, monkeypatch):
     from news48.core.agents.tools import planner as planner_tools
-
-    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -36,10 +34,8 @@ def test_plans_list_show_cancel(tmp_path, monkeypatch):
     assert json.loads(cancel_result.stdout)["status"] == "failed"
 
 
-def test_plans_show_displays_success_conditions(tmp_path, monkeypatch):
+def test_plans_show_displays_success_conditions(planner_db, monkeypatch):
     from news48.core.agents.tools import planner as planner_tools
-
-    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -58,10 +54,8 @@ def test_plans_show_displays_success_conditions(tmp_path, monkeypatch):
     assert "Error rate below 5%" in show_result.stdout
 
 
-def test_plans_show_json_includes_success_conditions(tmp_path, monkeypatch):
+def test_plans_show_json_includes_success_conditions(planner_db, monkeypatch):
     from news48.core.agents.tools import planner as planner_tools
-
-    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     created = json.loads(
         planner_tools.create_plan(
@@ -83,10 +77,8 @@ def test_plans_show_json_includes_success_conditions(tmp_path, monkeypatch):
     ]
 
 
-def test_plans_remediate_preview_and_apply(tmp_path, monkeypatch):
+def test_plans_remediate_preview_and_apply(planner_db, monkeypatch):
     from news48.core.agents.tools import planner as planner_tools
-
-    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     json.loads(
         planner_tools.create_plan(
@@ -123,12 +115,10 @@ def test_plans_remediate_preview_and_apply(tmp_path, monkeypatch):
     assert applied_data["apply"] is True
 
 
-def test_plans_remediate_clears_campaign_parent_deadlock(tmp_path, monkeypatch):
+def test_plans_remediate_clears_campaign_parent_deadlock(planner_db, monkeypatch):
     """plans remediate --apply clears parent_id when parent is a pending
     campaign, preventing permanent deadlock (Fix 2)."""
     from news48.core.agents.tools import planner as planner_tools
-
-    monkeypatch.setattr(config, "PLANS_DIR", tmp_path / ".plans")
 
     campaign = json.loads(
         planner_tools.create_plan(
@@ -177,7 +167,7 @@ def test_plans_remediate_clears_campaign_parent_deadlock(tmp_path, monkeypatch):
     assert fixed["campaign_id"] == campaign["plan_id"]
 
 
-def test_has_active_children_finds_parent_id_linked_children(tmp_path, monkeypatch):
+def test_has_active_children_finds_parent_id_linked_children(planner_db, monkeypatch):
     """_has_active_children detects children linked via parent_id, not just
     campaign_id (Fix 4)."""
     from news48.cli.commands.plans import _has_active_children

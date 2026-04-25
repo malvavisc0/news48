@@ -1,16 +1,15 @@
 """Persistent planner toolset for agent execution planning.
 
-Provides file-based execution plans with step management capabilities.
-Plans are stored as JSON files in the data/plans/ directory and survive
-process restarts.
+Provides SQLite-backed execution plans with step management capabilities.
+Plans are stored in DATA_DIR/plans.db and survive process restarts.
 
 This package splits the original monolithic planner.py into focused
 sub-modules while preserving all public import paths for backward
 compatibility.
 """
 
+from ._constants import _ACTIVE_PLAN_STATUSES  # noqa: F401
 from ._constants import (
-    _ACTIVE_PLAN_STATUSES,
     _ARCHIVE_AGE_HOURS,
     _ARCHIVE_CLEANUP_DAYS,
     _FAMILY_DEPENDENCIES,
@@ -19,8 +18,9 @@ from ._constants import (
     _TERMINAL_PLAN_STATUSES,
     _TERMINAL_STEP_STATUSES,
 )
+from ._db import _close_conn, db_claim_plan  # noqa: F401
+from ._lifecycle import _auto_complete_campaigns  # noqa: F401
 from ._lifecycle import (
-    _auto_complete_campaigns,
     _derive_plan_status_from_steps,
     _find_active_duplicate_plan,
     _find_active_plan_by_family,
@@ -32,13 +32,11 @@ from ._lifecycle import (
     _requeue_stale_plan,
     _task_family,
 )
+from ._storage import _is_valid_uuid  # noqa: F401
 from ._storage import (
     _archive_cleanup,
-    _ensure_plans_dir,
-    _is_valid_uuid,
     _no_eligible_plans_response,
     _now,
-    _plan_path,
     _read_plan,
     _serialize_plan,
     _write_plan,

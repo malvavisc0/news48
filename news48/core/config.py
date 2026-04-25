@@ -22,10 +22,10 @@ class DataDir:
 
 # Path constants derived from DataDir.root
 FILES_DIR = DataDir.root / "files"
-PLANS_DIR = DataDir.root / "plans"
+PLANS_DB = DataDir.root / "plans.db"
 MONITOR_DIR = DataDir.root / "monitor"
 CACHE_DIR = DataDir.root / "cache"
-LESSONS_FILE = DataDir.root / "lessons.json"
+LESSONS_DB = DataDir.root / "lessons.db"
 
 
 class Database:

@@ -79,7 +79,7 @@ The Fact-checker is the verification agent. It claims parsed articles that haven
 
 ## Self-Learning
 
-All four agents can save lessons when they discover something useful — correct command syntax, process insights, error recovery techniques, and feed-specific quirks. Lessons are persisted to `data/lessons.md` and injected into every agent's system prompt at startup, enabling cross-agent knowledge sharing. Lessons are human-auditable and carry across runs.
+All four agents can save lessons when they discover something useful — correct command syntax, process insights, error recovery techniques, and feed-specific quirks. Lessons are persisted to a SQLite database (`data/lessons.db`) and injected into every agent's system prompt at startup, enabling cross-agent knowledge sharing. Lessons are human-auditable and carry across runs.
 
 ## MCP Integration
 

@@ -12,7 +12,7 @@ Tools are organized into the following modules:
 | [`email`](../agents/tools/email.py) | Email delivery for sentinel reports |
 | [`files`](../agents/tools/files.py) | Unified file reading (content, metadata, chunks) |
 | [`lessons`](../agents/tools/lessons.py) | Lessons learned — persistent cross-run agent memory |
-| [`planner`](../agents/tools/planner.py) | Persistent execution plan management (tool module, not an agent) |
+| [`planner`](../agents/tools/planner/) | Persistent execution plan management — SQLite-backed (tool module, not an agent) |
 | [`searxng`](../agents/tools/searxng.py) | Web search via SearXNG |
 | [`sentinel`](../agents/tools/sentinel.py) | Sentinel health report generation |
 | [`shell`](../agents/tools/shell.py) | Shell command execution |
@@ -131,7 +131,7 @@ def read_file(
 
 #### `create_plan`
 
-Create a new execution plan, persisted to `data/plans/{id}.json`. Includes built-in duplicate detection and pipeline dependency inference.
+Create a new execution plan, persisted to `data/plans.db` (SQLite). Includes built-in duplicate detection and pipeline dependency inference.
 
 **Signature:**
 ```python
@@ -331,7 +331,7 @@ def run_shell_command(
 
 #### `save_lesson`
 
-Save a lesson learned to the persistent `data/lessons.json` file. Agents use this to persist knowledge across runs — correct command syntax, process insights, error recovery techniques, and feed-specific quirks. Lessons are automatically loaded into every agent's system prompt at startup.
+Save a lesson learned to the lessons database (`data/lessons.db`, SQLite). Agents use this to persist knowledge across runs — correct command syntax, process insights, error recovery techniques, and feed-specific quirks. Lessons are automatically loaded into every agent's system prompt at startup.
 
 **Signature:**
 ```python
@@ -358,15 +358,15 @@ def save_lesson(
 - Exact idempotency: skips if the exact lesson text already exists for the same agent/category
 
 **Behavior:**
-- Creates `data/lessons.json` if file doesn't exist
-- Appends the lesson as a JSON object with `agent`, `category`, and `lesson` fields
+- Auto-creates the SQLite database and table on first use
+- Inserts the lesson with `agent`, `category`, `lesson`, and `created_at` fields
 - All lessons are loaded for all agents at startup (cross-pollination)
 
 **Returns:** JSON string with:
 - `result`: Confirmation message with agent/category and lesson preview
 - `error`: Empty on success, or error description
 
-**Internal helper:** `_load_lessons()` reads the full `data/lessons.json` content, formats it as markdown, and is called by `compose_agent_instructions()` to inject lessons into every agent's system prompt.
+**Internal helper:** `_load_lessons()` reads all lessons from the SQLite database, formats them as markdown, and is called by `compose_agent_instructions()` to inject lessons into every agent's system prompt.
 
 ---
 
@@ -469,5 +469,5 @@ Each active runtime agent uses a specific subset of tools:
 - **Executor is execution-only**: it does not create plans directly; it claims pending plans and drives steps to completion or failure with verification evidence.
 - **Parser is autonomous and DB-claim based**: it is scheduler-driven, does not use plan files, and prevents duplicate parse work by claiming articles in the database before parsing.
 - **Fact-checker is a dedicated scheduled agent**: it runs on its own schedule and claims fact-unchecked articles directly from the database, independent of the plan queue.
-- **The `planner` tool module is legitimate**: [`agents/tools/planner.py`](../agents/tools/planner.py) manages execution plans (create, update, claim, list). It is a tool module used by the Executor agent, not a retired planner agent role.
+- **The `planner` tool module is legitimate**: [`agents/tools/planner/`](../agents/tools/planner/) manages execution plans (create, update, claim, list). It is a tool module used by the Executor agent, not a retired planner agent role. Plans are stored in `DATA_DIR/plans.db` (SQLite).
 - **All agents learn**: every agent has access to `save_lesson` and all accumulated lessons are injected into every agent's system prompt at startup, enabling cross-agent knowledge sharing.

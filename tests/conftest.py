@@ -67,3 +67,28 @@ def db_session(engine):
     session = sessionmaker(bind=engine)()
     yield session
     session.close()
+
+
+@pytest.fixture
+def planner_db(tmp_path, monkeypatch):
+    """Provide a fresh temp SQLite DB for planner tests.
+
+    - Redirects PLANS_DB to a temp directory
+    - Closes any existing connection before the test
+    - Resets the connection cache after the test
+    - Temp files are automatically cleaned up by pytest's tmp_path
+    """
+    from news48.core import config
+    from news48.core.agents.tools.planner._db import _close_conn
+
+    # Close any existing connection first
+    _close_conn()
+
+    # Redirect to temp DB
+    db_path = tmp_path / "test_plans.db"
+    monkeypatch.setattr(config, "PLANS_DB", db_path)
+
+    yield db_path
+
+    # Close connection so temp files can be deleted
+    _close_conn()

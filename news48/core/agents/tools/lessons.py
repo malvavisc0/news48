@@ -1,9 +1,7 @@
 """Lessons learned system — save and load agent lessons."""
 
-import fcntl
-import json
 import re
-from pathlib import Path
+import sqlite3
 
 from news48.core import config
 
@@ -18,10 +16,52 @@ _MIN_LESSON_LENGTH = 10
 # Maximum number of lessons to keep (LRU eviction).
 _MAX_LESSONS = 100
 
+# Module-level connection cache (one per process).
+_conn: sqlite3.Connection | None = None
 
-def _lessons_lock_path() -> Path:
-    """Return the lock file path adjacent to lessons.json."""
-    return config.LESSONS_FILE.with_suffix(".json.lock")
+
+def _close_conn() -> None:
+    """Close the cached SQLite connection and clear the cache."""
+    global _conn
+    if _conn is not None:
+        try:
+            _conn.close()
+        except Exception:
+            pass
+        _conn = None
+
+
+def _get_conn() -> sqlite3.Connection:
+    """Return a shared sqlite3 connection to the lessons database.
+
+    Opens (or reuses) a connection to ``config.LESSONS_DB``, enables WAL
+    journal mode, sets a busy timeout, and ensures the ``lessons`` table
+    and indexes exist.
+    """
+    global _conn
+    if _conn is not None:
+        return _conn
+
+    config.LESSONS_DB.parent.mkdir(parents=True, exist_ok=True)
+    _conn = sqlite3.connect(str(config.LESSONS_DB))
+    _conn.row_factory = sqlite3.Row
+    _conn.execute("PRAGMA journal_mode=WAL")
+    _conn.execute("PRAGMA busy_timeout=5000")
+    _conn.execute("""
+        CREATE TABLE IF NOT EXISTS lessons (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent       TEXT    NOT NULL,
+            category    TEXT    NOT NULL,
+            lesson      TEXT    NOT NULL,
+            created_at  REAL    NOT NULL
+        )
+        """)
+    _conn.execute("CREATE INDEX IF NOT EXISTS idx_lessons_agent " "ON lessons(agent)")
+    _conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_lessons_created_at " "ON lessons(created_at)"
+    )
+    _conn.commit()
+    return _conn
 
 
 def _normalize_words(text: str) -> list[str]:
@@ -72,51 +112,19 @@ def _is_status_noise(lesson: str) -> bool:
 
 
 def _read_lessons() -> list[dict]:
-    """Read lessons from the JSON file.
+    """Read lessons from the SQLite database.
 
-    Returns an empty list if the file doesn't exist or is empty.
+    Returns an empty list if the database doesn't exist or is empty.
     """
-    if not config.LESSONS_FILE.exists():
-        return []
     try:
-        content = config.LESSONS_FILE.read_text(encoding="utf-8")
-        if not content.strip():
-            return []
-        data = json.loads(content)
-        if isinstance(data, list):
-            return data
+        conn = _get_conn()
+        rows = conn.execute(
+            "SELECT agent, category, lesson, created_at "
+            "FROM lessons ORDER BY created_at DESC"
+        ).fetchall()
+        return [dict(row) for row in rows]
+    except Exception:
         return []
-    except (json.JSONDecodeError, OSError):
-        return []
-
-
-def _write_lessons(lessons: list[dict]) -> None:
-    """Write lessons list to the JSON file."""
-    config.LESSONS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    config.LESSONS_FILE.write_text(
-        json.dumps(lessons, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-
-
-def _lock_lessons():
-    """Acquire an exclusive lock for lessons file read-modify-write.
-
-    Returns a file descriptor that must be passed to _unlock_lessons().
-    """
-    lock_path = _lessons_lock_path()
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_fd = open(lock_path, "w")
-    fcntl.flock(lock_fd, fcntl.LOCK_EX)
-    return lock_fd
-
-
-def _unlock_lessons(lock_fd):
-    """Release the lessons file lock."""
-    try:
-        fcntl.flock(lock_fd, fcntl.LOCK_UN)
-    finally:
-        lock_fd.close()
 
 
 def save_lesson(
@@ -125,7 +133,7 @@ def save_lesson(
     category: str,
     lesson: str,
 ) -> str:
-    """Save a lesson learned to data/lessons.json.
+    """Save a lesson learned to the lessons database.
 
     ## When to Use
     Use this tool when you discover something worth remembering:
@@ -156,7 +164,7 @@ def save_lesson(
     import time
 
     try:
-        # --- pre-flight checks (outside lock - read-only) ---
+        # --- pre-flight checks ---
         if len(lesson.strip()) < _MIN_LESSON_LENGTH:
             return _safe_json(
                 {
@@ -184,59 +192,52 @@ def save_lesson(
                 }
             )
 
-        # --- critical section: read-check-write under lock ---
-        lock_fd = _lock_lessons()
-        try:
-            lessons = _read_lessons()
+        conn = _get_conn()
 
-            # Check idempotency: skip if exact lesson already exists
-            for entry in lessons:
-                if (
-                    entry.get("agent") == agent_name
-                    and entry.get("category") == category
-                    and entry.get("lesson") == lesson
-                ):
-                    return _safe_json(
-                        {
-                            "result": (
-                                f"Lesson already exists for " f"{agent_name}/{category}"
-                            ),
-                            "error": "",
-                        }
-                    )
-
-            # Check near-duplicate
-            existing_texts = [e.get("lesson", "") for e in lessons]
-            if _is_near_duplicate(lesson, existing_texts):
-                return _safe_json(
-                    {
-                        "result": (
-                            f"Near-duplicate lesson already exists for "
-                            f"{agent_name}/{category}"
-                        ),
-                        "error": "",
-                    }
-                )
-
-            # Append with timestamp
-            lessons.append(
+        # Check idempotency: skip if exact lesson already exists
+        existing = conn.execute(
+            "SELECT id FROM lessons " "WHERE agent = ? AND category = ? AND lesson = ?",
+            (agent_name, category, lesson),
+        ).fetchone()
+        if existing:
+            return _safe_json(
                 {
-                    "agent": agent_name,
-                    "category": category,
-                    "lesson": lesson,
-                    "created_at": time.time(),
+                    "result": (
+                        f"Lesson already exists for " f"{agent_name}/{category}"
+                    ),
+                    "error": "",
                 }
             )
 
-            # LRU eviction: keep only the most recent _MAX_LESSONS
-            if len(lessons) > _MAX_LESSONS:
-                # Sort by created_at descending, keep top _MAX_LESSONS
-                lessons.sort(key=lambda e: e.get("created_at", 0), reverse=True)
-                lessons = lessons[:_MAX_LESSONS]
+        # Check near-duplicate against existing lessons
+        all_lessons = conn.execute("SELECT lesson FROM lessons").fetchall()
+        existing_texts = [row["lesson"] for row in all_lessons]
+        if _is_near_duplicate(lesson, existing_texts):
+            return _safe_json(
+                {
+                    "result": (
+                        f"Near-duplicate lesson already exists for "
+                        f"{agent_name}/{category}"
+                    ),
+                    "error": "",
+                }
+            )
 
-            _write_lessons(lessons)
-        finally:
-            _unlock_lessons(lock_fd)
+        # Insert the new lesson
+        conn.execute(
+            "INSERT INTO lessons (agent, category, lesson, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            (agent_name, category, lesson, time.time()),
+        )
+
+        # LRU eviction: keep only the most recent _MAX_LESSONS
+        conn.execute(
+            "DELETE FROM lessons WHERE id NOT IN "
+            "(SELECT id FROM lessons ORDER BY created_at DESC LIMIT ?)",
+            (_MAX_LESSONS,),
+        )
+
+        conn.commit()
 
         return _safe_json(
             {
@@ -258,7 +259,7 @@ def save_lesson(
 
 
 def _load_lessons() -> str:
-    """Load all lessons from data/lessons.json.
+    """Load all lessons from the lessons database.
 
     Returns the lessons formatted as markdown for agent instructions,
     or empty string if no lessons exist.

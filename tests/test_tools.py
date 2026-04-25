@@ -128,12 +128,8 @@ class TestReadFile:
         test_file = tmp_path / "test.txt"
         test_file.write_text("line1\nline2\nline3\n", encoding="utf-8")
 
-        with patch(
-            "news48.core.agents.tools.files._ALLOWED_ROOTS", [tmp_path]
-        ):
-            result = json.loads(
-                read_file(reason="test", file_path=str(test_file))
-            )
+        with patch("news48.core.agents.tools.files._ALLOWED_ROOTS", [tmp_path]):
+            result = json.loads(read_file(reason="test", file_path=str(test_file)))
 
         assert result["error"] == ""
         assert "line1" in result["result"]["content"]
@@ -143,13 +139,9 @@ class TestReadFile:
         from news48.core.agents.tools.files import read_file
 
         test_file = tmp_path / "test.txt"
-        test_file.write_text(
-            "line0\nline1\nline2\nline3\nline4\n", encoding="utf-8"
-        )
+        test_file.write_text("line0\nline1\nline2\nline3\nline4\n", encoding="utf-8")
 
-        with patch(
-            "news48.core.agents.tools.files._ALLOWED_ROOTS", [tmp_path]
-        ):
+        with patch("news48.core.agents.tools.files._ALLOWED_ROOTS", [tmp_path]):
             result = json.loads(
                 read_file(
                     reason="test",
@@ -170,13 +162,9 @@ class TestReadFile:
         test_file = tmp_path / "test.txt"
         test_file.write_text("content", encoding="utf-8")
 
-        with patch(
-            "news48.core.agents.tools.files._ALLOWED_ROOTS", [tmp_path]
-        ):
+        with patch("news48.core.agents.tools.files._ALLOWED_ROOTS", [tmp_path]):
             result = json.loads(
-                read_file(
-                    reason="test", file_path=str(test_file), metadata_only=True
-                )
+                read_file(reason="test", file_path=str(test_file), metadata_only=True)
             )
 
         assert result["error"] == ""
@@ -186,9 +174,7 @@ class TestReadFile:
     def test_file_not_found(self, tmp_path):
         from news48.core.agents.tools.files import read_file
 
-        with patch(
-            "news48.core.agents.tools.files._ALLOWED_ROOTS", [tmp_path]
-        ):
+        with patch("news48.core.agents.tools.files._ALLOWED_ROOTS", [tmp_path]):
             result = json.loads(
                 read_file(reason="test", file_path=str(tmp_path / "nope.txt"))
             )
@@ -201,12 +187,8 @@ class TestReadFile:
         test_file = tmp_path / "test.bin"
         test_file.write_bytes(b"\x00\x01\x02\x03" * 100)
 
-        with patch(
-            "news48.core.agents.tools.files._ALLOWED_ROOTS", [tmp_path]
-        ):
-            result = json.loads(
-                read_file(reason="test", file_path=str(test_file))
-            )
+        with patch("news48.core.agents.tools.files._ALLOWED_ROOTS", [tmp_path]):
+            result = json.loads(read_file(reason="test", file_path=str(test_file)))
 
         assert "binary" in result["error"].lower()
 
@@ -222,24 +204,16 @@ class TestReadFile:
         env_file = tmp_path / ".env"
         env_file.write_text("SECRET=123", encoding="utf-8")
 
-        with patch(
-            "news48.core.agents.tools.files._ALLOWED_ROOTS", [tmp_path]
-        ):
-            result = json.loads(
-                read_file(reason="test", file_path=str(env_file))
-            )
+        with patch("news48.core.agents.tools.files._ALLOWED_ROOTS", [tmp_path]):
+            result = json.loads(read_file(reason="test", file_path=str(env_file)))
 
         assert "access denied" in result["error"].lower()
 
     def test_directory_as_file_returns_error(self, tmp_path):
         from news48.core.agents.tools.files import read_file
 
-        with patch(
-            "news48.core.agents.tools.files._ALLOWED_ROOTS", [tmp_path]
-        ):
-            result = json.loads(
-                read_file(reason="test", file_path=str(tmp_path))
-            )
+        with patch("news48.core.agents.tools.files._ALLOWED_ROOTS", [tmp_path]):
+            result = json.loads(read_file(reason="test", file_path=str(tmp_path)))
 
         # Reading a directory should fail (it's not a regular file for full read)
         assert result["error"] != "" or result["result"] != ""
@@ -261,9 +235,7 @@ class TestSendEmail:
             env = {k: v for k, v in os.environ.items() if k != "SMTP_HOST"}
             with patch.dict(os.environ, env, clear=True):
                 result = json.loads(
-                    send_email(
-                        reason="test", to="a@b.com", subject="Hi", body="Body"
-                    )
+                    send_email(reason="test", to="a@b.com", subject="Hi", body="Body")
                 )
                 assert "SMTP_HOST" in result["error"]
 
@@ -273,9 +245,7 @@ class TestSendEmail:
         env = {"SMTP_HOST": "smtp.example.com"}
         with patch.dict(os.environ, env, clear=True):
             result = json.loads(
-                send_email(
-                    reason="test", to="a@b.com", subject="Hi", body="Body"
-                )
+                send_email(reason="test", to="a@b.com", subject="Hi", body="Body")
             )
             assert "SMTP_USER" in result["error"]
 
@@ -288,9 +258,7 @@ class TestSendEmail:
             "SMTP_PASS": "pass",
         }
         with patch.dict(os.environ, env, clear=True):
-            result = json.loads(
-                send_email(reason="test", subject="Hi", body="Body")
-            )
+            result = json.loads(send_email(reason="test", subject="Hi", body="Body"))
             assert "recipient" in result["error"].lower()
 
     def test_missing_subject(self):
@@ -329,9 +297,7 @@ class TestSendEmail:
             "MONITOR_EMAIL_TO": "a@b.com",
         }
         with patch.dict(os.environ, env, clear=True):
-            with patch(
-                "news48.core.agents.tools.email.smtplib.SMTP"
-            ) as mock_smtp:
+            with patch("news48.core.agents.tools.email.smtplib.SMTP") as mock_smtp:
                 mock_server = MagicMock()
                 mock_smtp.return_value.__enter__ = lambda s: mock_server
                 mock_smtp.return_value.__exit__ = MagicMock(return_value=False)
@@ -399,9 +365,7 @@ class TestWriteSentinelReport:
         report = json.loads(report_path.read_text())
         assert report["status"] == "HEALTHY"
 
-    def test_invalid_json_metrics_falls_back_to_raw(
-        self, tmp_path, monkeypatch
-    ):
+    def test_invalid_json_metrics_falls_back_to_raw(self, tmp_path, monkeypatch):
         from news48.core import config
         from news48.core.agents.tools.sentinel import write_sentinel_report
 
@@ -535,9 +499,7 @@ class TestPerformWebSearch:
 
         with patch.object(searxng, "SEARXNG_URL", "http://localhost:8888"):
             with pytest.raises(ValueError, match="pages"):
-                searxng.perform_web_search(
-                    reason="test", query="hello", pages=0
-                )
+                searxng.perform_web_search(reason="test", query="hello", pages=0)
 
     def test_successful_search_returns_results(self):
         from news48.core.agents.tools import searxng
@@ -560,9 +522,7 @@ class TestPerformWebSearch:
                 mock_client = MagicMock()
                 mock_client.get.return_value = mock_response
                 mock_client_cls.return_value.__enter__ = lambda s: mock_client
-                mock_client_cls.return_value.__exit__ = MagicMock(
-                    return_value=False
-                )
+                mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
 
                 result = json.loads(
                     searxng.perform_web_search(
@@ -572,10 +532,7 @@ class TestPerformWebSearch:
 
                 assert result["error"] == ""
                 assert result["result"]["count"] == 1
-                assert (
-                    result["result"]["findings"][0]["url"]
-                    == "https://example.com/1"
-                )
+                assert result["result"]["findings"][0]["url"] == "https://example.com/1"
 
     def test_partial_failure_returns_error(self):
         import httpx
@@ -585,18 +542,12 @@ class TestPerformWebSearch:
         with patch.object(searxng, "SEARXNG_URL", "http://localhost:8888"):
             with patch("httpx.Client") as mock_client_cls:
                 mock_client = MagicMock()
-                mock_client.get.side_effect = httpx.HTTPError(
-                    "Connection refused"
-                )
+                mock_client.get.side_effect = httpx.HTTPError("Connection refused")
                 mock_client_cls.return_value.__enter__ = lambda s: mock_client
-                mock_client_cls.return_value.__exit__ = MagicMock(
-                    return_value=False
-                )
+                mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
 
                 result = json.loads(
-                    searxng.perform_web_search(
-                        reason="test", query="test", pages=1
-                    )
+                    searxng.perform_web_search(reason="test", query="test", pages=1)
                 )
 
                 assert result["result"]["count"] == 0
@@ -609,6 +560,61 @@ class TestPerformWebSearch:
 # ---------------------------------------------------------------------------
 
 
+class TestMarkdownifyConversion:
+    """Test that markdownify is used correctly for HTML-to-markdown conversion."""
+
+    def test_convert_simple_html(self):
+        """markdownify should convert basic HTML to markdown."""
+        from markdownify import markdownify
+
+        html = "<p>Hello <strong>world</strong></p>"
+        result = markdownify(html)
+        assert "Hello" in result
+        assert "world" in result
+
+    def test_convert_returns_string_not_dict(self):
+        """markdownify returns a plain string, not a dict with 'content' key."""
+        from markdownify import markdownify
+
+        result = markdownify("<p>test</p>")
+        assert isinstance(result, str)
+        assert not isinstance(result, dict)
+
+    def test_convert_empty_html(self):
+        """markdownify on empty HTML returns empty string."""
+        from markdownify import markdownify
+
+        result = markdownify("")
+        assert result == "" or result.strip() == ""
+
+    def test_convert_preserves_links(self):
+        """markdownify should convert <a> tags to markdown links."""
+        from markdownify import markdownify
+
+        html = '<a href="https://example.com">Click here</a>'
+        result = markdownify(html)
+        assert "Click here" in result
+        assert "https://example.com" in result
+
+    def test_convert_headers(self):
+        """markdownify should convert <h1> to markdown headers."""
+        from markdownify import markdownify
+
+        html = "<h1>Title</h1><p>Body text</p>"
+        result = markdownify(html)
+        assert "Title" in result
+        assert "Body text" in result
+
+    def test_convert_lists(self):
+        """markdownify should convert <ul>/<li> to markdown lists."""
+        from markdownify import markdownify
+
+        html = "<ul><li>Item 1</li><li>Item 2</li></ul>"
+        result = markdownify(html)
+        assert "Item 1" in result
+        assert "Item 2" in result
+
+
 class TestFetchWebpageContent:
     """Test fetch_webpage_content tool."""
 
@@ -617,9 +623,7 @@ class TestFetchWebpageContent:
         from news48.core.agents.tools.bypass import fetch_webpage_content
 
         result = json.loads(
-            await fetch_webpage_content(
-                reason="test", urls=["http://127.0.0.1/secret"]
-            )
+            await fetch_webpage_content(reason="test", urls=["http://127.0.0.1/secret"])
         )
 
         assert len(result["result"]["errors"]) == 1
@@ -634,9 +638,7 @@ class TestFetchWebpageContent:
     async def test_empty_url_list(self):
         from news48.core.agents.tools.bypass import fetch_webpage_content
 
-        result = json.loads(
-            await fetch_webpage_content(reason="test", urls=[])
-        )
+        result = json.loads(await fetch_webpage_content(reason="test", urls=[]))
 
         assert result["result"]["requested"] == 0
         assert result["result"]["succeeded"] == 0
@@ -666,8 +668,8 @@ class TestFetchWebpageContent:
                 return_value="<p>Hello world</p>",
             ),
             patch(
-                "news48.core.agents.tools.bypass.convert",
-                return_value={"content": "Hello world"},
+                "news48.core.agents.tools.bypass.markdownify",
+                return_value="Hello world",
             ),
         ):
             result = json.loads(
@@ -681,6 +683,56 @@ class TestFetchWebpageContent:
             assert result["result"]["succeeded"] == 1
             assert result["result"]["errors"] == []
             assert result["result"]["results"][0]["content"] == "Hello world"
+
+    @pytest.mark.anyio
+    async def test_successful_fetch_no_markdown(self):
+        """When markdown=False, content should be raw (stripped) HTML."""
+        from news48.core.agents.tools.bypass import fetch_webpage_content
+
+        with (
+            patch("news48.core.agents.tools.bypass.validate_url_not_private"),
+            patch(
+                "news48.core.agents.tools.bypass.Services.byparr",
+                return_value="http://localhost:8191",
+            ),
+            patch(
+                "news48.core.agents.tools.bypass.get_base_url",
+                return_value="example.com",
+            ),
+            patch(
+                "news48.core.agents.tools.bypass.get_byparr_solution",
+                new_callable=AsyncMock,
+                return_value=MagicMock(),
+            ),
+            patch(
+                "news48.core.agents.tools.bypass.fetch_url_content",
+                new_callable=AsyncMock,
+                return_value="<p>Hello world</p>",
+            ),
+            patch(
+                "news48.core.agents.tools.bypass.strip_html_noise",
+                return_value="Hello world",
+            ),
+        ):
+            result = json.loads(
+                await fetch_webpage_content(
+                    reason="test",
+                    urls=["https://example.com/page"],
+                    markdown=False,
+                )
+            )
+
+            assert result["result"]["succeeded"] == 1
+            assert result["result"]["results"][0]["content"] == "Hello world"
+
+    @pytest.mark.anyio
+    async def test_markdownify_called_instead_of_convert(self):
+        """Verify the bypass module uses markdownify, not the old convert."""
+        import news48.core.agents.tools.bypass as bypass_mod
+
+        # The module should have 'markdownify' imported, not 'convert'
+        assert hasattr(bypass_mod, "markdownify")
+        assert not hasattr(bypass_mod, "convert")
 
 
 # ---------------------------------------------------------------------------

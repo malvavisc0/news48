@@ -8,12 +8,12 @@ import typer
 
 from news48.core.agents.tools.planner import (
     _derive_plan_status_from_steps,
-    _ensure_plans_dir,
     _normalize_plan_for_consistency,
     _read_plan,
     _task_family,
     _write_plan,
 )
+from news48.core.agents.tools.planner._db import db_iter_plans
 
 from ._common import emit_error, emit_json
 
@@ -21,16 +21,10 @@ plans_app = typer.Typer(help="Inspect and manage agent execution plans.")
 
 
 def _iter_plans(status: str = "") -> list[dict]:
-    plans_dir = _ensure_plans_dir()
-    items = []
-    for plan_file in plans_dir.glob("*.json"):
-        try:
-            plan = json.loads(plan_file.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            continue
-        if status and plan.get("status") != status.lower():
-            continue
-        items.append(plan)
+    if status:
+        items = db_iter_plans(status=status.lower())
+    else:
+        items = db_iter_plans()
     items.sort(key=lambda p: p.get("created_at", ""))
     return items
 
@@ -60,7 +54,7 @@ def _remediate_plan(
     parent_statuses: dict[str, str],
     all_plans: list[dict[str, Any]] | None = None,
 ) -> list[str]:
-    """Mutate a plan in-place to repair common planner/executor corruption."""
+    """Mutate a plan in-place to repair common corruption."""
     actions: list[str] = []
 
     if _normalize_plan_for_consistency(plan):
@@ -114,7 +108,9 @@ def _remediate_plan(
     return actions
 
 
-def _dedupe_active_plans(plans: list[dict[str, Any]]) -> list[tuple[str, str]]:
+def _dedupe_active_plans(
+    plans: list[dict[str, Any]],
+) -> list[tuple[str, str]]:
     """Fail newer duplicates in same family and parent scope."""
     active = [p for p in plans if p.get("status") in {"pending", "executing"}]
     active.sort(key=lambda p: p.get("created_at", ""))
@@ -217,7 +213,7 @@ def plans_show(
         print(f"  - {condition}")
     print("Steps:")
     for step in plan.get("steps", []):
-        print(f"  - {step['id']} [{step['status']}] {step['description']}")
+        print(f"  - {step['id']} [{step['status']}] " f"{step['description']}")
 
 
 @plans_app.command(name="cancel")
@@ -246,7 +242,7 @@ def plans_remediate(
     apply: bool = typer.Option(False, "--apply", help="Persist changes"),
     output_json: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Audit/repair plan corruption and dedupe active pipeline plans."""
+    """Audit/repair plan corruption and dedupe active plans."""
     plans = _iter_plans()
     parent_statuses = {p["id"]: p.get("status", "") for p in plans}
     report: dict[str, Any] = {

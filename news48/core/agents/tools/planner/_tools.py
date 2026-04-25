@@ -1,16 +1,12 @@
 """Public planner tool functions: create, update, claim, list, recover."""
 
-import fcntl
-import json
 import os
 import uuid
 
-from news48.core import config
-
 from .._helpers import _safe_json
-from ._constants import _ACTIVE_PLAN_STATUSES, _TERMINAL_PLAN_STATUSES
+from ._constants import _TERMINAL_PLAN_STATUSES
+from ._db import db_claim_plan, db_iter_plans, db_read_plan
 from ._lifecycle import (
-    _auto_complete_campaigns,
     _derive_plan_status_from_steps,
     _find_active_duplicate_plan,
     _infer_parent_plan_id,
@@ -20,7 +16,6 @@ from ._lifecycle import (
     _task_family,
 )
 from ._storage import (
-    _ensure_plans_dir,
     _no_eligible_plans_response,
     _now,
     _read_plan,
@@ -40,7 +35,7 @@ def create_plan(
     scope_value: str = "",
     campaign_id: str = "",
 ) -> str:
-    """Create a new execution plan, persist to data/plans/{id}.json.
+    """Create a new execution plan, persist to the plans database.
 
     ## When to Use
     Use this tool when you need to break down a complex task into ordered
@@ -51,7 +46,7 @@ def create_plan(
     - Track progress through multi-step workflows
     - Maintain state across agent interactions and restarts
     - Record results for each step individually
-    - Plans are persisted to disk and survive process exits
+    - Plans are persisted to database and survive process exits
 
     ## Parameters
     - `reason` (str): Why planning is needed for this task
@@ -102,7 +97,7 @@ def create_plan(
                 return _safe_json(
                     {
                         "result": "",
-                        "error": f"success_conditions[{i}] cannot be blank",
+                        "error": (f"success_conditions[{i}] cannot be blank"),
                     }
                 )
 
@@ -111,7 +106,7 @@ def create_plan(
             return _safe_json(
                 {
                     "result": "",
-                    "error": "plan_kind must be 'execution' or 'campaign'",
+                    "error": ("plan_kind must be 'execution' or 'campaign'"),
                 }
             )
 
@@ -125,18 +120,12 @@ def create_plan(
         # instead to prevent a blocking dependency that can never be
         # resolved (campaigns are never completed by executors).
         if resolved_parent_id:
-            parent_plan_file = config.PLANS_DIR / f"{resolved_parent_id}.json"
-            if parent_plan_file.exists():
-                try:
-                    parent_data = json.loads(
-                        parent_plan_file.read_text(encoding="utf-8")
-                    )
-                    if parent_data.get("plan_kind") == "campaign":
-                        if not normalized_campaign_id:
-                            normalized_campaign_id = resolved_parent_id
-                        resolved_parent_id = None
-                except (json.JSONDecodeError, OSError):
-                    pass
+            parent_data = db_read_plan(resolved_parent_id)
+            if parent_data is not None:
+                if parent_data.get("plan_kind") == "campaign":
+                    if not normalized_campaign_id:
+                        normalized_campaign_id = resolved_parent_id
+                    resolved_parent_id = None
 
         duplicate = _find_active_duplicate_plan(
             task,
@@ -205,8 +194,9 @@ def create_plan(
 
         if normalized_plan_kind == "campaign":
             response["warning"] = (
-                "Campaign plans are NOT directly executable by the executor. "
-                "You MUST create at least one child execution plan with "
+                "Campaign plans are NOT directly executable by the "
+                "executor. You MUST create at least one child execution "
+                "plan with "
                 f'campaign_id="{plan_id}" in this same planning cycle. '
                 "A campaign with zero children will be auto-failed by "
                 "remediation."
@@ -257,15 +247,7 @@ def update_plan(
     valid_statuses = {"pending", "executing", "completed", "failed"}
     valid_plan_statuses = {"pending", "executing", "completed", "failed"}
 
-    # Acquire file lock to prevent concurrent update_plan / claim_plan races.
-    plans_dir = _ensure_plans_dir()
-    lock_path = plans_dir / ".claim.lock"
-    lock_fd = None
-
     try:
-        lock_fd = open(lock_path, "w")
-        fcntl.flock(lock_fd, fcntl.LOCK_EX)
-
         # Read existing plan
         try:
             plan = _read_plan(plan_id)
@@ -273,7 +255,9 @@ def update_plan(
             return _safe_json(
                 {
                     "result": "",
-                    "error": f"Plan '{plan_id}' not found. " f"Use create_plan first.",
+                    "error": (
+                        f"Plan '{plan_id}' not found. " f"Use create_plan first."
+                    ),
                 }
             )
 
@@ -298,8 +282,8 @@ def update_plan(
         plan_is_terminal = plan.get("status") in _TERMINAL_PLAN_STATUSES
 
         # Find and update the step. Support both canonical step IDs
-        # ("step-1") and exact description matches (e.g. "verification-step")
-        # for compatibility with agent outputs.
+        # ("step-1") and exact description matches (e.g.
+        # "verification-step") for compatibility with agent outputs.
         step_found = False
         changed = False
         target_step = None
@@ -327,7 +311,8 @@ def update_plan(
                         "result": _serialize_plan(plan),
                         "error": "",
                         "warning": (
-                            "Plan is already terminal. No changes applied. "
+                            "Plan is already terminal. "
+                            "No changes applied. "
                             "Do not call update_plan again."
                         ),
                     }
@@ -368,7 +353,7 @@ def update_plan(
             return _safe_json(
                 {
                     "result": "",
-                    "error": f"Step '{step_id}' not found in plan.",
+                    "error": (f"Step '{step_id}' not found in plan."),
                 }
             )
 
@@ -381,7 +366,8 @@ def update_plan(
                         "result": _serialize_plan(plan),
                         "error": "",
                         "warning": (
-                            "Plan is already terminal. No changes applied. "
+                            "Plan is already terminal. "
+                            "No changes applied. "
                             "Do not call update_plan again."
                         ),
                     }
@@ -397,7 +383,8 @@ def update_plan(
                         "result": _serialize_plan(plan),
                         "error": "",
                         "warning": (
-                            "Plan is already terminal. No changes applied. "
+                            "Plan is already terminal. "
+                            "No changes applied. "
                             "Do not call update_plan again."
                         ),
                     }
@@ -437,7 +424,8 @@ def update_plan(
                         "result": _serialize_plan(plan),
                         "error": "",
                         "warning": (
-                            "Plan is already terminal. No changes applied. "
+                            "Plan is already terminal. "
+                            "No changes applied. "
                             "Do not call update_plan again."
                         ),
                     }
@@ -456,7 +444,7 @@ def update_plan(
                     plan["claimed_at"] = timestamp
                     changed = True
                 elif plan.get("claimed_at") is None:
-                    # Owner exists but claimed_at was cleared — restore it
+                    # Owner exists but claimed_at was cleared — restore
                     plan["claimed_at"] = timestamp
                     changed = True
             else:
@@ -485,16 +473,13 @@ def update_plan(
         response: dict = {"result": _serialize_plan(plan), "error": ""}
         if derived_status and derived_status in _TERMINAL_PLAN_STATUSES:
             response["notice"] = (
-                f"Plan auto-transitioned to '{derived_status}' because all "
-                "steps are terminal. Do not call update_plan again."
+                f"Plan auto-transitioned to '{derived_status}' "
+                "because all steps are terminal. "
+                "Do not call update_plan again."
             )
         return _safe_json(response)
     except Exception as exc:
         return _safe_json({"result": "", "error": str(exc)})
-    finally:
-        if lock_fd is not None:
-            fcntl.flock(lock_fd, fcntl.LOCK_UN)
-            lock_fd.close()
 
 
 def release_plans_for_owner(owner: str) -> dict:
@@ -509,20 +494,11 @@ def release_plans_for_owner(owner: str) -> dict:
     Returns:
         Dict with released plan IDs and count.
     """
-    plans_dir = _ensure_plans_dir()
     released = []
     timestamp = _now()
 
-    for plan_file in plans_dir.glob("*.json"):
-        try:
-            plan = json.loads(plan_file.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            continue
-
+    for plan in db_iter_plans(status="executing"):
         if plan.get("claimed_by") != owner:
-            continue
-
-        if plan.get("status") != "executing":
             continue
 
         # Reset plan to pending
@@ -549,17 +525,12 @@ def recover_stale_plans(reason: str) -> str:
     This is used for autonomous recovery on worker startup.
     """
     try:
-        plans_dir = _ensure_plans_dir()
+        all_plans = db_iter_plans()
         scanned = 0
         normalized = 0
         requeued = 0
 
-        for plan_file in plans_dir.glob("*.json"):
-            try:
-                plan = json.loads(plan_file.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                continue
-
+        for plan in all_plans:
             scanned += 1
 
             if _normalize_plan_for_consistency(plan):
@@ -617,74 +588,27 @@ def claim_plan(reason: str, owner: str | None = None) -> str:
       nothing can be claimed
     - ``error``: Empty on success
     """
-    lock_fd = None
     try:
-        # Serialize concurrent claim attempts with a file lock so two
-        # executors cannot claim the same plan.
-        plans_dir = _ensure_plans_dir()
-        lock_path = plans_dir / ".claim.lock"
-        lock_fd = open(lock_path, "w")
-        fcntl.flock(lock_fd, fcntl.LOCK_EX)
-
-        all_plans = {}
-        pending_plans = []
-
-        for plan_file in plans_dir.glob("*.json"):
-            try:
-                plan = json.loads(plan_file.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                continue
-
+        # Phase 1: Heal stale/inconsistent plans (non-atomic).
+        for plan in db_iter_plans():
             if _normalize_plan_for_consistency(plan):
                 _write_plan(plan)
-
-            all_plans[plan["id"]] = plan
-
-            # Requeue stale executing plans
             if _is_plan_stale(plan):
                 _requeue_stale_plan(plan)
 
-            if plan.get("status") == "pending":
-                pending_plans.append(plan)
+        # Phase 2: Atomic claim via BEGIN IMMEDIATE.
+        claim_owner = owner or f"pid:{os.getpid()}"
+        claimed = db_claim_plan(
+            owner=claim_owner,
+            timestamp=_now(),
+        )
 
-        if not pending_plans:
+        if claimed is None:
             return _no_eligible_plans_response()
 
-        pending_plans.sort(key=lambda p: p.get("created_at", ""))
-
-        for plan in pending_plans:
-            if plan.get("plan_kind", "execution") == "campaign":
-                continue
-
-            parent_id = plan.get("parent_id")
-            if parent_id:
-                parent = all_plans.get(parent_id)
-                if not parent:
-                    continue  # Orphaned parent — skip
-                if (
-                    parent.get("plan_kind") != "campaign"
-                    and parent.get("status") != "completed"
-                ):
-                    continue  # Non-campaign parent must be completed
-                # Campaign parents: always allow children to be claimed
-
-            plan["status"] = "executing"
-            plan["updated_at"] = _now()
-            if owner:
-                plan["claimed_by"] = owner
-            else:
-                plan["claimed_by"] = f"pid:{os.getpid()}"
-            plan["claimed_at"] = _now()
-            _write_plan(plan)
-            return _safe_json({"result": _serialize_plan(plan), "error": ""})
-
-        return _no_eligible_plans_response()
+        return _safe_json({"result": _serialize_plan(claimed), "error": ""})
     except Exception as exc:
         return _safe_json({"result": "", "error": str(exc)})
-    finally:
-        if lock_fd is not None:
-            fcntl.flock(lock_fd, fcntl.LOCK_UN)
-            lock_fd.close()
 
 
 def list_plans(reason: str, status: str = "") -> str:
@@ -707,21 +631,17 @@ def list_plans(reason: str, status: str = "") -> str:
     - ``error``: Empty on success
     """
     try:
-        plans_dir = _ensure_plans_dir()
         status_set: set[str] = set()
         if status:
             status_set = {s.strip().lower() for s in status.split(",") if s.strip()}
+
+        if status_set:
+            plans_list = db_iter_plans(status=status_set)
+        else:
+            plans_list = db_iter_plans()
+
         plans = []
-
-        for plan_file in plans_dir.glob("*.json"):
-            try:
-                plan = json.loads(plan_file.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                continue
-
-            if status_set and plan.get("status") not in status_set:
-                continue
-
+        for plan in plans_list:
             plans.append(
                 {
                     "plan_id": plan["id"],
@@ -749,18 +669,9 @@ def peek_next_plan() -> str | None:
     claiming them. Used by the executor actor to determine which conditional
     skills to load for the executor agent.
     """
-    plans_dir = _ensure_plans_dir()
-    pending = []
-    all_plans = {}
-
-    for plan_file in plans_dir.glob("*.json"):
-        try:
-            plan = json.loads(plan_file.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            continue
-        all_plans[plan["id"]] = plan
-        if plan.get("status") == "pending":
-            pending.append(plan)
+    all_plans_list = db_iter_plans()
+    all_plans = {p["id"]: p for p in all_plans_list}
+    pending = [p for p in all_plans_list if p.get("status") == "pending"]
 
     pending.sort(key=lambda p: p.get("created_at", ""))
     for plan in pending:

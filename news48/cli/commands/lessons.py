@@ -104,6 +104,7 @@ def lessons_add(
             f"Invalid agent '{agent}'. " f"Must be one of: {', '.join(AGENT_NAMES)}",
             as_json=output_json,
         )
+        return
 
     # Reuse the agent tool's save_lesson function
     from news48.core.agents.tools.lessons import save_lesson

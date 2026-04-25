@@ -494,12 +494,12 @@ Expected: `{"error": "..."}` to stdout, exit code 1
 
 ## 14. Lessons
 
-### 14.1 Lessons list -- empty (no data/lessons.md)
+### 14.1 Lessons list -- empty (no data/lessons.db)
 ```bash
-rm -f data/lessons.md
+rm -f data/lessons.db
 uv run news48 lessons list
 ```
-Expected: `No lessons found (data/lessons.md does not exist).`
+Expected: `No lessons found (data/lessons.db does not exist).`
 
 ### 14.2 Lessons list -- JSON empty
 ```bash
@@ -557,7 +557,7 @@ Expected: `{"error": "Invalid agent 'badname'. Must be one of: ..."}`, exit code
 
 ### 14.11 Cleanup
 ```bash
-rm -f data/lessons.md
+rm -f data/lessons.db
 ```
 
 ---
