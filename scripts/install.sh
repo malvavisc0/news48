@@ -15,6 +15,7 @@ INSTALL_DIR="${NEWS48_DIR:-$HOME/news48}"
 
 # Files needed for Docker deployment
 REQUIRED_FILES=(
+    "Dockerfile"
     "docker-compose.yml"
     "docker-compose.prod.yml"
     "docker-compose.external-llm.yml"
@@ -118,23 +119,35 @@ if ! command -v openssl &>/dev/null; then
     exit 1
 fi
 
-# ─── Download Files ──────────────────────────────────────────────────────────
-printf "\n${BOLD}Downloading news48 files to $INSTALL_DIR...${RESET}\n"
+# ─── Clone Repository ────────────────────────────────────────────────────────
+printf "\n${BOLD}Downloading news48 to $INSTALL_DIR...${RESET}\n"
 
-mkdir -p "$INSTALL_DIR/scripts" "$INSTALL_DIR/searxng"
+if [ -d "$INSTALL_DIR/.git" ]; then
+    info "Repository already exists — pulling latest changes..."
+    cd "$INSTALL_DIR"
+    git pull --ff-only 2>/dev/null || warn "git pull failed, continuing with existing files"
+else
+    if [ -d "$INSTALL_DIR" ] && [ "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+        warn "$INSTALL_DIR is not empty."
+        read -rp "Overwrite with fresh clone? (y/N): " overwrite_dir <&3
+        if [[ "$overwrite_dir" =~ ^[Yy]$ ]]; then
+            rm -rf "$INSTALL_DIR"
+        else
+            error "Aborting. Choose a different directory or remove the existing one."
+            exit 1
+        fi
+    fi
+    git clone https://github.com/malvavisc0/news48.git "$INSTALL_DIR"
+fi
 
-for f in "${REQUIRED_FILES[@]}"; do
-    download "$REPO_RAW/$f" "$INSTALL_DIR/$f"
-done
+cd "$INSTALL_DIR"
+
+# Make scripts executable
 for f in "${REQUIRED_SCRIPTS[@]}"; do
-    download "$REPO_RAW/$f" "$INSTALL_DIR/$f"
-    chmod +x "$INSTALL_DIR/$f"
-done
-for f in "${REQUIRED_CONFIGS[@]}"; do
-    download "$REPO_RAW/$f" "$INSTALL_DIR/$f"
+    chmod +x "$f" 2>/dev/null || true
 done
 
-success "All files downloaded to $INSTALL_DIR"
+success "Repository ready at $INSTALL_DIR"
 
 # ─── Enter install directory ─────────────────────────────────────────────────
 cd "$INSTALL_DIR"

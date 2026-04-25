@@ -236,13 +236,13 @@ One-liner install:
 curl -fsSL https://raw.githubusercontent.com/malvavisc0/news48/master/scripts/install.sh | bash
 ```
 
-Or clone first:
+Or clone and run manually:
 ```bash
 git clone https://github.com/malvavisc0/news48.git && cd news48
 ./scripts/install.sh
 ```
 
-The interactive installer downloads only the required files (no git clone needed), checks prerequisites, prompts for deployment mode (GPU or external LLM), generates secure passwords, and launches all services.
+The interactive installer clones the repository, checks prerequisites, prompts for deployment mode (GPU or external LLM), generates secure passwords, and launches all services.
 
 **Option B — Local (uv):**
 
