@@ -444,6 +444,16 @@ printf "\n${BOLD}Service status:${RESET}\n"
 "${COMPOSE_CMD[@]}" ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || \
     "${COMPOSE_CMD[@]}" ps
 
+# ─── Seed Database ──────────────────────────────────────────────────────────
+COMPOSE_CMD_STR="${COMPOSE_CMD[*]}"
+printf "\n${BOLD}Seeding database...${RESET}\n"
+if "${COMPOSE_CMD[@]}" exec -T dramatiq-worker news48 seed /app/seed.txt 2>&1; then
+    success "Feeds seeded"
+else
+    warn "Seeding failed — you can run it manually later:"
+    info "  ${COMPOSE_CMD_STR} exec dramatiq-worker news48 seed /app/seed.txt"
+fi
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 printf "\n"
 printf "${BOLD}${GREEN}╔═══════════════════════════════════════════════╗${RESET}\n"
@@ -455,7 +465,6 @@ printf "  ${BOLD}Mode:${RESET}     %s\n" "$([ "$DEPLOY_MODE" = "standard" ] && e
 printf "  ${BOLD}Web UI:${RESET}   ${CYAN}http://localhost:8000${RESET}\n"
 printf "  ${BOLD}Health:${RESET}   ${CYAN}http://localhost:8000/health${RESET}\n"
 printf "\n"
-COMPOSE_CMD_STR="${COMPOSE_CMD[*]}"
 printf "  ${BOLD}Useful commands:${RESET}\n"
 printf "    View logs:     ${DIM}%s logs -f${RESET}\n" "$COMPOSE_CMD_STR"
 printf "    Shell access:  ${DIM}%s exec dramatiq-worker bash${RESET}\n" "$COMPOSE_CMD_STR"
