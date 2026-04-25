@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ─── Configuration ───────────────────────────────────────────────────────────
-REPO_RAW="https://raw.githubusercontent.com/malvavisc0/news48/main"
+REPO_RAW="https://raw.githubusercontent.com/malvavisc0/news48/master"
 INSTALL_DIR="${NEWS48_DIR:-$HOME/news48}"
 
 # Files needed for Docker deployment

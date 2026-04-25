@@ -233,7 +233,7 @@ news48 mcp revoke-key <key>          # Revoke a key
 
 One-liner install:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/malvavisc0/news48/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/malvavisc0/news48/master/scripts/install.sh | bash
 ```
 
 Or clone first:
