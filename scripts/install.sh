@@ -454,6 +454,13 @@ else
     info "  ${COMPOSE_CMD_STR} exec dramatiq-worker news48 seed /app/seed.txt"
 fi
 
+# ─── Detect IP ───────────────────────────────────────────────────────────────
+# Try to get the machine's LAN IP for remote access
+HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+[ -z "$HOST_IP" ] && HOST_IP=$(ip -4 addr show scope global 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -1)
+[ -z "$HOST_IP" ] && HOST_IP=$(ifconfig 2>/dev/null | awk '/inet /{print $2}' | grep -v '127.0.0.1' | head -1)
+[ -z "$HOST_IP" ] && HOST_IP="localhost"
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 printf "\n"
 printf "${BOLD}${GREEN}╔═══════════════════════════════════════════════╗${RESET}\n"
@@ -462,8 +469,8 @@ printf "${BOLD}${GREEN}╚══════════════════
 printf "\n"
 printf "  ${BOLD}Location:${RESET} %s\n" "$INSTALL_DIR"
 printf "  ${BOLD}Mode:${RESET}     %s\n" "$([ "$DEPLOY_MODE" = "standard" ] && echo "Standard (NVIDIA GPU)" || echo "External LLM")"
-printf "  ${BOLD}Web UI:${RESET}   ${CYAN}http://localhost:8000${RESET}\n"
-printf "  ${BOLD}Health:${RESET}   ${CYAN}http://localhost:8000/health${RESET}\n"
+printf "  ${BOLD}Web UI:${RESET}   ${CYAN}http://${HOST_IP}:8000${RESET}\n"
+printf "  ${BOLD}Health:${RESET}   ${CYAN}http://${HOST_IP}:8000/health${RESET}\n"
 printf "\n"
 printf "  ${BOLD}Useful commands:${RESET}\n"
 printf "    View logs:     ${DIM}%s logs -f${RESET}\n" "$COMPOSE_CMD_STR"
