@@ -393,6 +393,15 @@ if [ "$DEPLOY_MODE" = "external" ]; then
     success "External LLM configured: ${api_base} (${model_name})"
 fi
 
+# ─── Clean stale volumes ────────────────────────────────────────────────────
+# If we generated fresh passwords, old MySQL volumes will have mismatched
+# credentials. Remove them so MySQL re-initializes with the new passwords.
+if [ -n "${MYSQL_PASSWORD:-}" ]; then
+    printf "\n${BOLD}Cleaning stale Docker volumes...${RESET}\n"
+    "${COMPOSE_CMD[@]}" down -v 2>/dev/null || true
+    success "Volumes cleaned"
+fi
+
 # ─── Launch Services ─────────────────────────────────────────────────────────
 printf "\n${BOLD}Pulling images and starting services...${RESET}\n"
 info "This may take several minutes on first run (pulling images, starting containers)."
