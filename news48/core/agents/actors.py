@@ -266,9 +266,7 @@ else:
     parser_cycle = _require_registered_actor("parser_cycle")
     scheduled_parser = _require_registered_actor("scheduled_parser")
     fact_check_cycle = _require_registered_actor("fact_check_cycle")
-    scheduled_fact_checker = _require_registered_actor(
-        "scheduled_fact_checker"
-    )
+    scheduled_fact_checker = _require_registered_actor("scheduled_fact_checker")
     feed_fetch_cycle = _require_registered_actor("feed_fetch_cycle")
     download_cycle = _require_registered_actor("download_cycle")
     scheduled_feed_fetch = _require_registered_actor("scheduled_feed_fetch")

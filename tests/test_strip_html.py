@@ -160,9 +160,7 @@ class TestStripHtmlTagsInUpdateArticle:
         db_session.flush()
         return article.id
 
-    def test_strips_html_from_summary(
-        self, article_id: int, db_session
-    ) -> None:
+    def test_strips_html_from_summary(self, article_id: int, db_session) -> None:
         # Clear existing summary first so SD-1 allows the update
         # (SD-1: only update metadata if current value is NULL/empty)
         from news48.core.database.articles import update_article
@@ -173,9 +171,7 @@ class TestStripHtmlTagsInUpdateArticle:
             art.summary = None
             db_session.commit()
 
-        update_article(
-            article_id, content="clean", summary="<b>Bold</b> summary"
-        )
+        update_article(article_id, content="clean", summary="<b>Bold</b> summary")
         from news48.core.database.articles import get_article_by_id
 
         article = get_article_by_id(article_id)
@@ -184,9 +180,7 @@ class TestStripHtmlTagsInUpdateArticle:
     def test_strips_html_from_title(self, article_id: int) -> None:
         from news48.core.database.articles import update_article
 
-        update_article(
-            article_id, content="clean", title="<i>Italic</i> Title"
-        )
+        update_article(article_id, content="clean", title="<i>Italic</i> Title")
         from news48.core.database.articles import get_article_by_id
 
         article = get_article_by_id(article_id)
@@ -256,9 +250,7 @@ class TestStripHtmlTagsBasic:
         assert result == "Text"
 
     def test_tag_with_attributes(self) -> None:
-        result = strip_html_tags(
-            '<a href="https://example.com" class="link">Click</a>'
-        )
+        result = strip_html_tags('<a href="https://example.com" class="link">Click</a>')
         assert result == "Click"
 
     def test_multiple_tags(self) -> None:
@@ -432,10 +424,7 @@ class TestStripHtmlTagsCombined:
     """Combined scenarios: tags + entities + truncation."""
 
     def test_tags_entities_and_truncation(self) -> None:
-        text = (
-            "<p>It\x26#039;s \x26quot;great\x26quot;"
-            " \x26amp; fun</p>[\x26#8230;]"
-        )
+        text = "<p>It\x26#039;s \x26quot;great\x26quot;" " \x26amp; fun</p>[\x26#8230;]"
         result = strip_html_tags(text)
         assert result == 'It\'s "great" & fun'
 
