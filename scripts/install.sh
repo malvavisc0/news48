@@ -191,20 +191,24 @@ done
 
 # ─── Strip GPU references for External LLM mode ────────────────────────────
 if [ "$DEPLOY_MODE" = "external" ]; then
-    printf "\n${BOLD}Removing GPU references from docker-compose.yml...${RESET}\n"
+    printf "\n${BOLD}Removing GPU references from compose files...${RESET}\n"
     python3 -c "
 import re, sys
-with open('docker-compose.yml') as f:
-    content = f.read()
-# Remove deploy blocks containing nvidia GPU reservations
-content = re.sub(
-    r'    deploy:\n      resources:\n        reservations:\n          devices:\n            - driver: nvidia\n              count: all\n              capabilities: \[ gpu \]\n',
-    '',
-    content,
+gpu_pattern = re.compile(
+    r'    deploy:\n      resources:\n        reservations:\n          devices:\n            - driver: nvidia\n              count: all\n              capabilities: \[ gpu \]\n'
 )
-with open('docker-compose.yml', 'w') as f:
-    f.write(content)
-print('GPU references removed')
+for fname in ['docker-compose.yml', 'docker-compose.prod.yml']:
+    try:
+        with open(fname) as f:
+            content = f.read()
+        cleaned = gpu_pattern.sub('', content)
+        if cleaned != content:
+            with open(fname, 'w') as f:
+                f.write(cleaned)
+            print(f'  GPU references removed from {fname}')
+    except FileNotFoundError:
+        pass
+print('Done')
 " || warn "Could not strip GPU references — external-llm override will handle it"
 fi
 
