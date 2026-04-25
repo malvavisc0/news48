@@ -190,7 +190,9 @@ templates.env.filters["format_category_name"] = filters.format_category_name
 @app.get("/")
 async def homepage(
     request: Request,
-    sentiment: str | None = Query(None, pattern="^(positive|negative|neutral)$"),
+    sentiment: str | None = Query(
+        None, pattern="^(positive|negative|neutral)$"
+    ),
 ):
     """Homepage with curated top-10 stories, stats, clusters, expiring articles."""
     from news48.core.database.articles import (
@@ -232,7 +234,9 @@ async def homepage(
                     "title": story.get("title"),
                     "canonical_url": build_canonical_url(
                         site_url,
-                        "/article/{}/{}".format(story["id"], story.get("slug") or ""),
+                        "/article/{}/{}".format(
+                            story["id"], story.get("slug") or ""
+                        ),
                     ),
                 }
                 for story in stories
@@ -342,7 +346,10 @@ async def article_detail(request: Request, article_id: int, slug: str):
 @app.get("/cluster/{cluster_slug}")
 async def cluster_detail(request: Request, cluster_slug: str):
     """Cluster detail page showing all articles matching a tag."""
-    from news48.core.database.articles import get_all_categories, get_articles_by_tag
+    from news48.core.database.articles import (
+        get_all_categories,
+        get_articles_by_tag,
+    )
 
     articles, total = get_articles_by_tag(
         cluster_slug, hours=48, limit=None, parsed=True
@@ -373,7 +380,9 @@ async def cluster_detail(request: Request, cluster_slug: str):
                     "title": item.get("title"),
                     "canonical_url": build_canonical_url(
                         site_url,
-                        "/article/{}/{}".format(item["id"], item.get("slug") or ""),
+                        "/article/{}/{}".format(
+                            item["id"], item.get("slug") or ""
+                        ),
                     ),
                 }
                 for item in articles
@@ -404,7 +413,9 @@ async def cluster_detail(request: Request, cluster_slug: str):
 @app.get("/all")
 async def all_stories(
     request: Request,
-    sentiment: str | None = Query(None, pattern="^(positive|negative|neutral)$"),
+    sentiment: str | None = Query(
+        None, pattern="^(positive|negative|neutral)$"
+    ),
 ):
     """All stories page — shows every parsed article with optional sentiment filter."""
     from news48.core.database.articles import (
@@ -446,7 +457,9 @@ async def all_stories(
                     "title": item.get("title"),
                     "canonical_url": build_canonical_url(
                         site_url,
-                        "/article/{}/{}".format(item["id"], item.get("slug") or ""),
+                        "/article/{}/{}".format(
+                            item["id"], item.get("slug") or ""
+                        ),
                     ),
                 }
                 for item in articles
@@ -479,7 +492,9 @@ async def all_stories(
 async def category_detail(
     request: Request,
     category_slug: str,
-    sentiment: str | None = Query(None, pattern="^(positive|negative|neutral)$"),
+    sentiment: str | None = Query(
+        None, pattern="^(positive|negative|neutral)$"
+    ),
 ):
     """Category detail page showing all articles matching a category."""
     from news48.core.database.articles import (
@@ -503,13 +518,18 @@ async def category_detail(
     stats = get_web_stats(hours=48, parsed=True)
 
     # Look up display name from categories list
-    cat_match = next((c for c in categories if c["slug"] == category_slug), None)
-    raw_name = cat_match["name"] if cat_match else category_slug.replace("-", " ")
+    cat_match = next(
+        (c for c in categories if c["slug"] == category_slug), None
+    )
+    raw_name = (
+        cat_match["name"] if cat_match else category_slug.replace("-", " ")
+    )
     category_name = filters.format_category_name(raw_name)
     site_url = _site_url(request)
     canonical_url = build_canonical_url(site_url, f"/category/{category_slug}")
     category_title = (
-        f"{category_name} News Today | Live Verified Stories " "in the Last 48 Hours"
+        f"{category_name} News Today | Live Verified Stories "
+        "in the Last 48 Hours"
     )
     category_description = (
         f"The latest {category_name} news from the last 48 hours — "
@@ -530,7 +550,9 @@ async def category_detail(
                     "title": item.get("title"),
                     "canonical_url": build_canonical_url(
                         site_url,
-                        "/article/{}/{}".format(item["id"], item.get("slug") or ""),
+                        "/article/{}/{}".format(
+                            item["id"], item.get("slug") or ""
+                        ),
                     ),
                 }
                 for item in articles
@@ -631,6 +653,26 @@ async def llms_txt():
     """Serve the llms.txt file for LLM consumption."""
     llms_path = Path(__file__).parent / "llms.txt"
     return llms_path.read_text(encoding="utf-8")
+
+
+@app.get("/docs")
+async def docs_page(request: Request):
+    """Documentation page explaining news48 architecture and MCP setup."""
+    mcp_domain = os.getenv("MCP_DOMAIN", "news48.io")
+    seo = build_seo_meta(
+        title="How news48 Works — Architecture & MCP Setup | news48",
+        description=(
+            "Learn how news48 ingests, verifies, and publishes autonomous "
+            "news. MCP integration guide for Claude, Cursor, and other "
+            "AI assistants."
+        ),
+        canonical_url=build_canonical_url(_site_url(request), "/docs"),
+    )
+    return templates.TemplateResponse(
+        request=request,
+        name="docs.html",
+        context={"seo": seo, "mcp_domain": mcp_domain},
+    )
 
 
 @app.get("/health")
