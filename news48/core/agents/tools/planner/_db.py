@@ -75,7 +75,7 @@ def _get_conn() -> sqlite3.Connection:
 
     db_path = config.PLANS_DB
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path), timeout=10)
+    conn = sqlite3.connect(str(db_path), timeout=10, check_same_thread=False)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")

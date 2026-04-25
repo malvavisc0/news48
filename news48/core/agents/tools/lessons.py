@@ -43,7 +43,7 @@ def _get_conn() -> sqlite3.Connection:
         return _conn
 
     config.LESSONS_DB.parent.mkdir(parents=True, exist_ok=True)
-    _conn = sqlite3.connect(str(config.LESSONS_DB))
+    _conn = sqlite3.connect(str(config.LESSONS_DB), check_same_thread=False)
     _conn.row_factory = sqlite3.Row
     _conn.execute("PRAGMA journal_mode=WAL")
     _conn.execute("PRAGMA busy_timeout=5000")
