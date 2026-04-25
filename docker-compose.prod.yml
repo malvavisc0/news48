@@ -80,18 +80,12 @@ services:
               capabilities: [ gpu ]
 
   byparr:
-    shm_size: '2gb'
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8191/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "1.0"
 
   redis:
     deploy:
