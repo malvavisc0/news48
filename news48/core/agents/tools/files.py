@@ -3,8 +3,8 @@
 Provides a unified read_file tool that replaces the previous
 get_file_info, get_file_content, read_file_chunk, and list_directory tools.
 
-Security: File reads are restricted to the project root and data directory
-to prevent access to sensitive system files, credentials, etc.
+Security: File reads are restricted to the project root, data directory,
+and /tmp to prevent access to sensitive system files, credentials, etc.
 """
 
 import logging
@@ -24,8 +24,9 @@ _BINARY_SAMPLE_SIZE = 4096
 # Allowed root directories for file reads.
 _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 _DATA_ROOT = Path(config.DataDir.root).resolve()
+_TMP_ROOT = Path("/tmp")
 
-_ALLOWED_ROOTS = [_PROJECT_ROOT, _DATA_ROOT]
+_ALLOWED_ROOTS = [_PROJECT_ROOT, _DATA_ROOT, _TMP_ROOT]
 
 # Sensitive file patterns that are always blocked.
 _SENSITIVE_PATTERNS = (
@@ -119,7 +120,7 @@ def read_file(
     - offset and limit provided: Read a chunk of lines
 
     ## Security
-    File reads are restricted to the project root and data directory.
+    File reads are restricted to the project root, data directory, and /tmp.
     Sensitive files (.env, credentials, keys) are blocked.
 
     ## Returns

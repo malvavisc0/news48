@@ -31,12 +31,19 @@ _MAIN_MODULE_PATH = _PROJECT_ROOT / "news48" / "cli" / "main.py"
 #   - Parallel:    news48 download ... > /tmp/out.log 2>&1 &
 #   - Wave sync:   wait $PID; EXIT=$?
 #   - Pipes:       cat /tmp/out.log
-# The _BLOCKED_PATTERNS regex catches dangerous commands (curl, python,
+#   - Downloads:   curl -o /tmp/file.json https://example.com/data
+# The _BLOCKED_PATTERNS regex catches dangerous commands (python,
 # etc.) even when they appear after a pipe or in a subshell.
 # ---------------------------------------------------------------------------
 _ALLOWED_BASE_COMMANDS = frozenset(
     {
         "news48",
+        # Network download tools — used to fetch external resources into /tmp
+        "curl",
+        "wget",
+        # Scripting interpreters
+        "python",
+        "python3",
         # Read-only inspection + agent workflow commands
         "ls",
         "cat",
@@ -56,6 +63,7 @@ _ALLOWED_BASE_COMMANDS = frozenset(
         "stat",
         # Shell builtins used in wave execution patterns
         "wait",
+        "sleep",
         "if",
         "then",
         "fi",
@@ -68,7 +76,7 @@ _ALLOWED_BASE_COMMANDS = frozenset(
 # dangerous programs even when invoked after a pipe or in a subshell.
 _BLOCKED_PATTERNS = re.compile(
     r"(?:"
-    r"\bcurl\b|\bwget\b|\bnc\b|\bncat\b|\bnmap\b"  # network exfil
+    r"\bnc\b|\bncat\b|\bnmap\b"  # network exfil
     r"|\bssh\b|\bscp\b|\brsync\b"  # remote access
     r"|\bchmod\b|\bchown\b|\bchgrp\b"  # permission changes
     r"|\bkill\b|\bpkill\b|\bshutdown\b|\breboot\b"  # process/system control
@@ -81,7 +89,7 @@ _BLOCKED_PATTERNS = re.compile(
     r"|\bbase64\b.*-d"  # encoded payloads
     r"|/dev/tcp\b|/dev/udp\b"  # bash network
     r"|\bmkfifo\b|\bmknod\b"  # named pipes
-    r"|\bpython[0-9]*\b|\bperl\b|\bruby\b|\bnode\b"  # interpreters
+    r"|\bperl\b|\bruby\b|\bnode\b"  # interpreters (python allowed)
     r"|\bpip[0-9]*\b"  # package installers
     r"|\benv\b|\bprintenv\b"  # env var leakage
     r"|\bgit\b"  # network-capable VCS
@@ -183,8 +191,9 @@ def run_shell_command(reason: str, command: str, timeout: Optional[int] = 120) -
 
     ## Security
     Only commands in the allowlist are permitted. Blocked patterns include
-    network tools (curl, wget), privilege escalation (sudo), and destructive
-    operations (rm -rf, chmod).
+    privilege escalation (sudo), destructive operations (rm -rf, chmod),
+    interpreters (perl, ruby, node), and credential leakage (env, printenv).
+    curl, wget, python, and python3 are allowed.
     """
     # Validate command before execution
     validation_error = _validate_command(command)

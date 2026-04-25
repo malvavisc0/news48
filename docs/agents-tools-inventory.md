@@ -117,7 +117,7 @@ def read_file(
 - `offset` and `limit` provided: Read a chunk of lines
 
 **Security:**
-- File reads are restricted to the project root and data directory
+- File reads are restricted to the project root, data directory, and `/tmp`
 - Sensitive files (`.env`, credentials, keys) are blocked
 - System directories (`/proc`, `/sys`, `/dev`, `/etc`) are blocked
 
@@ -315,8 +315,10 @@ def run_shell_command(
 
 **Security:**
 - Only commands in the allowlist are permitted
-- Blocked patterns include: network tools (curl, wget), privilege escalation (sudo), interpreters (python, node), destructive operations (rm, chmod), and more
+- Blocked patterns include: privilege escalation (sudo), interpreters (perl, ruby, node), destructive operations (rm, chmod), credential leakage (env, printenv), and more
+- `curl`, `wget`, `python`, and `python3` are allowed
 - Shell operators (|, ;, &, >) are allowed for agent workflow patterns
+- The `/tmp` directory is the designated working area for downloaded files and temporary agent artifacts
 
 **Returns:** JSON string with:
 - `result.working_dir`: Current directory

