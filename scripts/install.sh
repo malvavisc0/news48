@@ -70,7 +70,7 @@ printf "\n"
 # Docker
 if ! command -v docker &>/dev/null; then
     warn "Docker is not installed."
-    read -rp "Install Docker now? (y/N): " install_docker
+    read -rp "Install Docker now? (y/N): " install_docker < /dev/tty
     if [[ "$install_docker" =~ ^[Yy]$ ]]; then
         info "Installing Docker..."
         curl -fsSL https://get.docker.com | sh
@@ -140,7 +140,7 @@ printf "\n"
 DEPLOY_MODE=""
 COMPOSE_CMD=()
 while true; do
-    read -rp "Enter choice [1-2]: " choice
+    read -rp "Enter choice [1-2]: " choice < /dev/tty
     case "$choice" in
         1)
             DEPLOY_MODE="standard"
@@ -178,7 +178,7 @@ if [ "$DEPLOY_MODE" = "standard" ]; then
     else
         warn "NVIDIA Container Toolkit test failed."
         warn "Install it: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html"
-        read -rp "Continue anyway? (y/N): " continue_no_gpu
+        read -rp "Continue anyway? (y/N): " continue_no_gpu < /dev/tty
         if [[ ! "$continue_no_gpu" =~ ^[Yy]$ ]]; then
             error "Aborting. Please install NVIDIA Container Toolkit first."
             exit 1
@@ -186,7 +186,7 @@ if [ "$DEPLOY_MODE" = "standard" ]; then
     fi
 
     printf "\n"
-    read -rp "HuggingFace token (leave empty for public models): " hf_token
+    read -rp "HuggingFace token (leave empty for public models): " hf_token < /dev/tty
 fi
 
 # ─── Environment Configuration ───────────────────────────────────────────────
@@ -194,7 +194,7 @@ printf "\n${BOLD}Configuring environment...${RESET}\n"
 
 if [ -f ".env" ]; then
     warn ".env file already exists."
-    read -rp "Overwrite with fresh configuration? (y/N): " overwrite_env
+    read -rp "Overwrite with fresh configuration? (y/N): " overwrite_env < /dev/tty
     if [[ ! "$overwrite_env" =~ ^[Yy]$ ]]; then
         info "Keeping existing .env"
     else
@@ -238,9 +238,9 @@ if [ "$DEPLOY_MODE" = "external" ]; then
     printf "  Host llama:  http://localhost:8080/v1\n"
     printf "\n"
 
-    read -rp "API_BASE URL: " api_base
-    read -rp "API_KEY (leave empty for local): " api_key
-    read -rp "MODEL name (e.g. gpt-4o, llama3.1-8b): " model_name
+    read -rp "API_BASE URL: " api_base < /dev/tty
+    read -rp "API_KEY (leave empty for local): " api_key < /dev/tty
+    read -rp "MODEL name (e.g. gpt-4o, llama3.1-8b): " model_name < /dev/tty
 
     if [ -z "$api_base" ]; then
         error "API_BASE is required for external LLM mode."
