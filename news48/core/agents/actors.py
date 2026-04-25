@@ -48,7 +48,7 @@ if not _actors_already_registered():
     @dramatiq.actor(
         queue_name="sentinel",
         max_retries=1,
-        time_limit=30 * 60 * 1000,  # 30 min in ms
+        time_limit=10 * 60 * 1000,  # 10 min
     )
     def sentinel_cycle() -> Any:
         """Run one sentinel cycle as a Dramatiq actor."""
@@ -78,7 +78,7 @@ if not _actors_already_registered():
     @dramatiq.actor(
         queue_name="executor",
         max_retries=1,
-        time_limit=30 * 60 * 1000,  # 30 min in ms
+        time_limit=10 * 60 * 1000,  # 10 min
     )
     def executor_cycle() -> Any:
         """Run one executor cycle as a Dramatiq actor."""
@@ -129,29 +129,27 @@ if not _actors_already_registered():
     @dramatiq.actor(
         queue_name="parser",
         max_retries=1,
-        time_limit=30 * 60 * 1000,  # 30 min in ms
+        time_limit=10 * 60 * 1000,  # 10 min
     )
     def parser_cycle() -> Any:
         """Run one autonomous parser cycle."""
         from .parser import run_autonomous
 
         result = asyncio.run(run_autonomous())
-        # Trigger fact-check for newly parsed articles
-        if isinstance(result, dict) and result.get("parsed", 0) > 0:
-            logger.info(
-                "Parser: %d articles parsed, enqueuing fact-check cycle",
-                result["parsed"],
-            )
-            fact_check_cycle.send()
         return result
 
     @dramatiq.actor(
         queue_name="parser",
-        periodic=cron("* * * * *"),  # every minute
+        periodic=cron("*/5 * * * *"),  # every 5 minutes
     )
     def scheduled_parser() -> None:
         """Periodic scheduler for parser — enqueues parser_cycle."""
-        parser_cycle.send()
+        from .tools.planner import peek_next_plan
+
+        # Only enqueue if there are parse-able articles available.
+        family = peek_next_plan()
+        if family == "parse":
+            parser_cycle.send()
 
     # -----------------------------------------------------------------------
     # Fact-Checker Agent
@@ -160,7 +158,7 @@ if not _actors_already_registered():
     @dramatiq.actor(
         queue_name="fact_checker",
         max_retries=1,
-        time_limit=30 * 60 * 1000,  # 30 min in ms
+        time_limit=10 * 60 * 1000,  # 10 min
     )
     def fact_check_cycle() -> Any:
         """Run one fact-check cycle."""
@@ -240,10 +238,11 @@ if not _actors_already_registered():
         queue_name="pipeline",
         max_retries=0,
         time_limit=5 * 60 * 1000,  # 5 min
-        periodic=cron("* * * * *"),  # every minute
+        periodic=cron("*/5 * * * *"),  # every 5 minutes
     )
     def heal_plan_deadlocks() -> Any:
         """Detect and repair campaign-parent deadlocks in pending plans."""
+        import fcntl
         import json
 
         from .tools.planner import (
@@ -255,17 +254,30 @@ if not _actors_already_registered():
 
         plans_dir = _ensure_plans_dir()
         healed = 0
-        for plan_file in plans_dir.glob("*.json"):
-            try:
-                plan = json.loads(plan_file.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                continue
-            if _normalize_plan_for_consistency(plan):
-                _write_plan(plan)
-                healed += 1
 
-        auto_completed = _auto_complete_campaigns(plans_dir)
-        return {"healed": healed + auto_completed}
+        # Acquire exclusive lock to prevent racing with
+        # claim_plan / update_plan / other heal cycles.
+        lock_path = plans_dir / ".claim.lock"
+        lock_fd = None
+        try:
+            lock_fd = open(lock_path, "w")
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+
+            for plan_file in plans_dir.glob("*.json"):
+                try:
+                    plan = json.loads(plan_file.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    continue
+                if _normalize_plan_for_consistency(plan):
+                    _write_plan(plan)
+                    healed += 1
+
+            auto_completed = _auto_complete_campaigns(plans_dir)
+            return {"healed": healed + auto_completed}
+        finally:
+            if lock_fd is not None:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                lock_fd.close()
 
 else:
     # Actors already registered — retrieve them from the broker

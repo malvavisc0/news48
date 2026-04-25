@@ -21,20 +21,26 @@ class StartupRecoveryMiddleware(dramatiq.Middleware):
     - Recover stale executing plans
     - Release stale article claims
     - Archive terminal plans older than 24h
+    - Clean archived plans older than 7 days
+    - Clean expired byparr cache files
     """
 
     def after_worker_boot(self, broker, worker):
         """Called once when a worker process starts."""
         logger.info("StartupRecoveryMiddleware: running recovery tasks")
         try:
+            import json
+
             from news48.core.database.articles import release_stale_article_claims
 
-            from .tools.planner import archive_terminal_plans, recover_stale_plans
+            from .tools.planner import (
+                _archive_cleanup,
+                archive_terminal_plans,
+                recover_stale_plans,
+            )
 
             # Recover stale plans
             payload = recover_stale_plans("Dramatiq worker startup recovery")
-            import json
-
             result = json.loads(payload).get("result", {})
             logger.info(
                 "Plan recovery: scanned=%s normalized=%s requeued=%s",
@@ -57,6 +63,24 @@ class StartupRecoveryMiddleware(dramatiq.Middleware):
                 logger.info(
                     "Plan archival: moved %s plan(s) to archive",
                     archive_result["archived"],
+                )
+
+            # Clean archived plans older than 7 days
+            cleanup_result = _archive_cleanup()
+            if cleanup_result.get("cleaned"):
+                logger.info(
+                    "Archive cleanup: deleted %s old plan(s)",
+                    cleanup_result["cleaned"],
+                )
+
+            # Clean expired byparr cache files
+            from news48.core.helpers.bypass import clean_expired_byparr_cache
+
+            cache_result = clean_expired_byparr_cache()
+            if cache_result.get("cleaned"):
+                logger.info(
+                    "Byparr cache cleanup: deleted %s expired file(s)",
+                    cache_result["cleaned"],
                 )
         except Exception as exc:
             logger.error("StartupRecoveryMiddleware failed: %s", exc)

@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 
+import httpx
 import typer
 from html_to_markdown import convert as html_to_markdown
 
@@ -101,8 +102,20 @@ async def _download_article(
                 return False
 
             last_error = None
+            last_is_auth = False
             for attempt in range(MAX_RETRIES + 1):
                 try:
+                    # On auth failure (403/401), refresh the stale
+                    # bypass solution before retrying.
+                    if last_is_auth:
+                        solution = await _ensure_solution(
+                            domain,
+                            solutions,
+                            domain_sem,
+                            stale=solution,
+                        )
+                        last_is_auth = False
+
                     raw_html = await fetch_url_content(
                         url=url,
                         solution=solution,
@@ -116,8 +129,20 @@ async def _download_article(
                         image_url=image_url,
                     )
                     return True
+                except httpx.HTTPStatusError as e:
+                    last_error = e
+                    # Detect auth failures so we can refresh the solution
+                    last_is_auth = e.response.status_code in (401, 403)
+                    logger.warning(
+                        "Attempt %d/%d failed for %s: HTTP %d",
+                        attempt + 1,
+                        MAX_RETRIES + 1,
+                        url,
+                        e.response.status_code,
+                    )
                 except Exception as e:
                     last_error = e
+                    last_is_auth = False
                     logger.warning(
                         "Attempt %d/%d failed for %s: %s",
                         attempt + 1,

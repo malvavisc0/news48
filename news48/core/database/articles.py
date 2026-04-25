@@ -99,9 +99,14 @@ def update_article(
     image_url: str | None = None,
     language: str | None = None,
 ) -> None:
-    """Update an article with parsed content from the parser agent."""
-    summary = _strip_html_tags(summary)
-    title = _strip_html_tags(title)
+    """Update an article with parsed content from the parser agent.
+
+    Metadata fields (author, published_at, image_url) are only
+    updated if the current value is NULL/empty, preserving accurate
+    feed-provided values over LLM extractions.
+    """
+    summary = _strip_html_tags(summary) or None
+    title = _strip_html_tags(title) or None
     content = _strip_html_tags(content) or ""
 
     if sentiment:
@@ -117,9 +122,10 @@ def update_article(
         article = session.get(Article, article_id)
         if article:
             article.content = content
-            if author:
+            # Only update metadata if current value is NULL/empty
+            if author and not article.author:
                 article.author = author
-            if published_at:
+            if published_at and not article.published_at:
                 article.published_at = published_at
             if sentiment:
                 article.sentiment = sentiment
@@ -127,7 +133,7 @@ def update_article(
                 article.categories = categories
             if tags:
                 article.tags = tags
-            if summary:
+            if summary and not article.summary:
                 article.summary = summary
             if parsed_at:
                 article.parsed_at = parsed_at
@@ -138,7 +144,7 @@ def update_article(
 
                 article.title = title
                 article.slug = f"{slugify(title)}-{article_id}"
-            if image_url:
+            if image_url and not article.image_url:
                 article.image_url = image_url
             if language:
                 article.language = language
@@ -152,7 +158,13 @@ def update_article_fact_check(
     force: bool = False,
 ) -> bool:
     """Update the fact-check fields of an article."""
-    valid_statuses = {"verified", "disputed", "unverifiable", "mixed"}
+    valid_statuses = {
+        "verified",
+        "disputed",
+        "unverifiable",
+        "mixed",
+        "fact_check_error",
+    }
     if status.lower() not in valid_statuses:
         raise ValueError(
             f"Invalid fact_check_status '{status}'. "
@@ -388,6 +400,7 @@ def get_articles_paginated(
         "fact-unchecked": (
             "articles.parsed_at IS NOT NULL " "AND articles.fact_check_status IS NULL"
         ),
+        "fact-check-error": "articles.fact_check_status = 'fact_check_error'",
     }
 
     where_clauses = []

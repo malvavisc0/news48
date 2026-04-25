@@ -19,6 +19,7 @@ def purge_articles_older_than_hours(
         A dict with purge results:
         - articles_found: Number of articles older than threshold
         - articles_deleted: Number of articles actually deleted
+        - fetches_deleted: Number of fetch records deleted
         - threshold_hours: The hours threshold used
         - cutoff_time: The ISO 8601 cutoff time
     """
@@ -32,6 +33,7 @@ def purge_articles_older_than_hours(
         ).scalar()
 
         articles_deleted = 0
+        fetches_deleted = 0
         if not dry_run and articles_found > 0:
             # Delete articles (cascade will handle related records)
             result = session.execute(
@@ -41,9 +43,19 @@ def purge_articles_older_than_hours(
             articles_deleted = result.rowcount
             session.commit()
 
+        # Also purge stale fetch records (skip during dry_run)
+        if not dry_run:
+            fetches_result = session.execute(
+                text("DELETE FROM fetches WHERE started_at < :threshold"),
+                {"threshold": threshold},
+            )
+            session.commit()
+            fetches_deleted = fetches_result.rowcount
+
         return {
             "articles_found": articles_found,
             "articles_deleted": articles_deleted,
+            "fetches_deleted": fetches_deleted,
             "threshold_hours": hours,
             "cutoff_time": threshold,
             "dry_run": dry_run,
@@ -51,17 +63,7 @@ def purge_articles_older_than_hours(
 
 
 def get_retention_policy_stats() -> dict:
-    """Get statistics about the 48-hour retention policy.
-
-    Returns:
-        A dict with retention policy statistics:
-        - total_articles: Total articles in database
-        - articles_within_48h: Articles published within last 48 hours
-        - articles_expired: Articles older than 48 hours
-        - retention_rate: Percentage of articles within 48h window
-        - oldest_article: Creation date of oldest article
-        - newest_article: Creation date of newest article
-    """
+    """Get statistics about the 48-hour retention policy."""
     with SessionLocal() as session:
         threshold_48h = _hours_ago_iso(48)
 
@@ -102,15 +104,7 @@ def get_retention_policy_stats() -> dict:
 
 
 def check_database_health() -> dict:
-    """Check database health and connectivity.
-
-    Returns:
-        A dict with health check results:
-        - is_connected: Whether database is accessible
-        - db_size_mb: Database size in megabytes
-        - table_counts: Number of rows in each table
-        - integrity_ok: Whether database integrity check passed
-    """
+    """Check database health and connectivity."""
     health = {
         "is_connected": False,
         "db_size_mb": 0,

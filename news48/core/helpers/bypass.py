@@ -1,6 +1,8 @@
 """Bypass solution and content fetching utilities."""
 
 import json
+import os
+import random
 import re
 import time
 from pathlib import Path
@@ -13,11 +15,82 @@ from news48.core.models import ByparrSolution
 # Solution file cache
 _CACHE_TTL = 3600  # 1 hour
 
+# Simple circuit breaker for byparr API failures.
+_CIRCUIT_BREAKER_THRESHOLD = 5  # consecutive failures before opening
+_CIRCUIT_BREAKER_COOLDOWN = 300  # seconds to wait before half-open
+_circuit_failures = 0
+_circuit_opened_at: float | None = None
+
+
+def _circuit_allowed() -> bool:
+    """Check if the circuit breaker allows requests."""
+    global _circuit_failures, _circuit_opened_at
+    if _circuit_opened_at is None:
+        return True  # closed
+    elapsed = time.time() - _circuit_opened_at
+    if elapsed >= _CIRCUIT_BREAKER_COOLDOWN:
+        _circuit_opened_at = None  # half-open, allow one probe
+        return True
+    return False
+
+
+def _circuit_record_success() -> None:
+    """Record a successful request, resetting the breaker."""
+    global _circuit_failures, _circuit_opened_at
+    _circuit_failures = 0
+    _circuit_opened_at = None
+
+
+def _circuit_record_failure() -> None:
+    """Record a failed request, potentially opening the breaker."""
+    global _circuit_failures, _circuit_opened_at
+    _circuit_failures += 1
+    if _circuit_failures >= _CIRCUIT_BREAKER_THRESHOLD:
+        _circuit_opened_at = time.time()
+
+
+# Rotated user-agent strings to avoid fingerprinting.
+_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) "
+    "Gecko/20100101 Firefox/133.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7; rv:133.0) "
+    "Gecko/20100101 Firefox/133.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+]
+
 
 def _get_cache_path(domain: str) -> Path:
     """Get the cache file path for a domain."""
     (config.CACHE_DIR / "byparr").mkdir(parents=True, exist_ok=True)
     return config.CACHE_DIR / "byparr" / f"{domain}.json"
+
+
+def clean_expired_byparr_cache() -> dict:
+    """Delete expired byparr cache files from disk."""
+    cache_dir = config.CACHE_DIR / "byparr"
+    if not cache_dir.exists():
+        return {"cleaned": 0, "errors": 0}
+
+    cleaned = 0
+    errors = 0
+    for cache_file in cache_dir.glob("*.json"):
+        try:
+            data = json.loads(cache_file.read_text(encoding="utf-8"))
+            if time.time() - data.get("timestamp", 0) >= _CACHE_TTL:
+                cache_file.unlink()
+                cleaned += 1
+        except (json.JSONDecodeError, OSError, KeyError):
+            try:
+                cache_file.unlink()
+                cleaned += 1
+            except OSError:
+                errors += 1
+    return {"cleaned": cleaned, "errors": errors}
 
 
 def _load_cached_solution(domain: str) -> ByparrSolution | None:
@@ -38,14 +111,21 @@ def _load_cached_solution(domain: str) -> ByparrSolution | None:
 
 
 def _cache_solution(domain: str, solution: ByparrSolution) -> None:
-    """Cache a bypass solution for a domain."""
+    """Cache a bypass solution for a domain.
+
+    Uses atomic write (write-to-temp-then-rename) to prevent
+    race conditions with concurrent readers.
+    """
     cache_path = _get_cache_path(domain)
     data = {
         "cookies": solution.cookies,
         "headers": solution.headers,
         "timestamp": time.time(),
     }
-    cache_path.write_text(json.dumps(data), encoding="utf-8")
+    # Atomic write
+    tmp_path = cache_path.with_suffix(".tmp")
+    tmp_path.write_text(json.dumps(data), encoding="utf-8")
+    os.replace(str(tmp_path), str(cache_path))
 
 
 async def get_byparr_solution(target_url: str, bypass_api_url: str) -> ByparrSolution:
@@ -69,12 +149,21 @@ async def get_byparr_solution(target_url: str, bypass_api_url: str) -> ByparrSol
 
     domain = get_base_url(target_url)
 
+    # Check circuit breaker before making API call
+    if not _circuit_allowed():
+        raise TimeoutError(
+            "Bypass API calls are temporarily disabled due to "
+            f"repeated failures. Will retry in "
+            f"{_CIRCUIT_BREAKER_COOLDOWN}s cooldown."
+        )
+
     # Check cache first
     cached = _load_cached_solution(domain)
     if cached is not None:
         return cached
 
-    timeout = httpx.Timeout(120.0, connect=30.0)
+    # Reduced timeout from 120s to 30s to fail fast
+    timeout = httpx.Timeout(30.0, connect=15.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(
             bypass_api_url,
@@ -89,6 +178,7 @@ async def get_byparr_solution(target_url: str, bypass_api_url: str) -> ByparrSol
 
         if data.get("status") != "ok":
             error_msg = data.get("message", "Unknown error")
+            _circuit_record_failure()
             raise ValueError(f"Bypass API error: {error_msg}")
 
         solution_data = data.get("solution")
@@ -132,12 +222,9 @@ async def get_byparr_solution(target_url: str, bypass_api_url: str) -> ByparrSol
                 if sanitized_value:  # Only add non-empty values
                     headers[key] = sanitized_value
 
-        # Ensure we have a user-agent (required for most websites)
+        # Rotate user-agent to avoid fingerprinting
         if "user-agent" not in headers:
-            headers["user-agent"] = (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) "
-                "Gecko/20100101 Firefox/125.0"
-            )
+            headers["user-agent"] = random.choice(_USER_AGENTS)
 
         solution = ByparrSolution(
             cookies=cookies,
@@ -146,6 +233,7 @@ async def get_byparr_solution(target_url: str, bypass_api_url: str) -> ByparrSol
 
         # Cache the result
         _cache_solution(domain, solution)
+        _circuit_record_success()
         return solution
 
 

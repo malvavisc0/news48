@@ -159,8 +159,16 @@ class TestStripHtmlTagsInUpdateArticle:
         db_session.flush()
         return article.id
 
-    def test_strips_html_from_summary(self, article_id: int) -> None:
+    def test_strips_html_from_summary(self, article_id: int, db_session) -> None:
+        # Clear existing summary first so SD-1 allows the update
+        # (SD-1: only update metadata if current value is NULL/empty)
         from news48.core.database.articles import update_article
+        from news48.core.database.models import Article
+
+        art = db_session.get(Article, article_id)
+        if art:
+            art.summary = None
+            db_session.commit()
 
         update_article(article_id, content="clean", summary="<b>Bold</b> summary")
         from news48.core.database.articles import get_article_by_id

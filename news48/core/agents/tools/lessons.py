@@ -1,7 +1,9 @@
 """Lessons learned system — save and load agent lessons."""
 
+import fcntl
 import json
 import re
+from pathlib import Path
 
 from news48.core import config
 
@@ -12,6 +14,14 @@ _DEDUP_PREFIX_WORDS = 8
 
 # Lessons shorter than this are almost certainly status noise, not insights.
 _MIN_LESSON_LENGTH = 10
+
+# Maximum number of lessons to keep (LRU eviction).
+_MAX_LESSONS = 100
+
+
+def _lessons_lock_path() -> Path:
+    """Return the lock file path adjacent to lessons.json."""
+    return config.LESSONS_FILE.with_suffix(".json.lock")
 
 
 def _normalize_words(text: str) -> list[str]:
@@ -89,6 +99,26 @@ def _write_lessons(lessons: list[dict]) -> None:
     )
 
 
+def _lock_lessons():
+    """Acquire an exclusive lock for lessons file read-modify-write.
+
+    Returns a file descriptor that must be passed to _unlock_lessons().
+    """
+    lock_path = _lessons_lock_path()
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_fd = open(lock_path, "w")
+    fcntl.flock(lock_fd, fcntl.LOCK_EX)
+    return lock_fd
+
+
+def _unlock_lessons(lock_fd):
+    """Release the lessons file lock."""
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+    finally:
+        lock_fd.close()
+
+
 def save_lesson(
     reason: str,
     agent_name: str,
@@ -123,8 +153,10 @@ def save_lesson(
     - `result`: Confirmation message
     - `error`: Empty on success, or error description
     """
+    import time
+
     try:
-        # --- pre-flight checks ---
+        # --- pre-flight checks (outside lock - read-only) ---
         if len(lesson.strip()) < _MIN_LESSON_LENGTH:
             return _safe_json(
                 {
@@ -152,46 +184,59 @@ def save_lesson(
                 }
             )
 
-        lessons = _read_lessons()
+        # --- critical section: read-check-write under lock ---
+        lock_fd = _lock_lessons()
+        try:
+            lessons = _read_lessons()
 
-        # Check idempotency: skip if exact lesson already exists
-        for entry in lessons:
-            if (
-                entry.get("agent") == agent_name
-                and entry.get("category") == category
-                and entry.get("lesson") == lesson
-            ):
+            # Check idempotency: skip if exact lesson already exists
+            for entry in lessons:
+                if (
+                    entry.get("agent") == agent_name
+                    and entry.get("category") == category
+                    and entry.get("lesson") == lesson
+                ):
+                    return _safe_json(
+                        {
+                            "result": (
+                                f"Lesson already exists for " f"{agent_name}/{category}"
+                            ),
+                            "error": "",
+                        }
+                    )
+
+            # Check near-duplicate
+            existing_texts = [e.get("lesson", "") for e in lessons]
+            if _is_near_duplicate(lesson, existing_texts):
                 return _safe_json(
                     {
                         "result": (
-                            f"Lesson already exists for " f"{agent_name}/{category}"
+                            f"Near-duplicate lesson already exists for "
+                            f"{agent_name}/{category}"
                         ),
                         "error": "",
                     }
                 )
 
-        # Check near-duplicate
-        existing_texts = [e.get("lesson", "") for e in lessons]
-        if _is_near_duplicate(lesson, existing_texts):
-            return _safe_json(
+            # Append with timestamp
+            lessons.append(
                 {
-                    "result": (
-                        f"Near-duplicate lesson already exists for "
-                        f"{agent_name}/{category}"
-                    ),
-                    "error": "",
+                    "agent": agent_name,
+                    "category": category,
+                    "lesson": lesson,
+                    "created_at": time.time(),
                 }
             )
 
-        # Append and save
-        lessons.append(
-            {
-                "agent": agent_name,
-                "category": category,
-                "lesson": lesson,
-            }
-        )
-        _write_lessons(lessons)
+            # LRU eviction: keep only the most recent _MAX_LESSONS
+            if len(lessons) > _MAX_LESSONS:
+                # Sort by created_at descending, keep top _MAX_LESSONS
+                lessons.sort(key=lambda e: e.get("created_at", 0), reverse=True)
+                lessons = lessons[:_MAX_LESSONS]
+
+            _write_lessons(lessons)
+        finally:
+            _unlock_lessons(lock_fd)
 
         return _safe_json(
             {
@@ -222,9 +267,15 @@ def _load_lessons() -> str:
     if not lessons:
         return ""
 
+    # Sort by recency (newest first) if timestamps available
+    def _sort_key(entry: dict) -> float:
+        return entry.get("created_at", 0)
+
+    lessons_sorted = sorted(lessons, key=_sort_key, reverse=True)
+
     # Group by agent, then by category
     grouped: dict[str, dict[str, list[str]]] = {}
-    for entry in lessons:
+    for entry in lessons_sorted:
         agent = entry.get("agent", "unknown")
         cat = entry.get("category", "Uncategorized")
         text = entry.get("lesson", "")

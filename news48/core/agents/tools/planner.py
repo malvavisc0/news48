@@ -326,6 +326,7 @@ def _ensure_plans_dir() -> Path:
 
 
 _ARCHIVE_AGE_HOURS = 24
+_ARCHIVE_CLEANUP_DAYS = 7
 
 
 def archive_terminal_plans() -> dict:
@@ -370,6 +371,46 @@ def archive_terminal_plans() -> dict:
             errors += 1
 
     return {"archived": archived, "errors": errors}
+
+
+def _archive_cleanup() -> dict:
+    """Delete archived plans older than 7 days."""
+    archive_dir = config.PLANS_DIR / "archive"
+    if not archive_dir.exists():
+        return {"cleaned": 0, "errors": 0}
+
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(days=_ARCHIVE_CLEANUP_DAYS)
+    ).isoformat()
+
+    cleaned = 0
+    errors = 0
+    for plan_file in archive_dir.glob("*.json"):
+        try:
+            plan = json.loads(plan_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            # Corrupt file — just delete it
+            try:
+                plan_file.unlink()
+                cleaned += 1
+            except OSError:
+                errors += 1
+            continue
+
+        updated_at = plan.get("updated_at", "")
+        if not updated_at or updated_at <= cutoff:
+            try:
+                plan_file.unlink()
+                cleaned += 1
+            except OSError as exc:
+                logger.warning(
+                    "Failed to delete archived plan %s: %s",
+                    plan_file.name,
+                    exc,
+                )
+                errors += 1
+
+    return {"cleaned": cleaned, "errors": errors}
 
 
 def _plan_path(plan_id: str) -> Path:
@@ -693,7 +734,15 @@ def update_plan(
     valid_statuses = {"pending", "executing", "completed", "failed"}
     valid_plan_statuses = {"pending", "executing", "completed", "failed"}
 
+    # Acquire file lock to prevent concurrent update_plan / claim_plan races.
+    plans_dir = _ensure_plans_dir()
+    lock_path = plans_dir / ".claim.lock"
+    lock_fd = None
+
     try:
+        lock_fd = open(lock_path, "w")
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+
         # Read existing plan
         try:
             plan = _read_plan(plan_id)
@@ -919,6 +968,10 @@ def update_plan(
         return _safe_json(response)
     except Exception as exc:
         return _safe_json({"result": "", "error": str(exc)})
+    finally:
+        if lock_fd is not None:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            lock_fd.close()
 
 
 def _serialize_plan(plan: dict) -> dict:

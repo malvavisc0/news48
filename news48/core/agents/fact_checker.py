@@ -125,11 +125,16 @@ async def _fact_check_article(article: dict, owner: str) -> dict:
 
 
 def _record_failure(article_id: int, error: str) -> None:
-    """Record a fact-check failure as unverifiable to prevent infinite retries."""
+    """Record a fact-check failure as error so it can be retried later.
+
+    Using a distinct ``"fact_check_error"`` status allows the article to
+    be picked up again in a future fact-check cycle, unlike ``"unverifiable"``
+    which is permanent until the data purge.
+    """
     try:
         update_article_fact_check(
             article_id,
-            status="unverifiable",
+            status="fact_check_error",
             result=f"Fact-check agent failed: {error}",
             force=True,
         )
@@ -138,8 +143,26 @@ def _record_failure(article_id: int, error: str) -> None:
 
 
 async def run_cycle(limit: int = 10) -> dict:
-    """Run one fact-check cycle by claiming fact-unchecked articles."""
-    articles, total = get_articles_paginated(limit=limit, status="fact-unchecked")
+    """Run one fact-check cycle by claiming fact-unchecked articles.
+
+    Also includes articles with ``fact_check_error`` status so they
+    can be retried after a transient failure.
+    """
+    articles_unchecked, _ = get_articles_paginated(limit=limit, status="fact-unchecked")
+    articles_error, _ = get_articles_paginated(limit=limit, status="fact-check-error")
+
+    # Merge and deduplicate by article ID
+    seen = set()
+    articles = []
+    for a in articles_unchecked + articles_error:
+        aid = int(a["id"])
+        if aid not in seen:
+            seen.add(aid)
+            articles.append(a)
+
+    # Respect the limit
+    articles = articles[:limit]
+
     if not articles:
         return {"checked": 0, "results": []}
 
