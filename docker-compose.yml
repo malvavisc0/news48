@@ -9,15 +9,16 @@ services:
     volumes:
       - news48-data:/data
     environment:
-      - DATABASE_URL=mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
-      - DATA_DIR=/data
-      - REDIS_URL=redis://redis:6379/0
-      - WEB_HOST=${WEB_HOST:-0.0.0.0}
-      - WEB_PORT=${WEB_PORT:-8000}
-      - WEB_WORKERS=${WEB_WORKERS:-1}
-      - WEB_LOG_LEVEL=${WEB_LOG_LEVEL:-info}
-      - WEB_RELOAD=${WEB_RELOAD:-0}
-      - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      TZ: ${TZ:-Europe/Berlin}
+      DATABASE_URL: mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
+      DATA_DIR: /data
+      REDIS_URL: redis://redis:6379/0
+      WEB_HOST: ${WEB_HOST:-0.0.0.0}
+      WEB_PORT: ${WEB_PORT:-8000}
+      WEB_WORKERS: ${WEB_WORKERS:-1}
+      WEB_LOG_LEVEL: ${WEB_LOG_LEVEL:-info}
+      WEB_RELOAD: ${WEB_RELOAD:-0}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
     depends_on:
       mysql:
         condition: service_healthy
@@ -39,10 +40,11 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
     environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
-      - MYSQL_DATABASE=${MYSQL_DATABASE:-news48}
-      - MYSQL_USER=${MYSQL_USER:-news48}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-news48}
+      TZ: ${TZ:-Europe/Berlin}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-news48}
+      MYSQL_USER: ${MYSQL_USER:-news48}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-news48}
     command: >
       --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --innodb-ft-min-token-size=2
     healthcheck:
@@ -63,7 +65,8 @@ services:
       target: worker
     entrypoint: [ "alembic", "upgrade", "head" ]
     environment:
-      - DATABASE_URL=mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
+      TZ: ${TZ:-Europe/Berlin}
+      DATABASE_URL: mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
     depends_on:
       mysql:
         condition: service_healthy
@@ -79,8 +82,9 @@ services:
       - llamacpp-models:/models
       - ./scripts/download-model.sh:/app/download-model.sh:ro
     environment:
-      - LLAMACPP_MODEL_REPO=${LLAMACPP_MODEL_REPO:-mradermacher/claude-oss-i1-GGUF}
-      - LLAMACPP_MODEL_FILE=${LLAMACPP_MODEL_FILE:-claude-oss.i1-Q6_K.gguf}
+      TZ: ${TZ:-Europe/Berlin}
+      LLAMACPP_MODEL_REPO: ${LLAMACPP_MODEL_REPO:-mradermacher/claude-oss-i1-GGUF}
+      LLAMACPP_MODEL_FILE: ${LLAMACPP_MODEL_FILE:-claude-oss.i1-Q6_K.gguf}
     deploy:
       resources:
         reservations:
@@ -98,17 +102,18 @@ services:
       - llamacpp-models:/models
       - ./scripts/llamacpp-entrypoint.sh:/app/llamacpp-entrypoint.sh:ro
     environment:
-      - LLAMACPP_MODEL_REPO=${LLAMACPP_MODEL_REPO:-mradermacher/claude-oss-i1-GGUF}
-      - LLAMACPP_MODEL_FILE=${LLAMACPP_MODEL_FILE:-claude-oss.i1-Q6_K.gguf}
-      - LLAMACPP_CTX_SIZE=${LLAMACPP_CTX_SIZE:-131072}
-      - LLAMACPP_PORT=${LLAMACPP_PORT:-8080}
-      - LLAMACPP_HOST=0.0.0.0
-      - LLAMACPP_N_GPU_LAYERS=${LLAMACPP_N_GPU_LAYERS:-999}
-      - LLAMACPP_PARALLEL=${LLAMACPP_PARALLEL:-12}
-      - LLAMACPP_THREADS=${LLAMACPP_THREADS:-16}
-      - LLAMACPP_CACHE_TYPE_K=${LLAMACPP_CACHE_TYPE_K:-q8_0}
-      - LLAMACPP_CACHE_TYPE_V=${LLAMACPP_CACHE_TYPE_V:-q8_0}
-      - LLAMACPP_FLASH_ATTN=${LLAMACPP_FLASH_ATTN:-on}
+      TZ: ${TZ:-Europe/Berlin}
+      LLAMACPP_MODEL_REPO: ${LLAMACPP_MODEL_REPO:-mradermacher/claude-oss-i1-GGUF}
+      LLAMACPP_MODEL_FILE: ${LLAMACPP_MODEL_FILE:-claude-oss.i1-Q6_K.gguf}
+      LLAMACPP_CTX_SIZE: ${LLAMACPP_CTX_SIZE:-131072}
+      LLAMACPP_PORT: ${LLAMACPP_PORT:-8080}
+      LLAMACPP_HOST: 0.0.0.0
+      LLAMACPP_N_GPU_LAYERS: ${LLAMACPP_N_GPU_LAYERS:-999}
+      LLAMACPP_PARALLEL: ${LLAMACPP_PARALLEL:-12}
+      LLAMACPP_THREADS: ${LLAMACPP_THREADS:-16}
+      LLAMACPP_CACHE_TYPE_K: ${LLAMACPP_CACHE_TYPE_K:-q8_0}
+      LLAMACPP_CACHE_TYPE_V: ${LLAMACPP_CACHE_TYPE_V:-q8_0}
+      LLAMACPP_FLASH_ATTN: ${LLAMACPP_FLASH_ATTN:-on}
     depends_on:
       llamacpp-init:
         condition: service_completed_successfully
@@ -133,13 +138,16 @@ services:
     volumes:
       - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
     environment:
-      - SEARXNG_SECRET=${SEARXNG_SECRET:-changeme}
-      - SEARXNG_BASE_URL=http://searxng:8080/
+      TZ: ${TZ:-Europe/Berlin}
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-changeme}
+      SEARXNG_BASE_URL: http://searxng:8080/
     networks:
       - news48-net
 
   byparr:
     image: ghcr.io/thephaseless/byparr:main
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
     networks:
       - news48-net
 
@@ -149,9 +157,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - dozzle-data:/data
     environment:
+      TZ: ${TZ:-Europe/Berlin}
       # Shell and actions disabled for security — enable only for debugging.
-      - DOZZLE_ENABLE_ACTIONS=false
-      - DOZZLE_ENABLE_SHELL=false
+      DOZZLE_ENABLE_ACTIONS: "false"
+      DOZZLE_ENABLE_SHELL: "false"
     networks:
       - news48-net
 
@@ -168,7 +177,8 @@ services:
     volumes:
       - redis-data:/data
     environment:
-      - REDIS_ARGS=--save 60 1000 --appendonly yes
+      TZ: ${TZ:-Europe/Berlin}
+      REDIS_ARGS: --save 60 1000 --appendonly yes
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
@@ -189,22 +199,23 @@ services:
     volumes:
       - news48-data:/data
     environment:
-      - DATABASE_URL=mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
-      - DATA_DIR=/data
-      - REDIS_URL=redis://redis:6379/0
-      - API_BASE=${API_BASE}
-      - API_KEY=${API_KEY}
-      - MODEL=${MODEL}
-      - CONTEXT_WINDOW=${CONTEXT_WINDOW:-49152}
-      - BYPARR_API_URL=${BYPARR_API_URL:-http://byparr:8191/v1}
-      - SEARXNG_URL=${SEARXNG_URL:-http://searxng:8080}
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASS=${SMTP_PASS}
-      - SMTP_FROM=${SMTP_FROM}
-      - MONITOR_EMAIL_TO=${MONITOR_EMAIL_TO}
-      - PARSER_CONCURRENCY=${PARSER_CONCURRENCY:-12}
+      TZ: ${TZ:-Europe/Berlin}
+      DATABASE_URL: mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
+      DATA_DIR: /data
+      REDIS_URL: redis://redis:6379/0
+      API_BASE: ${API_BASE}
+      API_KEY: ${API_KEY}
+      MODEL: ${MODEL}
+      CONTEXT_WINDOW: ${CONTEXT_WINDOW:-49152}
+      BYPARR_API_URL: ${BYPARR_API_URL:-http://byparr:8191/v1}
+      SEARXNG_URL: ${SEARXNG_URL:-http://searxng:8080}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM}
+      MONITOR_EMAIL_TO: ${MONITOR_EMAIL_TO}
+      PARSER_CONCURRENCY: ${PARSER_CONCURRENCY:-12}
     depends_on:
       redis:
         condition: service_healthy
@@ -228,9 +239,10 @@ services:
     volumes:
       - news48-data:/data
     environment:
-      - DATABASE_URL=mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
-      - DATA_DIR=/data
-      - REDIS_URL=redis://redis:6379/0
+      TZ: ${TZ:-Europe/Berlin}
+      DATABASE_URL: mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
+      DATA_DIR: /data
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       redis:
         condition: service_healthy

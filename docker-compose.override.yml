@@ -10,9 +10,9 @@ services:
       - /app/.venv # preserve image's venv, don't shadow with host's
       - ./data:/data
     environment:
-      - WEB_RELOAD=1
-      - WEB_LOG_LEVEL=debug
-      - WEB_WORKERS=1
+      WEB_RELOAD: "1"
+      WEB_LOG_LEVEL: debug
+      WEB_WORKERS: "1"
     ports:
       # Override the base port mapping for dev (avoids conflicts with local services)
       - "8765:8000"
@@ -30,6 +30,9 @@ services:
       - .:/app
       - /app/.venv # preserve image's venv, don't shadow with host's
       - ./data:/data
+    environment:
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
     stdin_open: true
     tty: true
 
@@ -44,3 +47,26 @@ services:
   dozzle:
     ports:
       - "9999:8080"
+
+  # Mailpit — local SMTP catch-all for development.
+  # All emails sent by the worker are captured here instead of
+  # being delivered to real recipients.
+  # Web UI: http://localhost:8025
+  # SMTP:   localhost:1025
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025" # Web UI
+      - "1025:1025" # SMTP
+    volumes:
+      - mailpit-data:/data
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_DATABASE: /data/mailpit.db
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    networks:
+      - news48-net
+
+volumes:
+  mailpit-data:
