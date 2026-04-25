@@ -179,7 +179,7 @@ while true; do
             ;;
         2)
             DEPLOY_MODE="external"
-            COMPOSE_CMD=(docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.external-llm.yml)
+            COMPOSE_CMD=(docker compose -f docker-compose.yml -f docker-compose.prod.yml)
             success "External LLM deployment"
             break
             ;;
@@ -189,27 +189,114 @@ while true; do
     esac
 done
 
-# ─── Strip GPU references for External LLM mode ────────────────────────────
+# ─── Strip llamacpp services for External LLM mode ──────────────────────────
 if [ "$DEPLOY_MODE" = "external" ]; then
-    printf "\n${BOLD}Removing GPU references from compose files...${RESET}\n"
-    python3 -c "
-import re, sys
-gpu_pattern = re.compile(
-    r'    deploy:\n      resources:\n        reservations:\n          devices:\n            - driver: nvidia\n              count: all\n              capabilities: \[ gpu \]\n'
-)
+    printf "\n${BOLD}Removing llamacpp services from compose files...${RESET}\n"
+    python3 << 'PYEOF'
+import re
+
+def remove_service_blocks(content, service_names):
+    """Remove entire top-level service blocks from docker-compose YAML."""
+    lines = content.split('\n')
+    result = []
+    skip = False
+    skip_indent = 0
+
+    for line in lines:
+        # Detect a top-level service definition (2-space indent under services:)
+        stripped = line.rstrip()
+        if not skip:
+            # Match service block start: "  servicename:" at indent level 2
+            match = re.match(r'^  (\w[\w-]*):(\s|$)', line)
+            if match and match.group(1) in service_names:
+                skip = True
+                skip_indent = 2
+                continue
+            result.append(line)
+        else:
+            # Skip until we hit a line at same or lesser indent (next service or end)
+            if stripped == '':
+                # Keep blank lines if next non-blank line is still under this service
+                result.append(line)
+                continue
+            indent = len(line) - len(line.lstrip())
+            if indent <= skip_indent:
+                skip = False
+                # This line starts a new block — check if it's another service to skip
+                match = re.match(r'^  (\w[\w-]*):(\s|$)', line)
+                if match and match.group(1) in service_names:
+                    skip = True
+                    continue
+                result.append(line)
+            # else: still inside skipped block, drop the line
+
+    return '\n'.join(result)
+
+def remove_depends_on_llamacpp(content):
+    """Remove llamacpp dependency from other services' depends_on blocks."""
+    lines = content.split('\n')
+    result = []
+    in_depends = False
+    dep_indent = 0
+
+    for line in lines:
+        stripped = line.rstrip()
+        if not in_depends:
+            if re.match(r'^(\s+)depends_on:\s*$', line):
+                in_depends = True
+                dep_indent = len(line) - len(line.lstrip())
+                result.append(line)
+            else:
+                result.append(line)
+        else:
+            indent = len(line) - len(line.lstrip()) if stripped else dep_indent + 2
+            if indent <= dep_indent:
+                in_depends = False
+                result.append(line)
+            elif re.match(r'^\s+llamacpp:\s*$', line):
+                # Skip the llamacpp depends_on entry
+                continue
+            elif re.match(r'^\s+condition:\s*service_healthy\s*$', line):
+                # Check if previous kept line was the llamacpp entry we removed
+                # If the last result line is the depends_on: header and we just removed llamacpp,
+                # this condition line belongs to llamacpp — skip it
+                if result and re.match(r'^\s+depends_on:\s*$', result[-1]):
+                    # This condition belongs to a service we already kept, don't skip
+                    result.append(line)
+                elif result and not re.match(r'^\s+\w[\w-]*:\s*$', result[-1]):
+                    # Previous line wasn't a service key — this condition is orphaned, skip
+                    continue
+                else:
+                    result.append(line)
+            else:
+                result.append(line)
+
+    return '\n'.join(result)
+
+services_to_remove = {'llamacpp', 'llamacpp-init'}
+
 for fname in ['docker-compose.yml', 'docker-compose.prod.yml']:
     try:
         with open(fname) as f:
             content = f.read()
-        cleaned = gpu_pattern.sub('', content)
+
+        # Remove entire service blocks
+        cleaned = remove_service_blocks(content, services_to_remove)
+
+        # Remove depends_on references to llamacpp
+        cleaned = remove_depends_on_llamacpp(cleaned)
+
         if cleaned != content:
             with open(fname, 'w') as f:
                 f.write(cleaned)
-            print(f'  GPU references removed from {fname}')
+            print(f'  llamacpp services removed from {fname}')
+        else:
+            print(f'  No llamacpp services found in {fname}')
     except FileNotFoundError:
-        pass
+        print(f'  {fname} not found, skipping')
+
 print('Done')
-" || warn "Could not strip GPU references — external-llm override will handle it"
+PYEOF
 fi
 
 # ─── NVIDIA Check (Standard mode only) ──────────────────────────────────────
