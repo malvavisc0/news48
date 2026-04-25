@@ -19,6 +19,9 @@ def search_articles_cmd(
         help="Filter by sentiment (positive, negative, neutral)",
     ),
     category: str = typer.Option(None, "--category", help="Filter by category"),
+    country: str = typer.Option(
+        None, "--country", help="Filter by country code (e.g., us, gb, de)"
+    ),
     limit: int = typer.Option(20, "--limit", "-l"),
     offset: int = typer.Option(0, "--offset", "-o"),
     output_json: bool = typer.Option(False, "--json"),
@@ -28,6 +31,7 @@ def search_articles_cmd(
     Examples:
         news48 search articles "climate change"
         news48 search articles "election" --sentiment negative --limit 5
+        news48 search articles "election" --country us --limit 5
     """
     require_db()
 
@@ -37,6 +41,7 @@ def search_articles_cmd(
             hours=hours,
             sentiment=sentiment,
             category=category,
+            country=country,
             limit=limit,
             offset=offset,
         )

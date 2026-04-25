@@ -7,12 +7,12 @@ The ``MCPEndpoint`` class is an ASGI app that:
   1. Validates Bearer-token auth against Redis on every request.
   2. Delegates to ``StreamableHTTPServerTransport.handle_request``.
 
-Lifecycle (``startup`` / ``shutdown``) is driven by the FastAPI app
-lifespan in ``news48.web.app``.
+All tool definitions and execution logic are in news48.mcp.tools,
+shared with the local stdio server.  The web endpoint passes
+``parsed_only=True`` so only fully parsed articles are returned.
 """
 
 import asyncio
-import json
 import logging
 
 from mcp import types
@@ -22,79 +22,12 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import Receive, Scope, Send
 
+from news48.mcp.tools import TOOLS, execute_tool
 from news48.web.mcp.auth import verify_key
 
 logger = logging.getLogger(__name__)
 
 mcp_app = Server("news48-web")
-
-TOOLS = [
-    types.Tool(
-        name="browse_articles",
-        description="Browse recent articles with optional category filter.",
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "hours": {
-                    "type": "integer",
-                    "description": "Look back N hours.",
-                    "default": 48,
-                },
-                "category": {
-                    "type": "string",
-                    "description": "Optional category filter.",
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Max results.",
-                    "default": 20,
-                },
-            },
-        },
-    ),
-    types.Tool(
-        name="get_topic_clusters",
-        description="Get topic clusters for recent articles.",
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "hours": {
-                    "type": "integer",
-                    "description": "Look back N hours.",
-                    "default": 48,
-                },
-            },
-        },
-    ),
-    types.Tool(
-        name="article_detail",
-        description="Get full article with fact-check claims.",
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "article_id": {
-                    "type": "integer",
-                    "description": "The article ID.",
-                },
-            },
-            "required": ["article_id"],
-        },
-    ),
-    types.Tool(
-        name="web_stats",
-        description="Get web-facing statistics.",
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "hours": {
-                    "type": "integer",
-                    "description": "Look back N hours.",
-                    "default": 48,
-                },
-            },
-        },
-    ),
-]
 
 
 @mcp_app.list_tools()
@@ -106,96 +39,7 @@ async def list_tools() -> list[types.Tool]:
 @mcp_app.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
     """Handle tool calls for the web MCP endpoint."""
-    try:
-        if name == "browse_articles":
-            return await _browse_articles(arguments)
-        elif name == "get_topic_clusters":
-            return await _get_topic_clusters(arguments)
-        elif name == "article_detail":
-            return await _article_detail(arguments)
-        elif name == "web_stats":
-            return await _web_stats(arguments)
-        else:
-            return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
-    except Exception:
-        logger.exception("Web MCP tool %s failed", name)
-        return [types.TextContent(type="text", text="An internal error occurred.")]
-
-
-def _clamp_int(value, default: int, lo: int, hi: int) -> int:
-    """Clamp an integer argument to [lo, hi] range."""
-    try:
-        return max(lo, min(hi, int(value)))
-    except (TypeError, ValueError):
-        return default
-
-
-async def _browse_articles(args: dict) -> list[types.TextContent]:
-    from news48.core.database.articles import get_articles_paginated
-
-    hours = _clamp_int(args.get("hours"), 48, 1, 168)
-    category = args.get("category")
-    limit = _clamp_int(args.get("limit"), 20, 1, 100)
-    articles, _ = get_articles_paginated(limit=limit, hours=hours, category=category)
-    return [
-        types.TextContent(
-            type="text",
-            text=json.dumps(articles, default=str, indent=2),
-        )
-    ]
-
-
-async def _get_topic_clusters(args: dict) -> list[types.TextContent]:
-    from news48.core.database.articles import get_topic_clusters
-
-    hours = _clamp_int(args.get("hours"), 48, 1, 168)
-    clusters = get_topic_clusters(hours=hours)
-    return [
-        types.TextContent(
-            type="text",
-            text=json.dumps(clusters, default=str, indent=2),
-        )
-    ]
-
-
-async def _article_detail(args: dict) -> list[types.TextContent]:
-    from news48.core.database import get_article_by_id, get_claims_for_article
-
-    article_id = _clamp_int(args.get("article_id"), 0, 1, 999999999)
-    if article_id == 0:
-        return [types.TextContent(type="text", text="Invalid article_id")]
-    article = get_article_by_id(article_id)
-    if not article:
-        return [
-            types.TextContent(
-                type="text",
-                text=f"Article {article_id} not found",
-            )
-        ]
-    claims = get_claims_for_article(article_id)
-    result = {
-        "article": (article if isinstance(article, dict) else article.to_dict()),
-        "claims": claims,
-    }
-    return [
-        types.TextContent(
-            type="text",
-            text=json.dumps(result, default=str, indent=2),
-        )
-    ]
-
-
-async def _web_stats(args: dict) -> list[types.TextContent]:
-    from news48.core.database.articles import get_web_stats
-
-    hours = _clamp_int(args.get("hours"), 48, 1, 168)
-    stats = get_web_stats(hours=hours)
-    return [
-        types.TextContent(
-            type="text",
-            text=json.dumps(stats, default=str, indent=2),
-        )
-    ]
+    return await execute_tool(name, arguments, parsed_only=True)
 
 
 class MCPEndpoint:

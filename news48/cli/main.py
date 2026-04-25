@@ -20,6 +20,7 @@ import typer
 from news48.cli.commands import (
     agents_app,
     articles_app,
+    briefing,
     cleanup_app,
     download,
     feeds_app,
@@ -53,6 +54,7 @@ app.command()(seed)
 app.command()(download)
 app.command(name="fact-check")(fact_check)
 app.command()(stats)
+app.command()(briefing)
 app.add_typer(feeds_app, name="feeds")
 app.add_typer(fetches_app, name="fetches")
 app.add_typer(articles_app, name="articles")

@@ -100,6 +100,9 @@ def list_articles(
         help="Filter by sentiment: positive, negative, neutral",
     ),
     category: str = typer.Option(None, "--category", "-c", help="Filter by category"),
+    country: str = typer.Option(
+        None, "--country", help="Filter by country code (e.g., us, gb, de)"
+    ),
     limit: int = typer.Option(20, "--limit", "-l", help="Number of articles"),
     offset: int = typer.Option(0, "--offset", "-o", help="Number to skip"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -130,6 +133,7 @@ def list_articles(
             language=language,
             sentiment=sentiment,
             category=category,
+            country=country,
         )
     except SystemExit:
         raise
@@ -1039,3 +1043,99 @@ async def _patch_article_fields(article: dict) -> dict:
             "success": False,
             "error": str(e),
         }
+
+
+@articles_app.command(name="categories")
+def article_categories(
+    hours: int = typer.Option(48, "--hours", help="Time window in hours"),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """List active news categories with article counts."""
+    require_db()
+
+    from news48.core.database.articles import get_all_categories
+
+    categories = get_all_categories(hours=hours, parsed=True)
+
+    data = {"hours": hours, "categories": categories}
+
+    if output_json:
+        emit_json(data)
+    else:
+        print(f"Categories (last {hours}h):")
+        for c in categories:
+            print(f"  {c['name']} ({c['article_count']} articles)")
+
+
+@articles_app.command(name="countries")
+def article_countries(
+    hours: int = typer.Option(48, "--hours", help="Time window in hours"),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """List countries mentioned in recent articles with article counts."""
+    require_db()
+
+    from news48.core.database.articles import get_all_countries
+
+    countries = get_all_countries(hours=hours, parsed=True)
+
+    data = {"hours": hours, "countries": countries}
+
+    if output_json:
+        emit_json(data)
+    else:
+        print(f"Countries (last {hours}h):")
+        for c in countries:
+            print(f"  {c['name']} ({c['article_count']} articles)")
+
+
+@articles_app.command(name="related")
+def article_related(
+    article_id: int = typer.Argument(..., help="Article ID"),
+    limit: int = typer.Option(5, "--limit", "-l", help="Max related articles"),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Show related articles based on shared categories/tags."""
+    require_db()
+
+    from news48.core.database.articles import get_related_articles
+
+    article = get_article_by_id(article_id)
+    if not article:
+        emit_error(
+            f"Article not found: {article_id}",
+            as_json=output_json,
+        )
+
+    related = get_related_articles(article_id, limit=limit, parsed=True)
+
+    data = {
+        "article_id": article_id,
+        "article_title": article["title"],
+        "total": len(related),
+        "related": [
+            {
+                "id": r["id"],
+                "title": r["title"],
+                "url": r["url"],
+                "source_name": r.get("source_name") or r.get("feed_source_name"),
+                "published_at": r.get("published_at"),
+                "categories": r.get("categories"),
+                "fact_check_status": r.get("fact_check_status"),
+            }
+            for r in related
+        ],
+    }
+
+    if output_json:
+        emit_json(data)
+    else:
+        title = article["title"] or "Untitled"
+        print(f"Related to: {title} (ID: {article_id})")
+        print(f"  {len(related)} related articles:")
+        for r in related:
+            source = r.get("source_name") or r.get("feed_source_name") or "Unknown"
+            fc = r.get("fact_check_status") or ""
+            fc_tag = f" [{fc}]" if fc else ""
+            print(f"  - [{source}] {r['title']}{fc_tag}")
+            print(f"    {r['url']}")

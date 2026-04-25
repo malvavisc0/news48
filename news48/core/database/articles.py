@@ -369,6 +369,7 @@ def get_articles_paginated(
     language: str | None = None,
     category: str | None = None,
     sentiment: str | None = None,
+    country: str | None = None,
     hours: int | None = None,
     include_source: bool = False,
     parsed: bool = False,
@@ -413,6 +414,10 @@ def get_articles_paginated(
     if sentiment:
         where_clauses.append("articles.sentiment = :sentiment")
         params["sentiment"] = sentiment
+
+    if country:
+        where_clauses.append("articles.countries LIKE :country ESCAPE '|'")
+        params["country"] = f"%{escape_like(country.strip().lower())}%"
 
     if hours is not None:
         where_clauses.append("articles.created_at >= :hours_ago")
@@ -769,6 +774,7 @@ def search_articles(
     hours: int = 48,
     sentiment: str | None = None,
     category: str | None = None,
+    country: str | None = None,
 ) -> tuple[list[dict], int]:
     """Full-text search articles with optional filters."""
     where_clauses = ["a.created_at >= :hours_ago"]
@@ -781,6 +787,10 @@ def search_articles(
     if category:
         where_clauses.append("a.categories LIKE :category ESCAPE '|'")
         params["category"] = f"%{escape_like(category)}%"
+
+    if country:
+        where_clauses.append("a.countries LIKE :country ESCAPE '|'")
+        params["country"] = f"%{escape_like(country.strip().lower())}%"
 
     where_sql = " AND ".join(where_clauses)
 
@@ -850,6 +860,48 @@ def _normalize_category(cat: str) -> str:
     """Normalize a category name: lowercase, replace hyphens/underscores
     with spaces, and collapse whitespace."""
     return " ".join(cat.strip().lower().replace("-", " ").replace("_", " ").split())
+
+
+def get_all_countries(hours: int = 48, parsed: bool = False) -> list[dict]:
+    """Get distinct countries with article counts within time window.
+
+    Deduplicates by title so that the same story from multiple sources
+    is only counted once per country.  Country codes are stored as
+    comma-separated values (e.g. "us,gb,de").
+    """
+    threshold = _hours_ago_db(hours)
+
+    with SessionLocal() as session:
+        rows = session.execute(
+            text("""
+            SELECT a.countries FROM articles a
+            INNER JOIN (
+                SELECT MIN(id) as min_id FROM articles
+                WHERE created_at >= :threshold
+                  AND countries IS NOT NULL AND countries != ''
+                  AND parsed_at IS NOT NULL
+                GROUP BY title
+            ) _dedup ON a.id = _dedup.min_id
+        """),
+            {"threshold": threshold},
+        ).fetchall()
+
+        counts: dict[str, int] = {}
+        for row in rows:
+            raw = row[0]
+            if raw:
+                for code in raw.split(","):
+                    code = code.strip().lower()
+                    if code:
+                        counts[code] = counts.get(code, 0) + 1
+
+        return [
+            {
+                "name": name,
+                "article_count": count,
+            }
+            for name, count in sorted(counts.items(), key=lambda x: -x[1])
+        ]
 
 
 def get_all_categories(hours: int = 48, parsed: bool = False) -> list[dict]:

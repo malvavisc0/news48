@@ -2,6 +2,7 @@
 
 from .agents import agents_app
 from .articles import articles_app
+from .briefing import briefing
 from .cleanup import cleanup_app
 from .download import download
 from .feeds import feeds_app
