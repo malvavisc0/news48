@@ -24,8 +24,26 @@ def _patch_database_modules(test_engine):
     db_connection.SessionLocal = test_session_factory
 
     from news48.core.database import articles, claims, feeds, fetches, retention
+    from news48.core.database.articles import (
+        _browsing,
+        _claims,
+        _mutations,
+        _queries,
+        _stats,
+    )
 
-    for mod in (articles, claims, fetches, feeds, retention):
+    for mod in (
+        articles,
+        claims,
+        fetches,
+        feeds,
+        retention,
+        _browsing,
+        _claims,
+        _mutations,
+        _queries,
+        _stats,
+    ):
         mod.SessionLocal = test_session_factory  # type: ignore[attr-defined]
 
 

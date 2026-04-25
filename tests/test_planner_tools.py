@@ -720,7 +720,7 @@ def test_stale_detects_dead_claimed_pid(tmp_path, monkeypatch):
     plan["claimed_by"] = "pid:999999"
     planner_tools._write_plan(plan)
 
-    monkeypatch.setattr(planner_tools, "_is_pid_alive", lambda _pid: False)
+    monkeypatch.setattr(planner_tools._lifecycle, "_is_pid_alive", lambda _pid: False)
 
     payload = json.loads(planner_tools.recover_stale_plans("startup recovery"))
     assert payload["error"] == ""
@@ -789,7 +789,7 @@ def test_is_plan_stale_returns_false_when_pid_alive(tmp_path, monkeypatch):
     plan["claimed_by"] = "pid:12345"
     planner_tools._write_plan(plan)
 
-    monkeypatch.setattr(planner_tools, "_is_pid_alive", lambda _pid: True)
+    monkeypatch.setattr(planner_tools._lifecycle, "_is_pid_alive", lambda _pid: True)
     assert planner_tools._is_plan_stale(plan) is False
 
 

@@ -1,17 +1,8 @@
-"""FastAPI web application with routes for the news48 web interface."""
+"""Content-heavy page routes: homepage, article, cluster, all stories, category."""
 
-import time
-from collections import defaultdict
-from contextlib import asynccontextmanager
-from pathlib import Path
-
-from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, PlainTextResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import HTTPException, Query, Request
 from fastapi.templating import Jinja2Templates
-from starlette.middleware.base import BaseHTTPMiddleware
 
-from news48 import __version__
 from news48.core.helpers.seo import (
     build_breadcrumb_schema,
     build_canonical_url,
@@ -20,126 +11,14 @@ from news48.core.helpers.seo import (
     build_website_schema,
     generate_json_ld,
     generate_og_tags,
-    generate_sitemap,
 )
-from news48.web.mcp.endpoint import mcp_endpoint
-
-from . import helpers as filters
-
-
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Add standard security headers to all responses."""
-
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = (
-            "camera=(), microphone=(), geolocation=()"
-        )
-        return response
-
-
-class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Simple in-memory rate limiter keyed by client IP.
-
-    Limits:
-    - General endpoints: 120 requests per minute
-    - Search endpoint: 20 requests per minute
-
-    Includes periodic sweep to remove stale IP entries and prevent
-    unbounded memory growth under high-cardinality traffic.
-    """
-
-    _GENERAL_LIMIT = 120
-    _SEARCH_LIMIT = 20
-    _WINDOW = 60.0  # seconds
-    _SWEEP_INTERVAL = 300.0  # full sweep every 5 minutes
-
-    def __init__(self, app):
-        super().__init__(app)
-        self._requests: dict[str, list[float]] = defaultdict(list)
-        self._last_sweep: float = time.time()
-
-    def _get_client_ip(self, request: Request) -> str:
-        forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
-        return request.client.host if request.client else "unknown"
-
-    def _cleanup(self, ip: str, now: float) -> None:
-        cutoff = now - self._WINDOW
-        self._requests[ip] = [t for t in self._requests[ip] if t > cutoff]
-
-    def _maybe_sweep(self, now: float) -> None:
-        """Remove empty IP entries to prevent unbounded dict growth."""
-        if now - self._last_sweep < self._SWEEP_INTERVAL:
-            return
-        self._last_sweep = now
-        empty_ips = [ip for ip, ts in self._requests.items() if not ts]
-        for ip in empty_ips:
-            del self._requests[ip]
-
-    async def dispatch(self, request: Request, call_next):
-        # Skip rate limiting for static files and health check
-        path = request.url.path
-        if path.startswith("/static") or path == "/health":
-            return await call_next(request)
-
-        ip = self._get_client_ip(request)
-        now = time.time()
-        self._cleanup(ip, now)
-        self._maybe_sweep(now)
-
-        # Determine limit based on path
-        if path.startswith("/search"):
-            limit = self._SEARCH_LIMIT
-        else:
-            limit = self._GENERAL_LIMIT
-
-        if len(self._requests[ip]) >= limit:
-            return JSONResponse(
-                {"detail": "Rate limit exceeded. Try again later."},
-                status_code=429,
-            )
-
-        self._requests[ip].append(now)
-        return await call_next(request)
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Manage MCP endpoint lifecycle."""
-    await mcp_endpoint.startup()
-    yield
-    await mcp_endpoint.shutdown()
-
-
-app = FastAPI(title="news48", lifespan=lifespan)
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(RateLimitMiddleware)
-
-# CORS: restrictive by default. Only the MCP endpoint needs
-# cross-origin access; web routes are server-rendered.
-from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[],  # No cross-origin for web routes
-    allow_methods=["GET"],
-    allow_headers=[],
-)
-
-app.mount("/mcp", mcp_endpoint)
 
 
 def _site_url(request: Request) -> str:
     return str(request.base_url).rstrip("/")
 
 
-def _default_meta(request: Request) -> dict[str, object]:
+def _default_meta(request: Request, templates: Jinja2Templates) -> dict[str, object]:
     site_url = _site_url(request)
     canonical_url = build_canonical_url(site_url, str(request.url.path))
     seo = build_seo_meta(
@@ -160,39 +39,11 @@ def _seo_str(seo: dict[str, object], key: str) -> str:
     return value if isinstance(value, str) else ""
 
 
-# Static files
-_web_dir = Path(__file__).parent
-app.mount(
-    "/static",
-    StaticFiles(directory=_web_dir / "static"),
-    name="static",
-)
-
-# Templates with custom filters.
-# Caching is disabled only when WEB_RELOAD=1 (development mode).
-import os  # noqa: E402
-
-templates = Jinja2Templates(directory=_web_dir / "templates")
-if os.getenv("WEB_RELOAD", "0") == "1":
-    templates.env.cache = None
-templates.env.globals["app_version"] = __version__
-templates.env.filters["relative_time"] = filters.format_relative_time
-templates.env.filters["hours_remaining"] = filters.hours_remaining
-templates.env.filters["freshness_class"] = filters.freshness_class
-templates.env.filters["cluster_bar"] = filters.cluster_bar
-templates.env.filters["word_count"] = filters.word_count
-templates.env.filters["read_time"] = filters.read_time
-templates.env.filters["parse_categories"] = filters.parse_categories
-templates.env.filters["parse_tags"] = filters.parse_tags
-templates.env.filters["format_category_name"] = filters.format_category_name
-
-
-@app.get("/")
 async def homepage(
     request: Request,
-    sentiment: str | None = Query(
-        None, pattern="^(positive|negative|neutral)$"
-    ),
+    templates: Jinja2Templates,
+    filters,
+    sentiment: str | None = None,
 ):
     """Homepage with curated top-10 stories, stats, clusters, expiring articles."""
     from news48.core.database.articles import (
@@ -215,10 +66,9 @@ async def homepage(
     expiring = get_expiring_articles(within_hours=6, parsed=True)
     categories = get_all_categories(hours=48, parsed=True)
 
-    # Compute max cluster count for proportional bar rendering
     max_cluster_count = max((c["article_count"] for c in clusters), default=10)
     site_url = _site_url(request)
-    seo = _default_meta(request)
+    seo = _default_meta(request, templates)
     canonical_url = _seo_str(seo, "canonical_url")
     seo["json_ld"] = [
         build_website_schema(site_url),
@@ -234,9 +84,7 @@ async def homepage(
                     "title": story.get("title"),
                     "canonical_url": build_canonical_url(
                         site_url,
-                        "/article/{}/{}".format(
-                            story["id"], story.get("slug") or ""
-                        ),
+                        "/article/{}/{}".format(story["id"], story.get("slug") or ""),
                     ),
                 }
                 for story in stories
@@ -261,8 +109,9 @@ async def homepage(
     )
 
 
-@app.get("/article/{article_id}/{slug}")
-async def article_detail(request: Request, article_id: int, slug: str):
+async def article_detail(
+    request: Request, templates: Jinja2Templates, article_id: int, slug: str
+):
     """Article detail page with fact-check claims and related stories."""
     from news48.core.database.articles import (
         get_all_categories,
@@ -280,7 +129,6 @@ async def article_detail(request: Request, article_id: int, slug: str):
     related = get_related_articles(article_id, limit=3, parsed=True)
     categories = get_all_categories(hours=48, parsed=True)
 
-    # Compute claims summary from claims list
     claims_summary = {
         "verified": 0,
         "disputed": 0,
@@ -322,7 +170,6 @@ async def article_detail(request: Request, article_id: int, slug: str):
         ),
     ]
 
-    # Increment view count (non-critical; don't fail the request)
     try:
         increment_view_count(article_id)
     except Exception:
@@ -343,13 +190,11 @@ async def article_detail(request: Request, article_id: int, slug: str):
     )
 
 
-@app.get("/cluster/{cluster_slug}")
-async def cluster_detail(request: Request, cluster_slug: str):
+async def cluster_detail(
+    request: Request, templates: Jinja2Templates, cluster_slug: str
+):
     """Cluster detail page showing all articles matching a tag."""
-    from news48.core.database.articles import (
-        get_all_categories,
-        get_articles_by_tag,
-    )
+    from news48.core.database.articles import get_all_categories, get_articles_by_tag
 
     articles, total = get_articles_by_tag(
         cluster_slug, hours=48, limit=None, parsed=True
@@ -380,9 +225,7 @@ async def cluster_detail(request: Request, cluster_slug: str):
                     "title": item.get("title"),
                     "canonical_url": build_canonical_url(
                         site_url,
-                        "/article/{}/{}".format(
-                            item["id"], item.get("slug") or ""
-                        ),
+                        "/article/{}/{}".format(item["id"], item.get("slug") or ""),
                     ),
                 }
                 for item in articles
@@ -410,12 +253,8 @@ async def cluster_detail(request: Request, cluster_slug: str):
     )
 
 
-@app.get("/all")
 async def all_stories(
-    request: Request,
-    sentiment: str | None = Query(
-        None, pattern="^(positive|negative|neutral)$"
-    ),
+    request: Request, templates: Jinja2Templates, sentiment: str | None = None
 ):
     """All stories page — shows every parsed article with optional sentiment filter."""
     from news48.core.database.articles import (
@@ -457,9 +296,7 @@ async def all_stories(
                     "title": item.get("title"),
                     "canonical_url": build_canonical_url(
                         site_url,
-                        "/article/{}/{}".format(
-                            item["id"], item.get("slug") or ""
-                        ),
+                        "/article/{}/{}".format(item["id"], item.get("slug") or ""),
                     ),
                 }
                 for item in articles
@@ -488,13 +325,12 @@ async def all_stories(
     )
 
 
-@app.get("/category/{category_slug}")
 async def category_detail(
     request: Request,
+    templates: Jinja2Templates,
+    filters,
     category_slug: str,
-    sentiment: str | None = Query(
-        None, pattern="^(positive|negative|neutral)$"
-    ),
+    sentiment: str | None = None,
 ):
     """Category detail page showing all articles matching a category."""
     from news48.core.database.articles import (
@@ -503,7 +339,6 @@ async def category_detail(
         get_web_stats,
     )
 
-    # First check the category exists (without sentiment filter)
     _, unfiltered_total = get_articles_by_category(
         category_slug, hours=48, limit=0, parsed=True, sentiment=None
     )
@@ -517,19 +352,13 @@ async def category_detail(
     categories = get_all_categories(hours=48, parsed=True)
     stats = get_web_stats(hours=48, parsed=True)
 
-    # Look up display name from categories list
-    cat_match = next(
-        (c for c in categories if c["slug"] == category_slug), None
-    )
-    raw_name = (
-        cat_match["name"] if cat_match else category_slug.replace("-", " ")
-    )
+    cat_match = next((c for c in categories if c["slug"] == category_slug), None)
+    raw_name = cat_match["name"] if cat_match else category_slug.replace("-", " ")
     category_name = filters.format_category_name(raw_name)
     site_url = _site_url(request)
     canonical_url = build_canonical_url(site_url, f"/category/{category_slug}")
     category_title = (
-        f"{category_name} News Today | Live Verified Stories "
-        "in the Last 48 Hours"
+        f"{category_name} News Today | Live Verified Stories " "in the Last 48 Hours"
     )
     category_description = (
         f"The latest {category_name} news from the last 48 hours — "
@@ -550,9 +379,7 @@ async def category_detail(
                     "title": item.get("title"),
                     "canonical_url": build_canonical_url(
                         site_url,
-                        "/article/{}/{}".format(
-                            item["id"], item.get("slug") or ""
-                        ),
+                        "/article/{}/{}".format(item["id"], item.get("slug") or ""),
                     ),
                 }
                 for item in articles
@@ -580,132 +407,4 @@ async def category_detail(
             "stats": stats,
             "seo": seo,
         },
-    )
-
-
-@app.get("/robots.txt", response_class=PlainTextResponse)
-async def robots(request: Request):
-    """Robots directives for crawlers."""
-    site_url = _site_url(request)
-    return "User-agent: *\n" "Allow: /\n" f"Sitemap: {site_url}/sitemap.xml\n"
-
-
-@app.get("/sitemap.xml", response_class=PlainTextResponse)
-async def sitemap(request: Request):
-    """XML sitemap for key indexable pages."""
-    from news48.core.database.articles import (
-        get_all_categories,
-        get_articles_paginated,
-        get_topic_clusters,
-    )
-
-    site_url = _site_url(request)
-    articles, _ = get_articles_paginated(
-        hours=48, limit=250, include_source=True, parsed=True
-    )
-    categories = get_all_categories(hours=48, parsed=True)
-    clusters = get_topic_clusters(hours=48, parsed=True)
-
-    extra_urls = [
-        {
-            "canonical_url": build_canonical_url(site_url, "/"),
-            "priority": "1.0",
-            "changefreq": "hourly",
-        },
-        {
-            "canonical_url": build_canonical_url(site_url, "/all"),
-            "priority": "0.9",
-            "changefreq": "hourly",
-        },
-    ]
-    extra_urls.extend(
-        {
-            "canonical_url": build_canonical_url(
-                site_url, f"/category/{category['slug']}"
-            ),
-            "priority": "0.9",
-            "changefreq": "hourly",
-        }
-        for category in categories
-    )
-    extra_urls.extend(
-        {
-            "canonical_url": build_canonical_url(
-                site_url, f"/cluster/{cluster['slug']}"
-            ),
-            "priority": "0.8",
-            "changefreq": "hourly",
-        }
-        for cluster in clusters
-    )
-
-    for article in articles:
-        article["canonical_url"] = build_canonical_url(
-            site_url,
-            "/article/{}/{}".format(article["id"], article.get("slug") or ""),
-        )
-
-    return generate_sitemap(articles, site_url, extra_urls=extra_urls)
-
-
-@app.get("/llms.txt", response_class=PlainTextResponse)
-async def llms_txt():
-    """Serve the llms.txt file for LLM consumption."""
-    llms_path = Path(__file__).parent / "llms.txt"
-    return llms_path.read_text(encoding="utf-8")
-
-
-@app.get("/docs")
-async def docs_page(request: Request):
-    """Documentation page explaining news48 architecture and MCP setup."""
-    mcp_domain = os.getenv("MCP_DOMAIN", "news48.io")
-    seo = build_seo_meta(
-        title="How news48 Works — Architecture & MCP Setup | news48",
-        description=(
-            "Learn how news48 ingests, verifies, and publishes autonomous "
-            "news. MCP integration guide for Claude, Cursor, and other "
-            "AI assistants."
-        ),
-        canonical_url=build_canonical_url(_site_url(request), "/docs"),
-    )
-    return templates.TemplateResponse(
-        request=request,
-        name="docs.html",
-        context={"seo": seo, "mcp_domain": mcp_domain},
-    )
-
-
-@app.get("/health")
-async def health():
-    """Health check endpoint."""
-    return {"status": "ok"}
-
-
-# Custom exception handlers
-@app.exception_handler(404)
-async def not_found_handler(request: Request, exc):
-    """Render custom 404 page."""
-    return templates.TemplateResponse(
-        request=request,
-        name="error.html",
-        context={
-            "title": "Not Found",
-            "message": "The article you are looking for does not exist "
-            "or has expired.",
-        },
-        status_code=404,
-    )
-
-
-@app.exception_handler(500)
-async def server_error_handler(request: Request, exc):
-    """Render custom 500 page."""
-    return templates.TemplateResponse(
-        request=request,
-        name="error.html",
-        context={
-            "title": "Server Error",
-            "message": "Something went wrong. Please try again later.",
-        },
-        status_code=500,
     )
