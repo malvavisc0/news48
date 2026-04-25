@@ -393,6 +393,10 @@ if [ "$DEPLOY_MODE" = "external" ]; then
     success "External LLM configured: ${api_base} (${model_name})"
 fi
 
+# ─── Create data directory ──────────────────────────────────────────────────
+mkdir -p "$INSTALL_DIR/data"
+success "Data directory ready"
+
 # ─── Clean stale volumes ────────────────────────────────────────────────────
 # If we generated fresh passwords, old MySQL volumes will have mismatched
 # credentials. Remove them so MySQL re-initializes with the new passwords.
