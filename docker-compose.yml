@@ -63,7 +63,8 @@ services:
       context: .
       dockerfile: Dockerfile
       target: worker
-    entrypoint: [ "alembic", "upgrade", "head" ]
+    entrypoint: [ "/app/scripts/docker-entrypoint.sh" ]
+    command: [ "alembic", "upgrade", "head" ]
     environment:
       TZ: ${TZ:-Europe/Berlin}
       DATABASE_URL: mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}

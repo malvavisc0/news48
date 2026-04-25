@@ -18,7 +18,8 @@ services:
   # One-shot init container — uses pre-built worker image instead of building locally.
   db-migrate:
     image: ghcr.io/malvavisc0/news48:latest-worker
-    entrypoint: [ "alembic", "upgrade", "head" ]
+    entrypoint: [ "/app/scripts/docker-entrypoint.sh" ]
+    command: [ "alembic", "upgrade", "head" ]
     depends_on:
       mysql:
         condition: service_healthy
