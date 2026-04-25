@@ -2,10 +2,10 @@ name: CI — Test, Build & Publish CLI
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
     tags: ["v*"]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 permissions:
   contents: write
@@ -13,10 +13,18 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    name: "test (${{ matrix.arch }}, py${{ matrix.python-version }})"
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
