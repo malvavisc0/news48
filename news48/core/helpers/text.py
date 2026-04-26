@@ -5,7 +5,11 @@ from html import unescape
 
 # Common RSS truncation markers to strip after entity decoding.
 _TRUNCATION_RE = re.compile(
-    r"\s*\[?\.{2,}\]?\s*|\s*\[…\]\s*|\s*\(more\)\s*|\s*\(continued\)\s*",
+    r"\s*\[?\.{2,}\]?\s*|\s*\[…\]\s*|\s*\(more\)\s*|\s*\(continued\)\s*"
+    r"|\s*Continue reading\s*$"
+    r"|\s*Read more\s*$"
+    r"|\s*Read full article\s*$"
+    r"|\s*Read the full story\s*$",
     re.IGNORECASE,
 )
 

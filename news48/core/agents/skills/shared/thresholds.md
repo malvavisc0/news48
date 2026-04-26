@@ -16,14 +16,16 @@ Always active for sentinel agent — single source of truth for all health thres
 | Malformed parsed articles | ≥ 1 | ≥ 10 |
 | Articles with missing fields | ≥ 5 | ≥ 20 |
 | Articles older than 48h | present | 100+ |
+| Fact-check completions (24h) | 0 | 0 for >1 hour |
+| Oldest fact-unchecked article | >30 minutes | >2 hours |
 
 ## Self-Healing Metrics (Do NOT Create Plans)
 
-The following backlogs are handled by the orchestrator's automated background loops or scheduled agents and **must not** trigger plan creation:
+The following backlogs are handled by Periodiq-scheduled pipeline actors and **must not** trigger plan creation:
 
-- **Empty article backlog** (download backlog) — the `_download_loop` runs every 30s and processes up to 100 articles per cycle.
-- **Downloaded article backlog** (parse backlog) — the parser is triggered automatically after each download batch, and also runs on its own schedule.
-- **Fact-check backlog** — the `fact_checker` agent runs on its own 5-minute schedule with up to 3 concurrent instances. Creating executor plans for fact-check backlog causes an infinite timeout→requeue loop because a single executor cannot complete the work within its 30-minute runtime limit.
+- **Empty article backlog** (download backlog) — the `scheduled_download` actor runs every minute via Periodiq and processes up to 100 articles per cycle.
+- **Downloaded article backlog** (parse backlog) — the `scheduled_parser` actor runs every 5 minutes via Periodiq, and the parser is also triggered immediately after successful downloads.
+- **Fact-check backlog** — the `scheduled_fact_checker` actor runs every 10 minutes via Periodiq. Creating executor plans for fact-check backlog causes an infinite timeout→requeue loop because a single executor cannot complete the work within its 10-minute runtime limit.
 
 These metrics may still be reported in the sentinel report for visibility, but they should **never** result in fix plans.
 

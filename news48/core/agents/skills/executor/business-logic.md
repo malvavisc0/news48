@@ -42,7 +42,7 @@ flowchart TD
 |-------|-----------|
 | `run-waves` | `plan_family:fetch` or `plan_family:download` |
 | `add-steps` | plan_family:discovery |
-| `run-cleanup` | plan_family:retention |
+| `run-cleanup` | plan_family:retention (includes summary cleanup) |
 | `run-feed-health` | plan_family:feed-health |
 | `run-db-health` | plan_family:db-health |
 | `run-retry` | plan_family:retry |

@@ -94,6 +94,7 @@ news48 ships a FastAPI web interface that displays the last 48 hours of verified
 | 🧩 Parse | `news48 parse` | Extract title, summary, categories, sentiment via LLM |
 | 🔬 Fact-check | `news48 fact-check` | Verify claims against evidence, record verdicts |
 | 🧹 Cleanup | `news48 cleanup purge` | Remove articles older than 48 hours |
+| 🧹 Summaries | `news48 cleanup summaries` | Clean truncation markers from summaries |
 
 Most commands support `--json` for machine-readable output and `--limit` to control batch size.
 
@@ -203,6 +204,8 @@ news48 cleanup status                # Retention policy stats
 news48 cleanup purge                 # Purge old articles (default: 48h)
 news48 cleanup purge --dry-run       # Preview without deleting
 news48 cleanup health                # Database connectivity check
+news48 cleanup summaries             # Clean truncation markers from summaries
+news48 cleanup summaries --dry-run   # Preview summary cleaning
 ```
 
 ### Web & MCP
