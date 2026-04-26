@@ -54,6 +54,45 @@
         </div>
     </section>
 
+    <!-- Autonomous Operation Score -->
+    <section class="docs__section">
+        <h2 class="docs__heading">Autonomous Operation Score</h2>
+        {% if assessment %}
+        <div class="docs__score-card">
+            <p class="docs__score-overall">
+                {{ "%.1f"|format(assessment.overall) }}
+                <span>/ 5.0</span>
+            </p>
+            <p class="docs__score-level">{{ assessment.level }}</p>
+            <p class="docs__score-meta">
+                {{ assessment.tier }} · {{ assessment.architecture }} · assessed {{ assessment.date }}
+            </p>
+            <div class="docs__dim-bars">
+                {% set dim_keys = [
+                ("self_starting", "Self-starting"),
+                ("self_monitoring", "Self-monitoring"),
+                ("self_healing", "Self-healing"),
+                ("self_scaling", "Self-scaling"),
+                ("self_optimizing", "Self-optimizing"),
+                ("error_containment", "Error containment"),
+                ] %}
+                {% for key, label in dim_keys %}
+                {% set dim = assessment.dimensions[key] %}
+                <div class="docs__dim-row">
+                    <span class="docs__dim-label">{{ label }}</span>
+                    <div class="docs__dim-track">
+                        <div class="docs__dim-fill" style="width: {{ (dim.score / 5 * 100)|int }}%"></div>
+                    </div>
+                    <span class="docs__dim-score">{{ "%.1f"|format(dim.score) }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <p class="docs__score-empty">Not yet assessed.</p>
+        {% endif %}
+    </section>
+
     <!-- Pipeline overview -->
     <section class="docs__section">
         <h2 class="docs__heading">How it works</h2>

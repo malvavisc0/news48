@@ -1,5 +1,6 @@
 """FastAPI web application with routes for the news48 web interface."""
 
+import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -214,6 +215,19 @@ async def llms_txt():
     return llms_path.read_text(encoding="utf-8")
 
 
+def _load_assessment() -> dict | None:
+    """Load the latest autonomous operation score assessment."""
+    assessment_path = (
+        Path(__file__).parent.parent.parent.parent
+        / ".scoring"
+        / "latest-assessment.json"
+    )
+    try:
+        return json.loads(assessment_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
 @app.get("/docs")
 async def docs_page(request: Request):
     mcp_domain = os.getenv("MCP_DOMAIN", "news48.io")
@@ -226,10 +240,15 @@ async def docs_page(request: Request):
         ),
         canonical_url=build_canonical_url(_site_url(request), "/docs"),
     )
+    assessment = _load_assessment()
     return templates.TemplateResponse(
         request=request,
         name="docs.html",
-        context={"seo": seo, "mcp_domain": mcp_domain},
+        context={
+            "seo": seo,
+            "mcp_domain": mcp_domain,
+            "assessment": assessment,
+        },
     )
 
 

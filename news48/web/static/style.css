@@ -1878,6 +1878,103 @@ a.cluster:focus-visible {
     line-height: var(--leading-meta);
 }
 
+/* Autonomous Operation Score */
+.docs__score-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--rule);
+    border-radius: var(--rounded-lg);
+    padding: var(--space-xl) var(--space-lg);
+    text-align: center;
+    box-shadow: var(--shadow-soft);
+}
+
+.docs__score-overall {
+    font-family: var(--font-display);
+    font-size: var(--text-3xl);
+    font-weight: 800;
+    color: var(--ink);
+    line-height: var(--leading-display);
+    margin: 0;
+}
+
+.docs__score-overall span {
+    color: var(--ink-faint);
+    font-weight: 400;
+}
+
+.docs__score-level {
+    font-family: var(--font-label);
+    font-size: var(--text-md);
+    font-weight: 700;
+    color: var(--action);
+    margin: var(--space-sm) 0 0;
+    letter-spacing: 0.02em;
+}
+
+.docs__score-meta {
+    font-family: var(--font-label);
+    font-size: var(--text-2xs);
+    color: var(--ink-faint);
+    margin-top: var(--space-sm);
+}
+
+.docs__dim-bars {
+    display: grid;
+    gap: 12px;
+    margin-top: var(--space-lg);
+    text-align: left;
+    max-width: 520px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.docs__dim-row {
+    display: grid;
+    grid-template-columns: 140px 1fr 36px;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.docs__dim-label {
+    font-family: var(--font-label);
+    font-size: var(--text-2xs);
+    font-weight: 500;
+    color: var(--ink-light);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.docs__dim-track {
+    height: 8px;
+    background: var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.docs__dim-fill {
+    height: 100%;
+    background: var(--action);
+    border-radius: 4px;
+    transition: width 0.6s ease;
+}
+
+.docs__dim-score {
+    font-family: var(--font-label);
+    font-size: var(--text-2xs);
+    font-weight: 700;
+    color: var(--ink);
+    text-align: right;
+}
+
+.docs__score-empty {
+    font-family: var(--font-label);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    font-style: italic;
+    padding: var(--space-lg) 0;
+}
+
 /* Responsive */
 @media (max-width: 640px) {
     .docs {
@@ -1907,5 +2004,17 @@ a.cluster:focus-visible {
 
     .docs__mcp-mode {
         padding: var(--space-md);
+    }
+
+    .docs__score-card {
+        padding: var(--space-lg) var(--space-md);
+    }
+
+    .docs__score-overall {
+        font-size: var(--text-2xl);
+    }
+
+    .docs__dim-row {
+        grid-template-columns: 110px 1fr 32px;
     }
 }
