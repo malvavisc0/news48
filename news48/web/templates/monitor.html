@@ -1,0 +1,349 @@
+{% extends "base.html" %}
+
+{% block title %}{{ seo.title if seo is defined and seo else 'news48 Monitor | Internal Dashboard' }}{% endblock %}
+
+{% block body_class %}page-monitor{% endblock %}
+
+{% block content %}
+{% set articles = stats.articles %}
+{% set sentiment = stats.sentiment %}
+{% set feeds = stats.feeds %}
+{% set fetches = stats.fetches %}
+{% set retention = stats.retention %}
+{% set health = stats.health %}
+{% set plans = stats.plans %}
+{% set failures_total = articles.download_failures + articles.parse_failures %}
+{% set sentiment_total = sentiment.positive + sentiment.neutral + sentiment.negative %}
+{% set parsed_rate = ((articles.parsed / articles.total * 100) if articles.total else 0) %}
+{% set unparsed_rate = ((articles.unparsed / articles.total * 100) if articles.total else 0) %}
+{% set no_content_rate = ((articles.no_content / articles.total * 100) if articles.total else 0) %}
+{% set positive_width = ((sentiment.positive / sentiment_total * 100) if sentiment_total else 0) %}
+{% set neutral_width = ((sentiment.neutral / sentiment_total * 100) if sentiment_total else 0) %}
+{% set negative_width = ((sentiment.negative / sentiment_total * 100) if sentiment_total else 0) %}
+{% set retention_width = retention.retention_rate or 0 %}
+{% set top_feed_max = feeds.top_feeds[0].article_count if feeds.top_feeds else 1 %}
+
+<link rel="stylesheet" href="/static/monitor.css" />
+
+<div class="monitor-shell" data-monitor-root>
+    <header class="monitor-hero">
+        <div class="monitor-hero__eyebrow">live ops snapshot</div>
+        <div class="monitor-hero__heading-row">
+            <div class="monitor-hero__copy">
+                <p class="site-mark monitor-site-mark"><a href="/">news48 monitor</a></p>
+                <h1 class="monitor-hero__title">Pipeline health, throughput &
+                    trust — pulled live.</h1>
+                <p class="monitor-hero__lede">What the pipeline is doing right now — no caching, no staging, just the
+                    live numbers. Every feed crawl, parse run, and retention sweep is reflected below as it
+                    happens.</p>
+            </div>
+            <div class="monitor-hero__aside">
+                <div class="monitor-live" aria-label="Live dashboard status">
+                    <span class="live-dot"></span>
+                    <span>live monitor</span>
+                </div>
+                <div class="monitor-proof-grid">
+                    <article class="monitor-proof-card">
+                        <span class="monitor-proof-card__label">articles tracked</span>
+                        <strong class="monitor-proof-card__value" data-field="articles.total">{{ articles.total
+                            }}</strong>
+                    </article>
+                    <article class="monitor-proof-card">
+                        <span class="monitor-proof-card__label">feeds watched</span>
+                        <strong class="monitor-proof-card__value" data-field="feeds.total">{{ feeds.total }}</strong>
+                    </article>
+                    <article class="monitor-proof-card">
+                        <span class="monitor-proof-card__label">parse coverage</span>
+                        <strong class="monitor-proof-card__value" data-field-derived="parse_coverage">{{ '%.1f' %
+                            parsed_rate }}%</strong>
+                    </article>
+                    <article class="monitor-proof-card">
+                        <span class="monitor-proof-card__label">retention discipline</span>
+                        <strong class="monitor-proof-card__value" data-field="retention.retention_rate">{{
+                            retention.retention_rate }}</strong>
+                    </article>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-line monitor-status-line">
+            <span>snapshot <strong data-monitor-last-refresh-label>server-rendered</strong></span>
+            <button type="button" class="monitor-refresh-button" data-monitor-refresh>refresh now</button>
+        </div>
+    </header>
+
+    <section class="monitor-story-grid">
+        <article
+            class="monitor-feature-card monitor-feature-card--health{% if not health.is_connected or not health.integrity_ok %} monitor-feature-card--danger{% endif %}">
+            <div class="monitor-feature-card__header">
+                <div>
+                    <p class="section-label">system health</p>
+                    <h2 class="monitor-feature-card__title">Stable and accountable.</h2>
+                </div>
+                <div class="monitor-health-flags">
+                    <span
+                        class="monitor-flag {% if health.is_connected %}is-ok{% else %}is-danger{% endif %}">connected</span>
+                    <span class="monitor-flag {% if health.integrity_ok %}is-ok{% else %}is-danger{% endif %}">integrity
+                        ok</span>
+                </div>
+            </div>
+            <p class="monitor-feature-card__lede">Connection status and database size.</p>
+            <div class="monitor-keyline">
+                <span>database footprint</span>
+                <strong><span data-field="db_size_mb">{{ stats.db_size_mb }}</span> MB</strong>
+            </div>
+        </article>
+
+        <article class="monitor-feature-card monitor-feature-card--pipeline">
+            <div class="monitor-feature-card__header">
+                <div>
+                    <p class="section-label">pipeline quality</p>
+                    <h2 class="monitor-feature-card__title">Coverage, backlog & friction.</h2>
+                </div>
+                <div class="monitor-inline-badge">{{ failures_total }} total failures</div>
+            </div>
+            <p class="monitor-feature-card__lede">How many articles made it through the pipeline.</p>
+            <div class="monitor-progress-stack">
+                <div class="monitor-progress-card">
+                    <div class="monitor-progress-card__meta"><span>parsed</span><strong data-field="articles.parsed">{{
+                            articles.parsed }}</strong></div>
+                    <div class="monitor-bar monitor-bar--emerald"><span data-bar="articles.parsed"
+                            data-width="{{ parsed_rate }}"></span></div>
+                    <div class="monitor-progress-card__note" data-note="articles.parsed">{{ '%.1f' % parsed_rate }}% of
+                        tracked articles</div>
+                </div>
+                <div class="monitor-progress-card">
+                    <div class="monitor-progress-card__meta"><span>awaiting parse</span><strong
+                            data-field="articles.unparsed">{{ articles.unparsed }}</strong></div>
+                    <div class="monitor-bar"><span data-bar="articles.unparsed" data-width="{{ unparsed_rate }}"></span>
+                    </div>
+                    <div class="monitor-progress-card__note" data-note="articles.unparsed">{{ '%.1f' % unparsed_rate }}%
+                        still in queue</div>
+                </div>
+                <div class="monitor-progress-card">
+                    <div class="monitor-progress-card__meta"><span>no content</span><strong
+                            data-field="articles.no_content">{{ articles.no_content }}</strong></div>
+                    <div class="monitor-bar monitor-bar--warn"><span data-bar="articles.no_content"
+                            data-width="{{ no_content_rate }}"></span></div>
+                    <div class="monitor-progress-card__note" data-note="articles.no_content">{{ '%.1f' % no_content_rate
+                        }}% source friction</div>
+                </div>
+            </div>
+            <div class="monitor-inline-meta">
+                <span>failures <strong data-field-derived="failures_total">{{ failures_total }}</strong>
+                    <span class="stat-note">{{ articles.download_failures }} download · {{ articles.parse_failures }}
+                        parse</span></span>
+                <span>oldest unparsed <strong data-field="articles.oldest_unparsed_at" data-format="datetime">{{
+                        articles.oldest_unparsed_at or
+                        '—' }}</strong></span>
+            </div>
+        </article>
+
+        <article class="monitor-panel monitor-panel--elevated">
+            <div class="monitor-section__header">
+                <div>
+                    <p class="section-label">plan activity</p>
+                    <h2 class="monitor-section__headline">Agent execution state</h2>
+                </div>
+            </div>
+            <p class="monitor-feature-card__lede">What the agent layer is working on — pending, running, done, or
+                broken.</p>
+            <div class="monitor-stat-grid monitor-stat-grid--4">
+                <article class="stat">
+                    <div class="stat-kicker">pending</div>
+                    <div class="stat-value" data-field="plans.pending">{{ plans.pending }}</div>
+                </article>
+                <article class="stat">
+                    <div class="stat-kicker">executing</div>
+                    <div class="stat-value" data-field="plans.executing">{{ plans.executing }}</div>
+                </article>
+                <article class="stat">
+                    <div class="stat-kicker">completed</div>
+                    <div class="stat-value" data-field="plans.completed">{{ plans.completed }}</div>
+                </article>
+                <article class="stat{% if plans.failed %} monitor-stat--danger{% endif %}">
+                    <div class="stat-kicker">failed</div>
+                    <div class="stat-value" data-field="plans.failed">{{ plans.failed }}</div>
+                </article>
+            </div>
+        </article>
+
+        <article class="monitor-panel monitor-panel--elevated">
+            <div class="monitor-section__header">
+                <div>
+                    <p class="section-label">article velocity</p>
+                    <h2 class="monitor-section__headline">Freshness & volume</h2>
+                </div>
+            </div>
+            <p class="monitor-feature-card__lede">How many articles have landed today and this week.</p>
+            <div class="monitor-stat-grid monitor-stat-grid--3">
+                <article class="stat">
+                    <div class="stat-kicker">today</div>
+                    <div class="stat-value" data-field="articles.articles_today">{{ articles.articles_today }}</div>
+                </article>
+                <article class="stat">
+                    <div class="stat-kicker">this week</div>
+                    <div class="stat-value" data-field="articles.articles_this_week">{{ articles.articles_this_week }}
+                    </div>
+                </article>
+            </div>
+        </article>
+    </section>
+
+    <section class="monitor-section monitor-section--sentiment" aria-labelledby="monitor-sentiment-label">
+        <div class="monitor-section__header monitor-section__header--centered">
+            <div>
+                <p class="section-label">sentiment pulse</p>
+                <h2 class="monitor-section__headline" id="monitor-sentiment-label">Story mix sentiment at a glance.</h2>
+                <p class="monitor-feature-card__lede">Positive, neutral, and negative breakdown across parsed articles.
+                </p>
+            </div>
+        </div>
+        <div class="monitor-sentiment-panel">
+            {% if sentiment_total > 0 %}
+            <div class="monitor-sentiment-cards">
+                <article class="monitor-sentiment-card is-positive">
+                    <div class="monitor-sentiment-card__icon">▲</div>
+                    <div class="monitor-sentiment-card__body">
+                        <span class="monitor-sentiment-card__label">positive</span>
+                        <strong class="monitor-sentiment-card__value" data-field="sentiment.positive">{{
+                            sentiment.positive }}</strong>
+                        <span class="monitor-sentiment-card__share">{{ '%.1f' % positive_width }}%</span>
+                    </div>
+                </article>
+                <article class="monitor-sentiment-card is-neutral">
+                    <div class="monitor-sentiment-card__icon">—</div>
+                    <div class="monitor-sentiment-card__body">
+                        <span class="monitor-sentiment-card__label">neutral</span>
+                        <strong class="monitor-sentiment-card__value" data-field="sentiment.neutral">{{
+                            sentiment.neutral }}</strong>
+                        <span class="monitor-sentiment-card__share">{{ '%.1f' % neutral_width }}%</span>
+                    </div>
+                </article>
+                <article class="monitor-sentiment-card is-negative">
+                    <div class="monitor-sentiment-card__icon">▼</div>
+                    <div class="monitor-sentiment-card__body">
+                        <span class="monitor-sentiment-card__label">negative</span>
+                        <strong class="monitor-sentiment-card__value" data-field="sentiment.negative">{{
+                            sentiment.negative }}</strong>
+                        <span class="monitor-sentiment-card__share">{{ '%.1f' % negative_width }}%</span>
+                    </div>
+                </article>
+            </div>
+            <div class="monitor-sentiment-spectrum">
+                <div class="monitor-sentiment-spectrum__bar">
+                    <span class="is-positive" data-stack="sentiment.positive" data-width="{{ positive_width }}"></span>
+                    <span class="is-neutral" data-stack="sentiment.neutral" data-width="{{ neutral_width }}"></span>
+                    <span class="is-negative" data-stack="sentiment.negative" data-width="{{ negative_width }}"></span>
+                </div>
+                <div class="monitor-sentiment-spectrum__legend">
+                    <span>positive confidence</span>
+                    <span>balanced / neutral coverage</span>
+                    <span>negative pressure</span>
+                </div>
+            </div>
+            {% else %}
+            <div class="monitor-empty-spotlight">
+                <strong>No sentiment data yet.</strong>
+                <span data-monitor-sentiment-empty>Shows up once enough articles are parsed.</span>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="monitor-data-grid">
+        <article class="monitor-panel monitor-panel--elevated">
+            <div class="monitor-section__header">
+                <div>
+                    <p class="section-label">retention discipline</p>
+                    <h2 class="monitor-section__headline">Latest {{ retention.threshold_hours }}h window</h2>
+                </div>
+            </div>
+            <p class="monitor-feature-card__lede">Articles older than the threshold get cleaned up automatically.</p>
+            <div class="monitor-stat-grid monitor-stat-grid--3">
+                <article class="stat">
+                    <div class="stat-kicker">within window</div>
+                    <div class="stat-value" data-field="retention.articles_within_48h">{{ retention.articles_within_48h
+                        }}</div>
+                </article>
+                <article class="stat">
+                    <div class="stat-kicker">retention rate</div>
+                    <div class="stat-value" data-field="retention.retention_rate">{{ retention.retention_rate }}</div>
+                </article>
+            </div>
+            <div class="monitor-bar monitor-bar--dark"><span data-bar="retention.retention_rate"
+                    data-width="{{ retention_width }}"></span></div>
+            <div class="monitor-inline-meta">
+                <span>oldest <strong data-field="retention.oldest_article" data-format="datetime">{{
+                        retention.oldest_article or '—'
+                        }}</strong></span>
+                <span>newest <strong data-field="retention.newest_article" data-format="datetime">{{
+                        retention.newest_article or '—'
+                        }}</strong></span>
+            </div>
+        </article>
+
+        <article class="monitor-panel monitor-panel--elevated">
+            <div class="monitor-section__header">
+                <div>
+                    <p class="section-label">fetch activity</p>
+                    <h2 class="monitor-section__headline">Collection runs</h2>
+                </div>
+            </div>
+            <p class="monitor-feature-card__lede">The last few crawl runs and how much each one picked up.</p>
+            <div class="monitor-inline-meta monitor-inline-meta--spacious">
+                <span>total runs <strong data-field="fetches.total">{{ fetches.total }}</strong></span>
+                <span>avg articles/run <strong data-field="fetches.avg_articles_per_fetch">{{
+                        fetches.avg_articles_per_fetch or '0' }}</strong></span>
+                <span>last fetch <strong data-field="fetches.last_fetch_at" data-format="datetime">{{
+                        fetches.last_fetch_at or '—'
+                        }}</strong></span>
+            </div>
+            <div class="monitor-runs" data-monitor-runs>
+                {% for run in fetches.recent[:5] %}
+                <div class="monitor-run-row">
+                    <span class="monitor-badge status-{{ run.status or 'unknown' }}">{{ run.status or 'unknown'
+                        }}</span>
+                    <span class="monitor-run-row__id">#{{ run.id }}</span>
+                    <span class="monitor-run-row__time" data-run-time data-format="relative-datetime">{{
+                        run.completed_at or run.started_at or '—' }}</span>
+                    <span class="monitor-run-row__summary">{{ run.feeds_fetched }} feeds · {{ run.articles_found }}
+                        articles</span>
+                </div>
+                {% else %}
+                <p class="empty-state">No recent fetch runs available.</p>
+                {% endfor %}
+            </div>
+        </article>
+
+        <article class="monitor-panel monitor-panel--elevated monitor-panel--feeds">
+            <div class="monitor-section__header">
+                <div>
+                    <p class="section-label">feed breadth</p>
+                    <h2 class="monitor-section__headline">Source diversity</h2>
+                </div>
+            </div>
+            <p class="monitor-feature-card__lede">Which feeds are pulling their weight and which have gone stale.</p>
+            <div class="monitor-list" data-monitor-feed-list>
+                {% for feed in feeds.top_feeds[:6] %}
+                <div class="monitor-list__row monitor-list__row--feed">
+                    <div class="monitor-list__copy">
+                        <strong>{{ feed.title or feed.url }}</strong>
+                        <span>{{ feed.url }}</span>
+                    </div>
+                    <div class="monitor-list__metric">
+                        <span data-feed-count>{{ feed.article_count }}</span>
+                        <div class="monitor-bar"><span
+                                data-width="{{ ((feed.article_count / top_feed_max) * 100) if top_feed_max else 0 }}"></span>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <p class="empty-state">No feed stats available.</p>
+                {% endfor %}
+            </div>
+        </article>
+    </section>
+    <script src="/static/monitor.js"></script>
+</div>
+{% endblock %}

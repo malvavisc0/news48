@@ -57,3 +57,4 @@ from .retention import (
     get_retention_policy_stats,
     purge_articles_older_than_hours,
 )
+from .stats import collect_stats

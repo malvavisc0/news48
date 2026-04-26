@@ -4,17 +4,19 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Query, Request
-from fastapi.responses import PlainTextResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from news48 import __version__
+from news48.core.database import collect_stats
 from news48.core.helpers.seo import (
     build_canonical_url,
     build_seo_meta,
     generate_sitemap,
 )
+from news48.web.mcp.auth import verify_key
 from news48.web.mcp.endpoint import mcp_endpoint
 
 from .. import helpers as filters
@@ -25,6 +27,7 @@ from ._routes import (
     category_detail,
     cluster_detail,
     homepage,
+    monitor,
 )
 
 
@@ -87,7 +90,9 @@ def _site_url(request: Request) -> str:
 @app.get("/")
 async def homepage_route(
     request: Request,
-    sentiment: str | None = Query(None, pattern="^(positive|negative|neutral)$"),
+    sentiment: str | None = Query(
+        None, pattern="^(positive|negative|neutral)$"
+    ),
 ):
     return await homepage(request, templates, filters, sentiment)
 
@@ -105,7 +110,9 @@ async def cluster_detail_route(request: Request, cluster_slug: str):
 @app.get("/all")
 async def all_stories_route(
     request: Request,
-    sentiment: str | None = Query(None, pattern="^(positive|negative|neutral)$"),
+    sentiment: str | None = Query(
+        None, pattern="^(positive|negative|neutral)$"
+    ),
 ):
     return await all_stories(request, templates, sentiment)
 
@@ -114,9 +121,31 @@ async def all_stories_route(
 async def category_detail_route(
     request: Request,
     category_slug: str,
-    sentiment: str | None = Query(None, pattern="^(positive|negative|neutral)$"),
+    sentiment: str | None = Query(
+        None, pattern="^(positive|negative|neutral)$"
+    ),
 ):
-    return await category_detail(request, templates, filters, category_slug, sentiment)
+    return await category_detail(
+        request, templates, filters, category_slug, sentiment
+    )
+
+
+@app.get("/monitor")
+async def monitor_route(request: Request):
+    return await monitor(request, templates)
+
+
+@app.get("/api/stats")
+async def stats_api(request: Request, stale_days: int = Query(7, ge=1, le=30)):
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Bearer token")
+
+    api_key = auth_header[7:]
+    if not verify_key(api_key):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    return JSONResponse(collect_stats(stale_days))
 
 
 # ---------------------------------------------------------------------------
