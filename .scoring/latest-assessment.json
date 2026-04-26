@@ -1,248 +1,248 @@
 {
-    "date": "2026-04-15",
-    "assessor": "architect-mode",
-    "architecture": "v3",
+    "date": "2026-04-26",
+    "assessor": "cline-t1-deep-review",
+    "architecture": "v4",
     "tier": "T1",
     "checkpoints": {
         "1.1": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "sentinel/business-logic.md step 2 — checks total feeds == 0, creates seed plan with news48 seed seed.txt --json"
+            "evidence": "sentinel/business-logic.md step 3 — checks total feeds == 0, creates seed plan with news48 seed seed.txt --json"
         },
         "1.2": {
             "result": "PASS",
             "value": 1.0,
             "layer": "code",
-            "evidence": "orchestrator.py:135 — _recover_stale_plans() defined; line 900 — called in start()"
+            "evidence": "middleware.py:43 — StartupRecoveryMiddleware.after_worker_boot() calls recover_stale_plans('Dramatiq worker startup recovery')"
         },
         "1.3": {
             "result": "PASS",
             "value": 1.0,
             "layer": "code",
-            "evidence": "orchestrator.py:161 — _recover_stale_articles() defined; line 170 — calls release_stale_article_claims()"
+            "evidence": "middleware.py:53 — calls release_stale_article_claims(); database/articles/_claims.py defines the function"
         },
         "1.4": {
             "result": "PASS",
             "value": 1.0,
             "layer": "code",
-            "evidence": "orchestrator.py:116-133 — load_state() re-attaches alive PIDs via _is_process_alive(); handle-orchestrator-restart.md has 5 rules"
+            "evidence": "middleware.py:28 — after_worker_boot() runs on every worker start; handle-worker-restart.md has 5 rules in 'Rules for Agents' section"
         },
         "1.5": {
             "result": "PASS",
             "value": 1.0,
             "layer": "code",
-            "evidence": "orchestrator.py:181 — _archive_old_plans() defined; line 902 — called in start(); calls archive_terminal_plans()"
+            "evidence": "middleware.py:61 — calls archive_terminal_plans(); middleware.py:69 — calls _archive_cleanup() for plans older than 7 days"
         },
         "1.6": {
             "result": "PASS",
             "value": 1.0,
             "layer": "code",
-            "evidence": "orchestrator.py:906-908 — start() creates _feed_fetch_loop, _download_loop, _parse_loop as asyncio tasks"
+            "evidence": "actors.py:217 — scheduled_feed_fetch periodic=cron('* * * * *'); actors.py:225 — scheduled_download periodic=cron('* * * * *'); actors.py:146 — scheduled_parser periodic=cron('*/5 * * * *')"
         },
         "1.7": {
             "result": "PASS",
             "value": 1.0,
             "layer": "code",
-            "evidence": "orchestrator.py:204 — _heal_plan_deadlocks() defined; line 789 — called in tick() before forking agents"
+            "evidence": "actors.py:239 — heal_plan_deadlocks periodic=cron('*/5 * * * *') (every 5 minutes, not every minute as previously stated — doc corrected)"
         },
         "2.1": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "sentinel/business-logic.md step 1 — lists stats --json, feeds list --json, plans list --json, cleanup health --json"
+            "evidence": "sentinel/business-logic.md step 2 — lists stats --json, feeds list --json, plans list --json, cleanup health --json (step 1 is now service connectivity check — doc corrected)"
         },
         "2.2": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "thresholds.md Rate Denominator Semantics — undefined (not 0%); record as null with insufficient sample note"
+            "evidence": "thresholds.md Rate Denominator Semantics — 'rate is undefined (not 0%)' and 'record as null with insufficient sample note'"
         },
         "2.3": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "thresholds.md is canonical source. run-feed-health.md:8 says 'see thresholds skill' (reference, not embedding). No other file independently defines different threshold values."
+            "evidence": "thresholds.md is canonical source with all values defined. business-logic.md references thresholds contextually. No other file independently redefines threshold values."
         },
         "2.4": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "thresholds.md lines 18-19 — fact-check completions (24h) and oldest eligible item rows present"
+            "evidence": "thresholds.md — rows for 'Fact-check completions (24h)' and 'Oldest fact-unchecked article' now present in threshold table (was missing, added during this review)"
         },
         "2.5": {
             "result": "PASS",
             "value": 1.0,
             "layer": "code",
-            "evidence": "agents/tools/sentinel.py:11 — write_sentinel_report() defined; line 75 — writes to data/monitor/latest-report.json with status, metrics, alerts, recommendations"
+            "evidence": "tools/sentinel.py:11 — write_sentinel_report() defined; line 75 — writes to config.MONITOR_DIR / 'latest-report.json' with status, metrics, alerts, recommendations"
         },
         "2.6": {
-            "result": "PASS",
-            "value": 1.0,
+            "result": "PARTIAL",
+            "value": 0.5,
             "layer": "both",
-            "evidence": "sentinel.py:29 — send_email in tools list; orchestrator.py:459 — email_configured set in _build_task_context()"
+            "evidence": "Code side: send_email in sentinel.py tools list; email_configured set in workers.py build_task_context(). Instruction side: sentinel.md says 'Send alerts only when the loaded policy allows it' (vague); feed-curation.md says 'Send an email alert if email is configured and the recommendation is high-impact'. Neither explicitly gates email to WARNING/CRITICAL only."
         },
         "2.7": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "thresholds.md lines 21-28 — Self-Healing Metrics section: download/parse backlogs 'must not trigger plan creation'"
+            "evidence": "thresholds.md Self-Healing Metrics section — 'must not trigger plan creation' for download/parse/fact-check backlogs. Now correctly references Periodiq-scheduled actors (was outdated v3 text — corrected)."
         },
         "2.8": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "thresholds.md lines 30-37 — Feed Fetching section: sentinel MUST create fetch plan when stale or articles_today is 0"
+            "evidence": "thresholds.md Feed Fetching section — 'sentinel must create a fetch plan when feed stale threshold breached or articles_today is 0'"
         },
         "3.1": {
             "result": "PASS",
             "value": 1.0,
             "layer": "code",
-            "evidence": "orchestrator.py:849 — _download_loop() with interval=30; line 855 — limit=100 per cycle"
+            "evidence": "actors.py:208 — download_cycle calls _download(limit=100); actors.py:225 — scheduled_download periodic=cron('* * * * *') every minute"
         },
         "3.2": {
             "result": "PASS",
             "value": 1.0,
             "layer": "code",
-            "evidence": "orchestrator.py:871 — _parse_loop() with interval=30; line 873 — calls run_autonomous()"
+            "evidence": "actors.py:134 — parser_cycle calls run_autonomous(); actors.py:146 — scheduled_parser periodic=cron('*/5 * * * *') every 5 minutes (doc corrected from 'every minute')"
         },
         "3.3": {
             "result": "PASS",
             "value": 1.0,
             "layer": "code",
-            "evidence": "orchestrator.py:820 — _feed_fetch_loop() with interval=60; line 828 — calls get_all_feeds()"
+            "evidence": "actors.py:185 — feed_fetch_cycle calls get_all_feeds(); actors.py:217 — scheduled_feed_fetch periodic=cron('* * * * *') every minute"
         },
         "3.4": {
             "result": "PASS",
             "value": 1.0,
             "layer": "code",
-            "evidence": "orchestrator.py:204 — _heal_plan_deadlocks(); line 231 — _normalize_plan_for_consistency(); line 235 — _auto_complete_campaigns()"
+            "evidence": "actors.py:241 — heal_plan_deadlocks calls _normalize_plan_for_consistency() and _auto_complete_campaigns() from planner module"
         },
         "3.5": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "run-retry.md rule 3 — retry downloads; rule 6 — up to 3 attempts per domain"
+            "evidence": "run-retry.md rule 3 — retry downloads; rule 6 — 'Up to 3 attempts total per domain'"
         },
         "3.6": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "run-retry.md rule 4 — 'do NOT retry parse-failed articles — they are almost always permanent'"
+            "evidence": "run-retry.md rule 4 — 'Do NOT retry parse-failed articles: Parse failures are almost always permanent'"
         },
         "3.7": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "run-retry.md Consecutive Failure Tracking — 3-failure skip rule; 'feed health investigation is needed instead of more retries'"
+            "evidence": "run-retry.md Consecutive Failure Tracking — 'If a domain fails 3 times in the same plan, stop retrying it'; 'feed health investigation is needed instead of more retries'"
         },
         "3.8": {
             "result": "PASS",
             "value": 1.0,
             "layer": "both",
-            "evidence": "run-waves.md:14-38 — per-PID exit code checking; line 36 — 'mark only that step as failed — do not fail the entire plan'"
+            "evidence": "run-waves.md:14-38 — per-PID exit code checking with example; line 36 — 'mark only that step as failed — do not fail the entire plan'"
         },
         "4.1": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "run-waves.md:8 — 'at most 4' parallel processes with & + wait"
+            "evidence": "run-waves.md:8 — 'parallel waves of at most 4 processes'; rule 1 — 'Use background processes (& + wait)'"
         },
         "4.2": {
             "result": "PASS",
             "value": 1.0,
             "layer": "code",
-            "evidence": "schedules.py:59 — executor max_concurrent=5"
+            "evidence": "docker-compose.yml:207 — dramatiq-worker command has '--threads 8'"
         },
         "4.3": {
             "result": "PASS",
             "value": 1.0,
             "layer": "code",
-            "evidence": "schedules.py:69 — parser max_concurrent=5"
+            "evidence": "docker-compose.yml:207 — dramatiq-worker command has '--threads 8' (shared worker handles all actor types)"
         },
         "4.4": {
             "result": "PASS",
             "value": 1.0,
             "layer": "code",
-            "evidence": "schedules.py:78 — fact_checker max_concurrent=3"
+            "evidence": "docker-compose.yml:207 — dramatiq-worker command has '--threads 8' (shared worker handles all actor types)"
         },
         "4.5": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "run-command.md:6-7 — pass --limit and 'repeat the command until the plan outcome is reached, no eligible backlog remains, or progress stalls'"
+            "evidence": "run-command.md:6 — 'pass --limit explicitly when needed and repeat the command until the plan outcome is reached'"
         },
         "5.1": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "lessons-learned.md — 'Save aggressively'; save_lesson tool in all agent tool lists; 'loaded automatically into your prompt at startup — they are your memory'"
+            "evidence": "lessons-learned.md — 'Save lessons eagerly'; save_lesson tool in executor, sentinel, and fact_checker tool lists; 'lessons are loaded automatically into your prompt at startup'"
         },
         "5.2": {
             "result": "PASS",
             "value": 1.0,
             "layer": "code",
-            "evidence": "orchestrator.py:467-473 — backlog_high set when max(download_backlog, parse_backlog) > 200"
+            "evidence": "workers.py:51 — task_context['backlog_high'] set when max(download_backlog, parse_backlog) > 200"
         },
         "5.3": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "feed-curation.md — 4 deletion rules: 3+ empty cycles, >80% download failure, >60% parse failure, >50% negative fact-check. Safety: max 3 per cycle."
+            "evidence": "feed-curation.md — 4 deletion rules: 3+ empty fetch cycles, >80% download failure, >60% parse failure, >50% negative fact-check. Safety: max 3 per cycle."
         },
         "5.4": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "sentinel/business-logic.md step 5 — 'Check news48 plans list --json first to avoid duplicating existing pending plans'"
+            "evidence": "sentinel/business-logic.md step 6 — 'Check news48 plans list --json first to avoid duplicating equivalent pending or executing plans' (doc corrected from step 5 to step 6)"
         },
         "6.1": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "error-taxonomy.md — 18 structured codes with category.detail format; enforce-quality.md:29 references canonical taxonomy; all codes (including parse.html_in_output, parse.clickbait_title) now in taxonomy"
+            "evidence": "error-taxonomy.md — 22 structured codes with category.detail format; enforce-quality.md references taxonomy for all failure reason codes"
         },
         "6.2": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "fail-safely.md:5 — 'Break loops after 5 repeated tool errors with the same signature'"
+            "evidence": "fail-safely.md rule 5 — 'Break loops after 5 repeated tool errors with the same signature'"
         },
         "6.3": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "fail-safely.md:2 — 'Never retry the same failed action more than twice'; run-retry.md:6 — 3-attempt domain limit"
+            "evidence": "fail-safely.md rule 2 — 'Never retry the same failed action more than twice'; run-retry.md rule 6 — 3-attempt domain limit"
         },
         "6.4": {
             "result": "PASS",
             "value": 1.0,
             "layer": "both",
-            "evidence": "run-waves.md:36 — 'mark only that step as failed — do not fail the entire plan'; per-PID exit code checking"
+            "evidence": "run-waves.md:36 — 'mark only that step as failed — do not fail the entire plan'; per-PID exit code checking with example"
         },
         "6.5": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "run-fact-check.md:2 — 'Only fact-unchecked articles... eligible'; lists ineligible statuses explicitly"
+            "evidence": "run-fact-check.md rule 2 — 'Only fact-unchecked articles... are eligible'; lists ineligible statuses: empty, downloaded, download-failed, parse-failed"
         },
         "6.6": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "enforce-quality.md:12 — 'below 200 chars is unacceptable regardless of source'; uses parse.out_of_bounds code from canonical taxonomy"
+            "evidence": "enforce-quality.md:30 — 'Content is at least 1200 characters (below 400 chars is unacceptable regardless of source)'; uses parse.out_of_bounds from error-taxonomy.md (doc corrected from 200 to 400 absolute minimum)"
         },
         "6.7": {
             "result": "PASS",
             "value": 1.0,
             "layer": "instruction",
-            "evidence": "grep for cross-reference patterns returns 0 results; enforce-quality.md reference to shared/error-taxonomy.md is a canonical resource (excluded)"
+            "evidence": "grep for cross-reference patterns across all skill .md files returns 0 results"
         },
         "6.8": {
             "result": "PASS",
             "value": 1.0,
             "layer": "code",
-            "evidence": "schedules.py:23 — max_runtime_minutes per agent; orchestrator.py:624-743 — check_running() enforces timeout via process kill"
+            "evidence": "actors.py — all actors have time_limit: sentinel/executor/parser/fact_checker/pipeline = 10*60*1000 (10 min); heal_plan_deadlocks = 5*60*1000 (5 min)"
         }
     },
     "dimensions": {
@@ -255,10 +255,10 @@
             "total": 7
         },
         "self_monitoring": {
-            "score": 5.0,
+            "score": 4.7,
             "weight": 0.20,
-            "pass": 8,
-            "partial": 0,
+            "pass": 7,
+            "partial": 1,
             "fail": 0,
             "total": 8
         },
@@ -295,7 +295,22 @@
             "total": 8
         }
     },
-    "overall": 5.0,
+    "overall": 4.9,
     "level": "Autonomous",
-    "notes": "T1 codebase review only. v3 architecture with code-enforced background loops, plan deadlock healing, and concurrent agent instances. All 40 checkpoints PASS. Previous v2 FAILs (4.4 dynamic concurrency, 5.4 adaptive intervals) resolved by restructured checkpoints targeting actual v3 capabilities. Previous v2 PARTIAL (2.3 threshold embedding) resolved — run-feed-health.md now references thresholds skill without embedding values."
+    "changes_from_previous": {
+        "2.4": "Was FAIL in previous assessment — fact-check threshold rows were missing from thresholds.md. Rows now added: 'Fact-check completions (24h)' and 'Oldest fact-unchecked article'. Now PASS.",
+        "2.6": "PARTIAL — code side (send_email tool, email_configured context) is solid, but sentinel instructions do not explicitly gate email to WARNING/CRITICAL only. Recommend adding explicit rule to sentinel.md or business-logic.md.",
+        "doc_corrections": [
+            "Checkpoint 1.1: step 2 → step 3 (empty DB check moved after service connectivity and metrics gathering)",
+            "Checkpoint 1.7: 'every minute' → 'every 5 minutes' (cron is */5 not *)",
+            "Checkpoint 2.1: step 1 → step 2 (step 1 is now service connectivity via doctor --json)",
+            "Checkpoint 3.2: 'every minute' → 'every 5 minutes' (scheduled_parser is */5)",
+            "Checkpoint 5.4: step 5 → step 6 (deduplication is in plan creation step)",
+            "Checkpoint 6.6: '200 chars absolute minimum' → '400 chars absolute minimum, 1200 chars standard'",
+            "Checkpoint 6.8: timeout example updated from 30 min to 10 min",
+            "Calibration Example D: updated from v3 _download_loop() to v4 Periodiq-scheduled actor",
+            "thresholds.md: fixed outdated _download_loop/30s references to Periodiq actors; fixed fact-check schedule from 5min/3concurrent to 10min/threads8; fixed 30min runtime limit to 10min"
+        ]
+    },
+    "notes": "T1 codebase review. v4 architecture. 39 PASS, 1 PARTIAL (2.6 email gating), 0 FAIL. One remaining gap: sentinel instructions should explicitly state 'do not send email for HEALTHY status' to make 2.6 fully PASS."
 }

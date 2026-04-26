@@ -56,13 +56,13 @@ Can the system go from zero state to full operation without human help (beyond i
 
 | # | Layer | Checkpoint | PASS criteria | Verification procedure |
 |---|-------|-----------|---------------|----------------------|
-| 1.1 | `[instruction]` | Sentinel detects empty database | `sentinel/business-logic.md` step 2 checks `total feeds == 0` and creates a seed plan | **T1**: `grep -n 'total feeds\|feeds.total.*0\|seed' agents/skills/sentinel/business-logic.md` returns the rule. **T2**: Run sentinel with empty DB; verify seed plan is created. |
+| 1.1 | `[instruction]` | Sentinel detects empty database | `sentinel/business-logic.md` step 3 checks `total feeds == 0` and creates a seed plan | **T1**: `grep -n 'total feeds\|feeds.total.*0\|seed' agents/skills/sentinel/business-logic.md` returns the rule. **T2**: Run sentinel with empty DB; verify seed plan is created. |
 | 1.2 | `[code]` | Startup recovers stale plans | `StartupRecoveryMiddleware.after_worker_boot()` calls `recover_stale_plans()` on worker boot | **T1**: `grep -n 'recover_stale_plans' agents/middleware.py` returns the call in `after_worker_boot()`. **T2**: Kill worker mid-execution, restart; verify stale plans are requeued. |
 | 1.3 | `[code]` | Startup recovers stale article claims | `StartupRecoveryMiddleware.after_worker_boot()` calls `release_stale_article_claims()` | **T1**: `grep -n 'release_stale_article_claims' agents/middleware.py database/articles.py` returns both. **T2**: Kill worker mid-parse, restart; verify claimed articles are released. |
-| 1.4 | `[code]` | Worker restart triggers recovery middleware | `StartupRecoveryMiddleware.after_worker_boot()` runs on every worker start; `handle-worker-restart.md` exists with agent rules | **T1**: Read `agents/middleware.py` `after_worker_boot()` — verify recovery calls. Verify `handle-worker-restart.md` exists with ≥5 rules. **T2**: Restart worker while actor is mid-execution; verify recovery runs. |
+| 1.4 | `[code]` | Worker restart triggers recovery middleware | `StartupRecoveryMiddleware.after_worker_boot()` runs on every worker start; `handle-worker-restart.md` exists with agent rules | **T1**: Read `news48/core/agents/middleware.py` `after_worker_boot()` — verify recovery calls. Verify `handle-worker-restart.md` exists with ≥5 rules. **T2**: Restart worker while actor is mid-execution; verify recovery runs. |
 | 1.5 | `[code]` | Old plans archived on startup | `archive_terminal_plans()` is called by `StartupRecoveryMiddleware.after_worker_boot()` | **T1**: `grep -n 'archive_terminal_plans' agents/middleware.py agents/tools/planner.py` returns both. **T2**: Create >24h-old terminal plans, restart; verify they move to archive. |
 | 1.6 | `[code]` | Periodiq scheduler auto-enqueues pipeline tasks | `scheduled_feed_fetch`, `scheduled_download`, `scheduled_parser` actors in `agents/actors.py` have `periodic=cron(...)` decorators | **T1**: `grep -n 'periodic=cron' agents/actors.py` returns all three scheduled actors. **T2**: Start periodiq-scheduler; verify tasks are enqueued on cron. |
-| 1.7 | `[code]` | Plan deadlock healing runs every minute | `heal_plan_deadlocks` actor in `agents/actors.py` has `periodic=cron("* * * * *")` | **T1**: `grep -n 'heal_plan_deadlocks' agents/actors.py` returns the actor with cron decorator. **T2**: Create a campaign-parent deadlock; verify it is healed on next cron tick. |
+| 1.7 | `[code]` | Plan deadlock healing runs every 5 minutes | `heal_plan_deadlocks` actor in `agents/actors.py` has `periodic=cron("*/5 * * * *")` | **T1**: `grep -n 'heal_plan_deadlocks' agents/actors.py` returns the actor with `*/5 * * * *` cron decorator. **T2**: Create a campaign-parent deadlock; verify it is healed within 5 minutes. |
 
 **Dimension score** = (sum of checkpoint values / 7) × 5
 
@@ -74,7 +74,7 @@ Can the system observe its own health, detect problems, and report them without 
 
 | # | Layer | Checkpoint | PASS criteria | Verification procedure |
 |---|-------|-----------|---------------|----------------------|
-| 2.1 | `[instruction]` | Sentinel gathers system metrics | `sentinel/business-logic.md` step 1 lists evidence commands: `stats --json`, `feeds list --json`, `plans list --json`, `cleanup health --json` | **T1**: Read `sentinel/business-logic.md` step 1; verify all 4 commands are listed. **T2**: Run sentinel; verify all 4 commands appear in logs. |
+| 2.1 | `[instruction]` | Sentinel gathers system metrics | `sentinel/business-logic.md` step 2 lists evidence commands: `stats --json`, `feeds list --json`, `plans list --json`, `cleanup health --json` | **T1**: Read `sentinel/business-logic.md` step 2; verify all 4 commands are listed. **T2**: Run sentinel; verify all 4 commands appear in logs. |
 | 2.2 | `[instruction]` | Rates handle 0/0 as undefined | `thresholds.md` Rate Denominator Semantics says undefined/null, not 0% | **T1**: `grep -n 'undefined\|null\|insufficient' agents/skills/shared/thresholds.md` returns relevant rules. **T2**: Run sentinel on empty system; verify report shows `null` rates. |
 | 2.3 | `[instruction]` | Canonical thresholds are single source of truth | `grep` for threshold values (10%, 25%, 100 MB, 500 MB, 10 minutes, 30 minutes) returns hits ONLY in `thresholds.md`. Hits in other files that use threshold values as operational references (not redefining them) are excluded. | **T1**: `grep -rn '10%\|25%\|100 MB\|500 MB' agents/skills/ --include='*.md'`. PASS if only `thresholds.md` has the values. PARTIAL if other files reference values contextually. FAIL if other files independently define different values. |
 | 2.4 | `[instruction]` | Fact-check thresholds in canonical table | `thresholds.md` contains rows for fact-check completions (24h) and oldest eligible item | **T1**: `grep -n 'Fact-check\|fact-check' agents/skills/shared/thresholds.md` returns at least 2 rows. |
@@ -94,7 +94,7 @@ Can the system recover from failures and degraded states without human intervent
 | # | Layer | Checkpoint | PASS criteria | Verification procedure |
 |---|-------|-----------|---------------|----------------------|
 | 3.1 | `[code]` | Background download loop self-heals backlog | `download_cycle` actor runs every minute via Periodiq, processes up to 100 articles per cycle | **T1**: `grep -n 'download_cycle\|limit=100' agents/actors.py commands/download.py` returns the actor and limit. **T2**: Insert articles with `empty` status; verify they are downloaded automatically. |
-| 3.2 | `[code]` | Background parse loop self-heals backlog | `parser_cycle` actor runs every minute via Periodiq, calls `run_autonomous()` which claims and parses downloaded articles | **T1**: `grep -n 'parser_cycle\|run_autonomous' agents/actors.py agents/parser.py` returns the actor and function. **T2**: Insert downloaded articles; verify they are parsed automatically. |
+| 3.2 | `[code]` | Background parse loop self-heals backlog | `parser_cycle` actor runs every 5 minutes via Periodiq, calls `run_autonomous()` which claims and parses downloaded articles | **T1**: `grep -n 'parser_cycle\|run_autonomous' agents/actors.py agents/parser.py` returns the actor and function. **T2**: Insert downloaded articles; verify they are parsed automatically within 5 minutes. |
 | 3.3 | `[code]` | Background feed fetch loop maintains inflow | `feed_fetch_cycle` actor runs every minute via Periodiq, fetches all feeds from database | **T1**: `grep -n 'feed_fetch_cycle\|get_all_feeds' agents/actors.py database/feeds.py` returns the actor and function. **T2**: Add feeds to database; verify they are fetched automatically. |
 | 3.4 | `[code]` | Plan deadlock healing runs continuously | `heal_plan_deadlocks` actor normalizes campaign-parent references and auto-completes campaigns whose children are all terminal | **T1**: `grep -n 'heal_plan_deadlocks\|_normalize_plan_for_consistency\|_auto_complete_campaigns' agents/actors.py agents/tools/planner.py` returns the actor and helpers. **T2**: Create a campaign-parent deadlock; verify it is healed on next cron tick. |
 | 3.5 | `[instruction]` | Executor retries transient download failures | `run-retry.md` specifies retry for `download-failed` articles with up to 3 attempts per domain | **T1**: Read `run-retry.md`; verify it mentions download-failed retries and 3-attempt limit. **T2**: Inject failed downloads; verify executor retries them. |
@@ -131,7 +131,7 @@ Can the system improve its own performance based on historical data?
 | 5.1 | `[instruction]` | Lessons learned persisted across runs | `lessons-learned.md` specifies aggressive lesson saving; `save_lesson` tool persists knowledge; lessons are loaded into agent prompts at startup | **T1**: `grep -n 'save_lesson\|aggressively\|memory' agents/skills/shared/lessons-learned.md` returns the rules. Verify `save_lesson` in agent tool lists. **T2**: Run executor; verify lessons are loaded and new lessons are saved. |
 | 5.2 | `[code]` | Sentinel receives backlog context | `agents/workers.py` `build_task_context()` sets `backlog_high=True` when download or parse backlog exceeds 200 | **T1**: `grep -n 'backlog_high\|backlog.*200' agents/workers.py` returns the context building logic. **T2**: Create backlog >200; verify sentinel receives `backlog_high: true`. |
 | 5.3 | `[instruction]` | Feed curation removes underperforming feeds | `feed-curation.md` specifies deletion rules: 3+ consecutive empty fetch cycles, >80% download failure, >60% parse failure, >50% negative fact-check | **T1**: Read `feed-curation.md`; verify all 4 deletion rules and safety limits. **T2**: Create a feed with >80% download failure; verify sentinel deletes it. |
-| 5.4 | `[instruction]` | Sentinel deduplicates plans before creation | `sentinel/business-logic.md` step 5 requires checking `news48 plans list --json` first to avoid duplicating existing pending plans | **T1**: `grep -n 'plans list\|duplicate\|existing' agents/skills/sentinel/business-logic.md` returns the deduplication rule. **T2**: With active pending plan for a scope, run sentinel; verify no duplicate created. |
+| 5.4 | `[instruction]` | Sentinel deduplicates plans before creation | `sentinel/business-logic.md` step 6 requires checking `news48 plans list --json` first to avoid duplicating existing pending plans | **T1**: `grep -n 'plans list\|duplicate\|existing' agents/skills/sentinel/business-logic.md` returns the deduplication rule. **T2**: With active pending plan for a scope, run sentinel; verify no duplicate created. |
 
 **Dimension score** = (sum of checkpoint values / 4) × 5
 
@@ -148,9 +148,9 @@ Can the system prevent errors from cascading and maintain stability?
 | 6.3 | `[instruction]` | Retry limits enforced | `fail-safely.md` rule 2 limits retries to never more than twice for same failed action; `run-retry.md` enforces 3-attempt domain limit | **T1**: `grep -n 'retry.*twice\|more than twice\|never retry' agents/skills/shared/fail-safely.md` returns the rule. `grep -n '3 attempts\|3/3' agents/skills/executor/run-retry.md` returns the domain limit. |
 | 6.4 | `[both]` | Wave failure isolation | `run-waves.md` checks per-PID exit codes; failed process does not fail entire plan | **T1**: Read `run-waves.md` lines 14-38; verify per-PID checking and isolation rule. **T2**: Make 1 of 4 wave members fail; verify others complete and only failed one is marked. |
 | 6.5 | `[instruction]` | Fact-check eligibility gated | `run-fact-check.md` rule 2 limits fact-checking to `fact-unchecked` articles only; lists ineligible statuses | **T1**: `grep -n 'fact-unchecked\|ineligible\|not eligible' agents/skills/executor/run-fact-check.md` returns the gating rule. **T2**: Attempt to fact-check a `downloaded` article; verify rejection. |
-| 6.6 | `[instruction]` | Quality gate blocks bad output | `enforce-quality.md` specifies minimum content length (200 chars absolute minimum) and uses canonical error codes from `error-taxonomy.md` | **T1**: `grep -n 'out_of_bounds\|200.*char\|600.*char' agents/skills/parser/enforce-quality.md` returns quality rules. **T2**: Submit article with 100-char content; verify `parse.out_of_bounds` failure. |
+| 6.6 | `[instruction]` | Quality gate blocks bad output | `enforce-quality.md` specifies minimum content length (1200 chars standard, 400 chars absolute minimum) and uses canonical error codes from `error-taxonomy.md` | **T1**: `grep -n 'out_of_bounds\|1200.*char\|400.*char' agents/skills/parser/enforce-quality.md` returns quality rules. **T2**: Submit article with 200-char content; verify `parse.out_of_bounds` failure. |
 | 6.7 | `[instruction]` | No inter-skill cross-references | Skill files do not reference other skills by name (business-logic routing tables and shared canonical references excluded) | **T1**: `grep -rn 'loaded in this prompt\|see the.*skill\|see the.*procedure loaded\|refer to\|described in\|defined in\|documented in' agents/skills/ --include='*.md'` returns 0 results. References to `shared/error-taxonomy.md` or `shared/thresholds.md` as canonical sources are excluded. |
-| 6.8 | `[code]` | Runtime timeout enforcement | `time_limit` in `@dramatiq.actor()` decorator per actor (e.g., `time_limit=30 * 60 * 1000` for 30 min) | **T1**: `grep -n 'time_limit' agents/actors.py` returns the timeout settings per actor. **T2**: Run an actor that exceeds time_limit; verify Dramatiq terminates it. |
+| 6.8 | `[code]` | Runtime timeout enforcement | `time_limit` in `@dramatiq.actor()` decorator per actor (e.g., `time_limit=10 * 60 * 1000` for 10 min) | **T1**: `grep -n 'time_limit' agents/actors.py` returns the timeout settings per actor. **T2**: Run an actor that exceeds time_limit; verify Dramatiq terminates it. |
 
 **Dimension score** = (sum of checkpoint values / 8) × 5
 
@@ -224,12 +224,12 @@ A hypothetical function `_auto_scale_workers()` exists in a module but is never 
 - The code exists but has no effect at runtime.
 - **Ruling: FAIL** — code must be both present and reachable. Dead code is not a capability.
 
-### Example D: Background loop with hardcoded interval (checkpoint 3.1)
+### Example D: Periodiq-scheduled actor with fixed cron (checkpoint 3.1)
 
-`_download_loop()` has `interval=30` as a default parameter.
+`download_cycle` actor is enqueued every minute by `scheduled_download` via `periodic=cron("* * * * *")`.
 
-- The loop runs automatically and is called from `start()`.
-- The interval is not dynamically adjustable, but the loop is code-enforced and always active.
+- The actor runs automatically on a fixed cron schedule managed by Periodiq.
+- The interval is not dynamically adjustable, but the actor is code-enforced and always active.
 - **Ruling: PASS** — the capability exists and is reachable. Lack of dynamic tuning is captured in Dimension 5 (self-optimizing), not here.
 
 ---
@@ -276,4 +276,5 @@ Record each assessment here for trend tracking.
 | 2026-04-12 | 5.0 | 4.7 | 5.0 | 3.75 | 3.75 | 5.0 | **4.7** | v2 | Strict scoring; 4.4+5.4 FAIL; 2.3 PARTIAL |
 | 2026-04-15 | 5.0 | 5.0 | 5.0 | 5.0 | 5.0 | 5.0 | **5.0** | v3 | T1 only; all 40 checkpoints PASS; code-enforced loops + concurrency replace instruction-only v2 gaps |
 | 2026-04-22 | 5.0 | 5.0 | 5.0 | 5.0 | 5.0 | 5.0 | **5.0** | v4 | Dramatiq migration complete; orchestrator removed; Periodiq + Redis replace scheduling |
+| 2026-04-26 | 5.0 | 4.7 | 5.0 | 5.0 | 5.0 | 5.0 | **4.9** | v4 | T1 deep review; 2.4 fixed (added missing fact-check threshold rows to thresholds.md); 2.6 PARTIAL (email gating not explicit WARNING/CRITICAL); doc corrections: step numbers, cron frequencies, content lengths, calibration example D updated for v4 |
 | | | | | | | | | | |

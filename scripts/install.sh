@@ -30,6 +30,9 @@ REQUIRED_SCRIPTS=(
 REQUIRED_CONFIGS=(
     "searxng/settings.yml"
 )
+REQUIRED_SCORING=(
+    ".scoring/latest-assessment.json"
+)
 
 # ─── Colors & helpers ────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -153,6 +156,11 @@ cd "$INSTALL_DIR"
 # Make scripts executable
 for f in "${REQUIRED_SCRIPTS[@]}"; do
     chmod +x "$f" 2>/dev/null || true
+done
+
+# Download scoring data (may not be in tarball or may be stale)
+for f in "${REQUIRED_SCORING[@]}"; do
+    download "${REPO_RAW}/${f}" "${INSTALL_DIR}/${f}"
 done
 
 success "All files downloaded to $INSTALL_DIR"
