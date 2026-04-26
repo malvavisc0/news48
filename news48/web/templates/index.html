@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ seo.title if seo is defined and seo else 'AI-Verified News and Fact-Checked Stories | news48'
+{% block title %}{{ seo.title if seo is defined and seo else 'news48 — Fact-Checked News, 48 Hours at a Time'
 }}{% endblock %}
 
 {% block json_ld %}
@@ -15,9 +15,9 @@
 
 {% block content %}
 <header class="page-hero page-hero--home">
-    <h1 class="masthead">AI-verified news from the last 48 hours</h1>
-    <div class="tagline">Clear summaries, automated fact-checks, and real-time topic discovery — all in one live feed
-    </div>
+    <h1 class="masthead">verified news that disappears in 48 hours</h1>
+    <div class="tagline">Clear summaries, live fact-checks, and grouped topics — refreshed around the clock, gone by
+        design.</div>
     <div class="status-line">
         <span><span class="live-dot"></span><strong>{{ stats.live_stories }}</strong> stories</span>
         <span><strong>{{ stats.verified }}</strong> verified</span>
@@ -68,7 +68,7 @@
 </section>
 
 <section class="section" aria-labelledby="now-label">
-    <h2 class="section-label" id="now-label">latest verified and developing stories</h2>
+    <h2 class="section-label" id="now-label">live stories</h2>
     <div class="story-list">
         {% for story in stories %}
         <article
@@ -169,5 +169,6 @@
     {% endif %}
 </section>
 
-<p class="footnote">news48 keeps only the latest 48 hours of stories — fresh, readable, and easy to compare.</p>
+<p class="footnote">Everything on news48 self-destructs after 48 hours. No archive, no stale links — just what matters
+    now.</p>
 {% endblock %}

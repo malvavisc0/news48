@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ seo.title if seo is defined and seo else 'All Stories | news48' }}{% endblock %}
+{% block title %}{{ seo.title if seo is defined and seo else 'All Stories — Live Feed | news48' }}{% endblock %}
 
 {% block json_ld %}
 {% if seo is defined and seo and seo.json_ld %}
@@ -16,8 +16,8 @@
 <a class="back-link" href="/">← back to homepage</a>
 
 <header class="page-hero">
-    <h1 class="page-title">All Stories</h1>
-    <div class="tagline">{{ total }} live stories across all categories</div>
+    <h1 class="page-title">The full feed</h1>
+    <div class="tagline">{{ total }} stories, all categories, one window.</div>
 </header>
 
 <section class="filter-stack" aria-labelledby="all-mood-label">
@@ -54,7 +54,7 @@
 </section>
 
 <section class="section" aria-labelledby="all-stories-label">
-    <h2 class="section-label" id="all-stories-label">all live stories</h2>
+    <h2 class="section-label" id="all-stories-label">everything live right now</h2>
     <div class="story-list">
         {% for story in articles %}
         <article

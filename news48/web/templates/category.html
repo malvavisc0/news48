@@ -17,7 +17,7 @@
 
 <header class="page-hero">
     <h1 class="page-title">{{ category_name }}</h1>
-    <div class="tagline">{{ total }} live stories in {{ category_name }}</div>
+    <div class="tagline">{{ total }} stories in {{ category_name }}, refreshed every 48 hours.</div>
 </header>
 
 <section class="filter-stack" aria-labelledby="category-mood-label">
@@ -55,7 +55,7 @@
 </section>
 
 <section class="section" aria-labelledby="category-stories-label">
-    <h2 class="section-label" id="category-stories-label">latest {{ category_name }} stories</h2>
+    <h2 class="section-label" id="category-stories-label">{{ category_name }} — live now</h2>
     <div class="story-list">
         {% for story in articles %}
         <article

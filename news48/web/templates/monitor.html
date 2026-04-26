@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}{{ seo.title if seo is defined and seo else 'news48 Monitor | Internal Dashboard' }}{% endblock %}
+{% block title %}{{ seo.title if seo is defined and seo else 'Pipeline Monitor — Live Dashboard | news48' }}{% endblock
+%}
 
 {% block body_class %}page-monitor{% endblock %}
 
 {% block content %}
+<a class="back-link" href="/">← back to live feed</a>
 {% set articles = stats.articles %}
 {% set sentiment = stats.sentiment %}
 {% set feeds = stats.feeds %}
@@ -26,15 +28,13 @@
 
 <div class="monitor-shell" data-monitor-root>
     <header class="monitor-hero">
-        <div class="monitor-hero__eyebrow">live ops snapshot</div>
+        <div class="monitor-hero__eyebrow">live dashboard</div>
         <div class="monitor-hero__heading-row">
             <div class="monitor-hero__copy">
                 <p class="site-mark monitor-site-mark"><a href="/">news48 monitor</a></p>
-                <h1 class="monitor-hero__title">Pipeline health, throughput &
-                    trust — pulled live.</h1>
-                <p class="monitor-hero__lede">What the pipeline is doing right now — no caching, no staging, just the
-                    live numbers. Every feed crawl, parse run, and retention sweep is reflected below as it
-                    happens.</p>
+                <h1 class="monitor-hero__title">Pipeline health & throughput, live.</h1>
+                <p class="monitor-hero__lede">Real-time numbers from every feed crawl, parse run, and retention sweep —
+                    no caching, no staging.</p>
             </div>
             <div class="monitor-hero__aside">
                 <div class="monitor-live" aria-label="Live dashboard status">

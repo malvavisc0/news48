@@ -21,6 +21,21 @@
     --action-hover: #9A3522;
     --paper: var(--neutral);
 
+    /* --- Translucent rule variants --- */
+    --rule-soft: rgba(214, 211, 208, 0.9);
+    --rule-muted: rgba(214, 211, 208, 0.68);
+    --rule-faint: rgba(214, 211, 208, 0.42);
+
+    /* --- Translucent surfaces --- */
+    --surface-hover: rgba(255, 255, 255, 0.55);
+    --surface-tinted: rgba(255, 255, 255, 0.72);
+    --surface-sunken: rgba(255, 255, 255, 0.6);
+    --surface-raised: #FCFBF9;
+
+    /* --- Ink translucency --- */
+    --ink-74: rgba(26, 28, 30, 0.74);
+    --ink-66: rgba(26, 28, 30, 0.66);
+
     /* --- Functional (kept warm to match Heritage) --- */
     --verified: #166534;
     --verified-bg: #166534;
@@ -30,6 +45,18 @@
     --disputed: #B45309;
     --highlight-bg: var(--primary);
     --highlight-fg: var(--neutral);
+
+    /* --- Status tints (badges, alerts) --- */
+    --verified-tint: rgba(22, 101, 52, 0.06);
+    --verified-border: rgba(22, 101, 52, 0.18);
+    --breaking-tint: rgba(127, 29, 29, 0.06);
+    --breaking-border: rgba(127, 29, 29, 0.18);
+    --disputed-tint: rgba(180, 83, 9, 0.05);
+    --disputed-border: rgba(180, 83, 9, 0.16);
+    --warn-tint: rgba(180, 83, 9, 0.035);
+    --warn-border: rgba(180, 83, 9, 0.22);
+    --danger-tint: rgba(127, 29, 29, 0.035);
+    --danger-border: rgba(127, 29, 29, 0.22);
 
     /* --- Heritage typography --- */
     --font-display: 'Fraunces', Georgia, serif;
@@ -55,6 +82,7 @@
     --rounded-sm: 2px;
     --rounded-md: 4px;
     --rounded-lg: 8px;
+    --rounded-full: 999px;
 
     /* --- Heritage spacing --- */
     --space-sm: 8px;
@@ -62,8 +90,26 @@
     --space-lg: 32px;
     --space-xl: 48px;
     --space-2xl: 72px;
-    --surface-raised: #FCFBF9;
+
+    /* --- Shadows --- */
     --shadow-soft: 0 18px 40px rgba(26, 28, 30, 0.06);
+    --shadow-card: 0 14px 36px rgba(26, 28, 30, 0.055);
+    --shadow-button: 0 8px 18px rgba(26, 28, 30, 0.12);
+
+    /* --- Gradient endpoints (monitor bars & spectrum) --- */
+    --action-end: #dd7a65;
+    --verified-start: #1f6b41;
+    --verified-end: #349d69;
+    --verified-end-bright: #2fa86e;
+    --disputed-end: #d59b4f;
+    --ink-end: #595f65;
+    --neutral-start: #7a8085;
+    --neutral-end: #b2b6bb;
+    --breaking-end: #c44a4a;
+
+    /* --- Shared breakpoints (use literal values in @media queries) ---
+       sm: 640px | md: 760px | lg: 1080px
+       -------------------------------------------------------------- */
 }
 
 @keyframes pulse-live {
@@ -256,8 +302,8 @@ a:focus-visible {
     width: 100%;
     padding: 18px 18px 28px;
     background: transparent;
-    border: 1px solid rgba(214, 211, 208, 0.9);
-    border-radius: 6px;
+    border: 1px solid var(--rule-soft);
+    border-radius: var(--rounded-lg);
     box-shadow: 0 1px 0 rgba(26, 28, 30, 0.02);
     backdrop-filter: blur(10px);
 }
@@ -463,9 +509,9 @@ a:focus-visible {
     font-size: var(--text-xs);
     color: var(--ink-light);
     padding: 14px 16px;
-    background: rgba(255, 255, 255, 0.6);
-    border: 1px solid rgba(214, 211, 208, 0.8);
-    border-radius: 12px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--rule-soft);
+    border-radius: var(--rounded-lg);
 }
 
 .status-line strong {
@@ -613,9 +659,9 @@ a:focus-visible {
     align-items: start;
     padding: 20px;
     margin: 0;
-    border: 1px solid rgba(214, 211, 208, 0.9);
+    border: 1px solid var(--rule-soft);
     border-left: 3px solid transparent;
-    border-radius: 6px;
+    border-radius: var(--rounded-lg);
     background: transparent;
     box-shadow: none;
     transition: background 0.15s ease, box-shadow 0.15s ease,
@@ -628,7 +674,7 @@ a:focus-visible {
 
 .story:hover,
 .story:focus-within {
-    background: rgba(255, 255, 255, 0.55);
+    background: var(--surface-hover);
     box-shadow: none;
     transform: translateY(-2px);
 }
@@ -886,14 +932,14 @@ a:focus-visible {
     justify-content: space-between;
     gap: 24px;
     padding: 22px;
-    border: 1px solid rgba(214, 211, 208, 0.9);
+    border: 1px solid var(--rule-soft);
     text-decoration: none;
     color: inherit;
     cursor: pointer;
     transition: padding-left 0.15s ease, background 0.15s ease,
         box-shadow 0.15s ease, border-left-color 0.15s ease;
     border-left: 3px solid transparent;
-    border-radius: 6px;
+    border-radius: var(--rounded-lg);
     background: transparent;
 }
 
@@ -908,7 +954,7 @@ a:focus-visible {
 a.cluster:hover,
 a.cluster:focus-visible {
     border-left-color: var(--action);
-    background: rgba(255, 255, 255, 0.55);
+    background: var(--surface-hover);
     box-shadow: none;
     text-decoration: none;
 }
@@ -976,8 +1022,8 @@ a.cluster:focus-visible {
     gap: 18px;
     padding: 16px 18px;
     background: transparent;
-    border: 1px solid rgba(214, 211, 208, 0.9);
-    border-radius: 6px;
+    border: 1px solid var(--rule-soft);
+    border-radius: var(--rounded-lg);
 }
 
 .expiring-item a {
@@ -1040,8 +1086,8 @@ a.cluster:focus-visible {
 
 .content-panel {
     background: transparent;
-    border: 1px solid rgba(214, 211, 208, 0.92);
-    border-radius: 6px;
+    border: 1px solid var(--rule-soft);
+    border-radius: var(--rounded-lg);
     box-shadow: none;
 }
 
@@ -1055,7 +1101,7 @@ a.cluster:focus-visible {
     align-items: center;
     padding: 14px 18px;
     background: transparent;
-    border-radius: 6px;
+    border-radius: var(--rounded-lg);
     font-size: var(--text-xs);
     color: var(--ink-light);
     font-family: var(--font-label);
@@ -1089,8 +1135,8 @@ a.cluster:focus-visible {
 }
 
 .mini-stat {
-    border: 1px solid rgba(214, 211, 208, 0.92);
-    border-radius: 6px;
+    border: 1px solid var(--rule-soft);
+    border-radius: var(--rounded-lg);
     padding: 14px 14px 16px;
     background: transparent;
 }
@@ -1143,8 +1189,8 @@ a.cluster:focus-visible {
     max-width: 42rem;
     font-size: var(--text-sm);
     line-height: var(--leading-relaxed);
-    background: rgba(255, 255, 255, 0.72);
-    border: 1px solid rgba(214, 211, 208, 0.9);
+    background: var(--surface-tinted);
+    border: 1px solid var(--rule-soft);
 }
 
 .content-panel--article-body {
@@ -1169,8 +1215,8 @@ a.cluster:focus-visible {
     padding: 12px;
     margin-bottom: 20px;
     background: transparent;
-    border: 1px solid rgba(214, 211, 208, 0.92);
-    border-radius: 6px;
+    border: 1px solid var(--rule-soft);
+    border-radius: var(--rounded-lg);
     font-family: var(--font-label);
     font-size: var(--text-xs);
     color: var(--ink-light);
@@ -1220,8 +1266,8 @@ a.cluster:focus-visible {
     grid-template-columns: 1fr;
     gap: 14px;
     padding: 20px;
-    border: 1px solid rgba(214, 211, 208, 0.92);
-    border-radius: 6px;
+    border: 1px solid var(--rule-soft);
+    border-radius: var(--rounded-lg);
     background: transparent;
     align-items: start;
 }
@@ -1245,7 +1291,7 @@ a.cluster:focus-visible {
     align-items: center;
     gap: 6px;
     padding: 3px 8px;
-    border-radius: 4px;
+    border-radius: var(--rounded-md);
     border: 1px solid currentColor;
     background: transparent;
     font-family: var(--font-label);
@@ -1329,9 +1375,9 @@ a.cluster:focus-visible {
 }
 
 .related-item {
-    border: 1px solid rgba(214, 211, 208, 0.92);
+    border: 1px solid var(--rule-soft);
     padding: 20px;
-    border-radius: 6px;
+    border-radius: var(--rounded-lg);
     background: transparent;
     transition: background 0.15s ease, box-shadow 0.15s ease;
 }
@@ -1342,7 +1388,7 @@ a.cluster:focus-visible {
 
 .related-item:hover,
 .related-item:focus-within {
-    background: rgba(255, 255, 255, 0.55);
+    background: var(--surface-hover);
     box-shadow: none;
 }
 
@@ -1386,7 +1432,7 @@ a.cluster:focus-visible {
     padding: var(--space-md) 18px;
     background: var(--surface);
     border: 1px dashed var(--rule);
-    border-radius: var(--rounded-md);
+    border-radius: var(--rounded-lg);
     font-family: var(--font-body);
     font-size: 15px;
     line-height: 1.65;
@@ -1593,7 +1639,7 @@ a.cluster:focus-visible {
     .claim-row,
     .expiring-item,
     .mini-stat {
-        border-radius: 6px;
+        border-radius: var(--rounded-lg);
     }
 
     .category-pill {
@@ -1607,9 +1653,9 @@ a.cluster:focus-visible {
    ============================================================ */
 
 .docs {
-    max-width: 820px;
+    max-width: 720px;
     margin: 0 auto;
-    padding: var(--space-xl) var(--space-md) var(--space-2xl);
+    padding: 56px 16px 112px;
 }
 
 .docs__hero {
@@ -1976,9 +2022,16 @@ a.cluster:focus-visible {
 }
 
 /* Responsive */
+@media (min-width: 1080px) {
+    .docs {
+        max-width: 960px;
+        padding: 72px 24px 128px;
+    }
+}
+
 @media (max-width: 640px) {
     .docs {
-        padding: var(--space-lg) var(--space-sm) var(--space-xl);
+        padding: 36px 16px 88px;
     }
 
     .docs__title {

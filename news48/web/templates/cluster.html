@@ -17,8 +17,7 @@
 
 <header class="page-hero">
     <h1 class="page-title">{{ cluster_name }}</h1>
-    <div class="tagline">{{ total }} related stories grouped by topic so readers can compare angles, developments, and
-        source reporting quickly.</div>
+    <div class="tagline">{{ total }} stories covering {{ cluster_name }} from multiple angles.</div>
 </header>
 
 <nav class="category-nav filter-panel" aria-label="Categories">
@@ -30,7 +29,7 @@
 </nav>
 
 <section class="section" aria-labelledby="cluster-stories-label">
-    <h2 class="section-label" id="cluster-stories-label">latest {{ cluster_name }} coverage</h2>
+    <h2 class="section-label" id="cluster-stories-label">{{ cluster_name }} — all angles</h2>
     <div class="story-list">
         {% for story in articles %}
         <article
