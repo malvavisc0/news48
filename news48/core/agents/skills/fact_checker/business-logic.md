@@ -5,7 +5,7 @@
 ```mermaid
 flowchart TD
     A[Start fact-check cycle] --> B[Read article info + content]
-    B --> C[Extract 2-3 key claims]
+    B --> C[Extract 2-5 key claims (max 5)]
     C --> D[For each claim: search web evidence]
     D --> E[Assign per-claim verdict]
     E --> F[Build claims JSON array]
@@ -18,8 +18,8 @@ flowchart TD
 
 ## Skills
 
-- **fc-extract-claims** — Extract 2–3 key,
-  externally verifiable claims from the article.
+- **fc-extract-claims** — Extract 2–5 key,
+  externally verifiable claims from the article (hard limit: 5 max).
 - **fc-search-evidence** — Search the web for
   supporting or refuting evidence and assign a per-claim verdict.
 - **fc-record-verdict** — Persist the claims via

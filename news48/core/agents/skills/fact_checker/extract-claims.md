@@ -9,7 +9,7 @@ Extract the material factual claims from the article that need verification.
    news48 articles info <id> --json
    news48 articles content <id> --json
    ```
-2. Identify 2–3 key factual claims.
+2. Identify **2–5 key factual claims** (absolute maximum: 5).
 3. Focus on verifiable statements: specific numbers, events, named entities,
    direct quotes, dates, and attributions. Skip opinion, prediction, and
    rhetorical framing.
@@ -18,6 +18,7 @@ Extract the material factual claims from the article that need verification.
 
 ## Claim selection policy
 
+- **HARD LIMIT: Maximum 5 claims per article.** Never extract more than 5.
 - Prefer claims that can be checked against external reporting, official
   statements, regulatory filings, or primary documents.
 - Skip pure opinion, forecast, analysis, or rhetorical framing unless it
