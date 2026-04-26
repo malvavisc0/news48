@@ -22,6 +22,7 @@ Collect → Download → Parse → Fact-check — on repeat, with agents that le
 - [Web Interface](#-web-interface)
 - [Pipeline](#-pipeline)
 - [Agents](#-agents)
+- [Autonomous Operation](#-autonomous-operation)
 - [CLI Reference](#-cli-reference)
 - [Quick Start](#-quick-start)
 - [Docker](#-docker)
@@ -58,8 +59,13 @@ news48 ships a FastAPI web interface that displays the last 48 hours of verified
 | `/category/{slug}` | Category view with tone filter (e.g. `/category/politics?sentiment=negative`) |
 | `/article/{id}/{slug}` | Article detail with fact-check breakdown and related coverage |
 | `/cluster/{slug}` | Topic cluster — all stories sharing a tag |
+| `/docs` | Architecture overview & MCP setup guide (loads autonomous operation score) |
+| `/monitor` | Internal monitor dashboard — server-rendered pipeline stats (`noindex`) |
+| `/api/stats` | JSON stats API (requires `Authorization: Bearer <mcp-api-key>`) |
 | `/sitemap.xml` | Auto-generated XML sitemap |
-| `/health` | Health check endpoint |
+| `/robots.txt` | Robots file with sitemap reference |
+| `/llms.txt` | Machine-readable system description for AI assistants |
+| `/health` | Health check endpoint (`{"status": "ok"}`) |
 
 ### Features
 
@@ -130,6 +136,45 @@ news48 lessons add -a executor -c "Timing" -l "Use 600s timeout for fact-checks"
 
 ---
 
+## 🎯 Autonomous Operation
+
+news48 is designed to run **without human intervention**. Every capability is measured by a rigorous **Autonomous Operation Score** — a weighted assessment across six dimensions that evaluates how well the system starts, monitors, heals, scales, optimizes, and contains errors on its own.
+
+### Current Score: **4.9 / 5.0** — Autonomous
+
+> System runs unattended for extended periods. Human involvement only for strategic decisions.
+
+| Dimension | Weight | Score | What it measures |
+|-----------|:------:|:-----:|-----------------|
+| **Self-starting** | 15% | 5.0 | Zero-to-running without human help — auto-seeding, startup recovery, Periodiq scheduling |
+| **Self-monitoring** | 20% | 4.7 | Health observation, structured reports, email alerts, canonical thresholds |
+| **Self-healing** | 25% | 5.0 | Background download/parse/feed loops, plan deadlock healing, retry logic |
+| **Self-scaling** | 10% | 5.0 | Parallel wave execution, concurrent actor instances, batch-repeat patterns |
+| **Self-optimizing** | 10% | 5.0 | Cross-run lesson persistence, feed curation, plan deduplication |
+| **Error containment** | 20% | 5.0 | Quality gates, retry limits, failure isolation, runtime timeouts, error taxonomy |
+
+### How It Works
+
+Every checkpoint is enforced at one of two layers:
+
+- **`[code]`** — Deterministic Python code paths (e.g., `StartupRecoveryMiddleware` runs recovery on every worker boot)
+- **`[instruction]`** — Agent skill files that define rules the LLM follows (e.g., `fail-safely.md` mandates breaking loops after 5 repeated errors)
+- **`[both]`** — Defence in depth with code + instructions working together
+
+The full methodology — all 40 checkpoints, verification procedures, and scoring rubric — is documented in [`docs/autonomous-operation-score.md`](docs/autonomous-operation-score.md). The latest assessment is loaded dynamically on the `/docs` page.
+
+### Score Levels
+
+| Range | Level | Meaning |
+|-------|-------|---------|
+| 4.5 – 5.0 | **Autonomous** | Runs unattended. Human only for strategic decisions. |
+| 3.5 – 4.4 | **Supervised** | Autonomous under normal conditions. Human needed for edge cases. |
+| 2.5 – 3.4 | **Assisted** | Handles happy path. Human needed for failures and recovery. |
+| 1.5 – 2.4 | **Manual** | Frequent human input required. |
+| 1.0 – 1.4 | **Prototype** | Only runs with direct supervision. |
+
+---
+
 ## 📋 CLI Reference
 
 ### Pipeline Commands
@@ -140,6 +185,8 @@ news48 fetch                    # Pull RSS/Atom feeds
 news48 download                 # Download article content
 news48 parse                    # Parse articles with LLM
 news48 fact-check               # Fact-check parsed articles
+news48 briefing                 # Structured news briefing (top stories, trending, stats)
+news48 doctor                   # Health check of all external services
 news48 stats                    # Show system statistics
 ```
 
@@ -277,12 +324,17 @@ uv sync --extra all    # Everything
 | `REDIS_URL` | | Redis URL for Dramatiq (required for agents) |
 | `SEARXNG_URL` | | SearXNG for fact-checker evidence search |
 | `CONTEXT_WINDOW` | | Context window size (default: 1048576) |
+| `WEB_HOST` | | Web server host (default: `0.0.0.0`) |
+| `WEB_PORT` | | Web server port (default: `8000`) |
+| `PARSER_CONCURRENCY` | | Parser agent concurrency (default: `8`) |
+| `ARTICLE_EXTRACTION` | | Body extraction mode: `trafilatura` or `none` (default: `trafilatura`) |
 | `SMTP_HOST` | | SMTP host for sentinel email alerts |
 | `SMTP_PORT` | | SMTP port (default: 587) |
 | `SMTP_USER` | | SMTP username |
 | `SMTP_PASS` | | SMTP password |
 | `SMTP_FROM` | | Sender email address |
 | `MONITOR_EMAIL_TO` | | Recipient for sentinel alerts |
+| `HF_TOKEN` | | HuggingFace token for gated models (Docker GPU deployments) |
 
 ### Run It
 
@@ -366,6 +418,22 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.yml -f docker-compose.prod.yml down
 ```
 
+### External LLM (no local GPU)
+
+Use `docker-compose.external-llm.yml` to skip the built-in llama.cpp server and point at any OpenAI-compatible endpoint instead:
+
+```bash
+# Set API_BASE in .env (examples):
+#   API_BASE=http://host:7070/v1          # host llama.cpp
+#   API_BASE=https://api.openai.com/v1    # OpenAI
+#   API_BASE=https://api.groq.com/openai/v1  # Groq
+#   API_BASE=http://host:11434/v1         # Ollama
+
+docker compose -f docker-compose.yml -f docker-compose.external-llm.yml up -d
+```
+
+This disables the Docker llama.cpp container and model download — ideal for hosted LLM APIs or when running llama.cpp on the host machine.
+
 ### Seeding in Docker
 
 The sentinel agent auto-detects an empty database and creates a seed plan — so if `seed.txt` is in the image, seeding happens automatically.
@@ -409,7 +477,7 @@ uv run news48 mcp serve
 }
 ```
 
-**Tools:** `fetch_feeds`, `list_feeds`, `search_articles`, `get_article_detail`, `get_stats`, `parse_article`
+**Tools:** `get_briefing`, `search_news`, `get_article`, `browse_category`, `list_categories`, `list_countries`
 
 ### Remote Endpoint (HTTP)
 
@@ -441,7 +509,7 @@ uv run news48 mcp revoke-key n48-...
 }
 ```
 
-**Tools:** `browse_articles`, `get_topic_clusters`, `article_detail`, `web_stats`
+**Tools:** `get_briefing`, `search_news`, `get_article`, `browse_category`, `list_categories`, `list_countries`
 
 > 🔒 All keys are prefixed `n48-` for secret scanner detection. If Redis is unreachable, all MCP requests are denied (fail-closed).
 
