@@ -41,3 +41,20 @@ Source: A 1200-word article about a new regulation that includes the specific re
 
 **Acceptable extraction:**
 > "New regulation requires X by [date]. Applies to [industries]. Compliance deadline: [date]. Industry groups oppose due to [reasons]. Legal challenge expected from [entity]. Estimated cost: $[amount]. Previous attempt in [year] failed because [reason]."
+
+## Anti-Pattern: Including Navigation/UI Artifacts
+
+Source articles — especially from RSS feeds, website excerpts, or live blogs — often include navigation prompts, "read more" links, or subscription calls-to-action at the end of the excerpt. These are NOT part of the article content and must be excluded from extraction.
+
+**Unacceptable:** Including "Continue reading", "Read more", "Click here for full article", or similar prompts in the extracted facts.
+
+**Rule:** Before extracting facts, scan the source for navigation/UI artifacts and mentally discard them. Only extract substantive journalistic content.
+
+**Common patterns to ignore:**
+- "Continue reading" / "Continue reading on the website"
+- "Read more" / "Read the full article" / "Read the full story"
+- "Click here to read" / "Click here for the full article"
+- "Subscribe to read" / "Sign in to continue"
+- "Keep reading" / "Read on" / "More on this story"
+- "Related stories" / "See also" / "You may also like"
+- Live blog markers like "This live blog is now closed" followed by navigation prompts

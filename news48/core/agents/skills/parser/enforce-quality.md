@@ -22,9 +22,11 @@ Ensure ALL are true before writing content:
 - [ ] Summary is not equal to title
 - [ ] Summary is not equal to the first sentence of the content
 - [ ] Summary does not start with meta-references ("This article...", "This story...", "The article...", "In this article...", "This report...", etc.) — must start directly with substantive content
+- [ ] Summary does NOT contain navigation/UI artifacts — phrases like "Continue reading", "Continue reading on the website", "Read more", "Read the full article", "Full story", "Click here to read", "Subscribe to read", "Sign in to continue" must be stripped entirely
 
 ### Content Checks
 - [ ] **No HTML tags** in title, summary, or content — all output must be plain text. Strip HTML entities and tags completely.
+- [ ] **No navigation/UI artifacts** in title, summary, or content — strip phrases like "Continue reading", "Continue reading on the website", "Read more", "Read the full article", "Full story", "Click here to read", "Subscribe to read", "Sign in to continue", "Keep reading", "Read on", "More on this story", "Related stories"
 - [ ] **Content is at least 1200 characters** (sources genuinely brief may have 400+ chars — below 400 chars is unacceptable regardless of source)
 - [ ] **Content has 3+ substantive paragraphs, each at least 150 characters**
 - [ ] **No verbatim or near-verbatim passages from source** — no phrase of 4+ consecutive words may match the source
@@ -81,3 +83,4 @@ Must use codes from the canonical error taxonomy:
 | `parse.shallow_content` | Content is too brief or lacks substantive depth (below 1200 chars or fewer than 3 substantive paragraphs) |
 | `parse.unchanged_title` | Output title is identical or near-identical to source title |
 | `parse.meta_summary` | Summary starts with meta-references instead of substantive content |
+| `parse.navigation_artifacts` | Summary or content contains UI/navigation prompts like "Continue reading", "Read more", etc. |

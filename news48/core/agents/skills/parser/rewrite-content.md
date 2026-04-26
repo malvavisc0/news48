@@ -32,6 +32,20 @@ Output must be substantive and comprehensive — never a hollow summary that str
 - Use clear, plain English — avoid jargon unless the subject demands it
 - Maintain factual accuracy and preserve attribution for disputed or unverified claims
 
+### 4. Strip Navigation and UI Artifacts
+Source articles — especially from RSS feeds or website excerpts — often include navigation prompts, "read more" links, or subscription calls-to-action. These must be completely removed from the output.
+
+**Common patterns to strip:**
+- "Continue reading" / "Continue reading on the website"
+- "Read more" / "Read the full article" / "Read the full story"
+- "Click here to read" / "Click here for the full article"
+- "Subscribe to read" / "Sign in to continue"
+- "Keep reading" / "Read on" / "More on this story"
+- "Related stories" / "See also" / "You may also like"
+- Any similar prompt that directs the reader to another page or action
+
+**Rule:** If a sentence or phrase exists solely to direct the reader to read more content elsewhere, remove it entirely. Do not paraphrase it. Do not include it in the summary or content.
+
 ## Examples
 
 ### Acceptable Rewrite

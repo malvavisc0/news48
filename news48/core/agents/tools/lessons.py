@@ -94,6 +94,7 @@ def _is_status_noise(lesson: str) -> bool:
     - "No X detected", "All X healthy", "No issues"
     - Bare metric snapshots without actionable insight
     - Very short generic statements
+    - Article-specific content summaries (not operational insights)
     """
     lowered = lesson.lower().strip()
     noise_patterns = [
@@ -108,6 +109,27 @@ def _is_status_noise(lesson: str) -> bool:
     for pat in noise_patterns:
         if re.match(pat, lowered):
             return True
+
+    # Article-specific content patterns — these are NOT operational lessons
+    article_content_patterns = [
+        r"^when parsing (articles? about|news about|" r"reports? on|stories? about)",
+        r"^when parsing \w+ (articles?|news|reports?|stories?)",
+        r"^the article (should|must|needs to|structure|" r"includes?|describes?)",
+        r"^extract (the|key|specific) (facts?|details?|"
+        r"information|findings?|statistics)",
+        r"^preserve (quantitative|specific|key) " r"(details?|facts?|metrics?|numbers)",
+        r"^rewrite content (completely|in original " r"language|with proper)",
+        r"^maintaining \d+\+ characters? across " r"\d+\+ paragraphs?",
+        r"^the article structure includes?",
+        r"^always include (specific|key|supporting) "
+        r"(numbers?|details?|facts?|quotes?)",
+        r"^key statistics to (capture|include|extract)",
+        r"^the core event.*extract.*supporting evidence",
+    ]
+    for pat in article_content_patterns:
+        if re.search(pat, lowered):
+            return True
+
     return False
 
 
