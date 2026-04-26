@@ -459,3 +459,46 @@ def strip_html_noise(html_content: str) -> str:
         html_content = body_match.group(1)
 
     return html_content.strip()
+
+
+def extract_article_body(html_content: str) -> str:
+    """Extract the main article body from HTML, discarding navigation chrome.
+
+    Uses trafilatura to identify and extract the primary article content,
+    removing navigation menus, sidebars, footers, cookie banners, and
+    other non-article elements.
+
+    When ``config.Extraction.mode`` is ``"none"`` the function returns the
+    input unchanged (extraction is skipped).
+
+    Args:
+        html_content: HTML string (preferably pre-cleaned by strip_html_noise).
+
+    Returns:
+        Cleaned HTML containing only the article body, or the original
+        HTML if extraction is disabled or fails (fallback to preserve content).
+    """
+    if config.Extraction.mode == "none":
+        return html_content
+
+    try:
+        import trafilatura
+
+        result = trafilatura.extract(
+            html_content,
+            include_comments=False,
+            include_tables=True,
+            include_formatting=True,
+            favor_recall=True,  # prefer extracting more content
+        )
+        if result:
+            return result
+    except ImportError:
+        # trafilatura not installed — fall through to original content
+        pass
+    except Exception:
+        # Extraction failed — fall through to original content
+        pass
+
+    # Fallback: return original content if extraction fails
+    return html_content

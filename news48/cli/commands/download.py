@@ -20,6 +20,7 @@ from news48.core.database import (
     update_article,
 )
 from news48.core.helpers.bypass import (
+    extract_article_body,
     fetch_url_content,
     get_byparr_solution,
     strip_html_noise,
@@ -122,7 +123,8 @@ async def _download_article(
                     )
                     image_url = extract_og_image(raw_html)
                     cleaned_html = strip_html_noise(raw_html)
-                    content = markdownify(cleaned_html) or ""
+                    article_html = extract_article_body(cleaned_html)
+                    content = markdownify(article_html) or ""
                     update_article(
                         article["id"],
                         content=content,

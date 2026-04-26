@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import re
 import tempfile
 from os import getenv
 
@@ -21,6 +22,27 @@ from ._run import run_agent
 from .skills import compose_agent_instructions
 
 logger = logging.getLogger(__name__)
+
+# Regex to detect video-only content: articles where the body is mostly
+# video/embed/iframe tags with minimal actual text.
+_VIDEO_ONLY_RE = re.compile(r"<(video|iframe|embed|object|script)[^>]*>", re.IGNORECASE)
+
+
+def _is_video_only(content: str) -> bool:
+    """Check if article content is primarily video/embed with no real text.
+
+    Returns True when the content has video/embed tags but less than 100
+    characters of actual text after stripping all HTML.
+    """
+    if not content:
+        return False
+    # Count video-related tags
+    video_tags = len(_VIDEO_ONLY_RE.findall(content))
+    if video_tags == 0:
+        return False
+    # Strip all HTML and check remaining text length
+    text_only = re.sub(r"<[^>]+>", "", content).strip()
+    return len(text_only) < 100
 
 
 def _get_temp_file_path(content: str) -> str:
@@ -50,6 +72,18 @@ async def _parse_claimed_article(article: dict, owner: str) -> dict:
     raw_content = article.get("content") or ""
     if not raw_content.strip():
         error = "Article has no content to parse"
+        mark_article_parse_failed(int(article["id"]), error)
+        return {
+            "id": int(article["id"]),
+            "title": article.get("title"),
+            "url": article.get("url"),
+            "success": False,
+            "error": error,
+        }
+
+    # Guard: skip video-only articles (no real text to parse)
+    if _is_video_only(raw_content):
+        error = "Article is video-only, no text content to parse"
         mark_article_parse_failed(int(article["id"]), error)
         return {
             "id": int(article["id"]),

@@ -8,6 +8,7 @@ from markdownify import markdownify
 
 from news48.core.config import Services
 from news48.core.helpers.bypass import (
+    extract_article_body,
     fetch_url_content,
     get_byparr_solution,
     strip_html_noise,
@@ -85,10 +86,10 @@ async def fetch_webpage_content(
             domain = get_base_url(url=url)
             solution = await get_solution(domain)
             content = await fetch_url_content(url=url, solution=solution)
+            content = strip_html_noise(content)
+            content = extract_article_body(content)
             if markdown:
                 content = markdownify(content) or ""
-            else:
-                content = strip_html_noise(content)
 
             return {"url": url, "content": content, "success": True}
         except Exception as e:

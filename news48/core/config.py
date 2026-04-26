@@ -67,3 +67,9 @@ class Redis:
     """Redis configuration for Dramatiq."""
 
     url: str = getenv("REDIS_URL", "redis://localhost:6379/0")
+
+
+class Extraction:
+    """Article body extraction settings."""
+
+    mode: str = getenv("ARTICLE_EXTRACTION", "trafilatura")
