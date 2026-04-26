@@ -1,5 +1,6 @@
 services:
   web:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile
@@ -32,6 +33,7 @@ services:
       - news48-net
 
   mysql:
+    restart: unless-stopped
     image: mysql:8.0
     # MySQL port is NOT exposed to host in production.
     # Uncomment below for local development access only.
@@ -97,6 +99,7 @@ services:
       - news48-net
 
   llamacpp:
+    restart: unless-stopped
     image: ghcr.io/ggml-org/llama.cpp:server-cuda13
     entrypoint: [ "bash", "/app/llamacpp-entrypoint.sh" ]
     volumes:
@@ -135,6 +138,7 @@ services:
       - news48-net
 
   searxng:
+    restart: unless-stopped
     image: searxng/searxng:latest
     volumes:
       - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
@@ -146,6 +150,7 @@ services:
       - news48-net
 
   byparr:
+    restart: unless-stopped
     image: ghcr.io/thephaseless/byparr:main
     environment:
       TZ: ${TZ:-Europe/Berlin}
@@ -153,6 +158,7 @@ services:
       - news48-net
 
   dozzle:
+    restart: unless-stopped
     image: amir20/dozzle:latest
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -169,6 +175,7 @@ services:
   # redis-stack includes RedisInsight UI at :8001 — useful during development.
   # For production, consider switching to redis:7-alpine for lower overhead.
   redis:
+    restart: unless-stopped
     image: redis/redis-stack:latest
     # Ports NOT exposed in production.
     # Uncomment below for local development access only.
@@ -191,6 +198,7 @@ services:
   # Dramatiq worker — consumes task queues and executes agents.
   # Uses the same worker image but overrides the command.
   dramatiq-worker:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile
@@ -231,6 +239,7 @@ services:
 
   # Periodiq scheduler — enqueues periodic tasks to Redis queues.
   periodiq-scheduler:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile
