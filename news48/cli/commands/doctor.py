@@ -1,14 +1,11 @@
 """Doctor command — quick health check of all external services."""
 
 import asyncio
-import json
 import os
-import time
 from typing import Any
 
 import typer
 from rich.console import Console
-from rich.table import Table
 
 from ._common import emit_json
 
@@ -124,8 +121,6 @@ def _check_database() -> dict:
 def _check_redis() -> dict:
     """Check Redis connectivity."""
     try:
-        from news48.core.config import Redis as RedisConfig
-
         url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
         import redis as redis_lib
 

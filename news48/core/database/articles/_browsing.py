@@ -121,7 +121,6 @@ def get_all_categories(hours: int = 48, parsed: bool = False) -> list[dict]:
     'artificial intelligence' are merged.
     """
     threshold = _hours_ago_db(hours)
-    parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
 
     with SessionLocal() as session:
         rows = session.execute(

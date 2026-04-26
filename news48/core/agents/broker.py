@@ -31,7 +31,7 @@ else:
 # Import here to avoid circular imports — actors import broker at top.
 from .middleware import PlanRecoveryMiddleware  # noqa: E402
 from .middleware import StartupRecoveryMiddleware  # noqa: E402
-from .middleware import StructuredLoggingMiddleware
+from .middleware import StructuredLoggingMiddleware  # noqa: E402
 
 # Only add middleware once (check by class name)
 _middleware_names = {type(m).__name__ for m in redis_broker.middleware}

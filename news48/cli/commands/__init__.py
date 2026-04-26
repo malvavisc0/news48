@@ -15,3 +15,21 @@ from .plans import plans_app
 from .search import search_app
 from .seed import seed
 from .stats import stats
+
+__all__ = [
+    "agents_app",
+    "articles_app",
+    "briefing",
+    "cleanup_app",
+    "doctor",
+    "download",
+    "feeds_app",
+    "fetch",
+    "fetches_app",
+    "lessons_app",
+    "parse",
+    "plans_app",
+    "search_app",
+    "seed",
+    "stats",
+]

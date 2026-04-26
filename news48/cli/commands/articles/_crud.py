@@ -1,6 +1,5 @@
 """Article CRUD CLI commands: list, info, delete, reset, content, update, fail."""
 
-import json
 import sys
 
 import typer

@@ -410,7 +410,7 @@ async def _search_news(
 async def _get_article(
     args: dict, *, parsed_only: bool = False
 ) -> list[types.TextContent]:
-    from news48.core.database import get_article_by_id, get_claims_for_article
+    from news48.core.database import get_claims_for_article
     from news48.core.database.articles import get_article_detail, get_related_articles
 
     article_id = _clamp_int(args.get("article_id"), 0, 1, 999999999)

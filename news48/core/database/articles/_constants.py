@@ -2,8 +2,6 @@
 
 from datetime import datetime, timedelta, timezone
 
-from news48.core.helpers.security import escape_like
-
 # Processing claim constants
 _VALID_PROCESSING_ACTIONS = {"download", "parse", "fact_check"}
 _CLAIM_TIMEOUT_MINUTES = 30

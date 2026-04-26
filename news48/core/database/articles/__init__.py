@@ -53,6 +53,10 @@ from ._queries import (
 from ._stats import get_article_stats, get_feed_stats, get_fetch_stats, get_web_stats
 
 __all__ = [
+    # _constants
+    "_CLAIM_TIMEOUT_MINUTES",
+    "_VALID_PROCESSING_ACTIONS",
+    # _browsing
     "claim_articles_for_processing",
     "clear_article_processing_claim",
     "delete_article",
