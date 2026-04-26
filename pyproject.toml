@@ -31,6 +31,7 @@ cli = [
     "dramatiq",
     "periodiq",
     "mcp[cli]",
+    "trafilatura",
 ]
 web = ["fastapi", "uvicorn", "Jinja2", "mcp"]
 all = ["news48[cli,web]"]
