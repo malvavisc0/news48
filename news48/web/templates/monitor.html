@@ -20,7 +20,6 @@
 {% set positive_width = ((sentiment.positive / sentiment_total * 100) if sentiment_total else 0) %}
 {% set neutral_width = ((sentiment.neutral / sentiment_total * 100) if sentiment_total else 0) %}
 {% set negative_width = ((sentiment.negative / sentiment_total * 100) if sentiment_total else 0) %}
-{% set retention_width = retention.retention_rate or 0 %}
 {% set top_feed_max = feeds.top_feeds[0].article_count if feeds.top_feeds else 1 %}
 
 <link rel="stylesheet" href="/static/monitor.css" />
@@ -58,7 +57,7 @@
                             parsed_rate }}%</strong>
                     </article>
                     <article class="monitor-proof-card">
-                        <span class="monitor-proof-card__label">retention discipline</span>
+                        <span class="monitor-proof-card__label">retention</span>
                         <strong class="monitor-proof-card__value" data-field="retention.retention_rate">{{
                             retention.retention_rate }}</strong>
                     </article>
@@ -73,121 +72,113 @@
     </header>
 
     <section class="monitor-story-grid">
-        <article
-            class="monitor-feature-card monitor-feature-card--health{% if not health.is_connected or not health.integrity_ok %} monitor-feature-card--danger{% endif %}">
-            <div class="monitor-feature-card__header">
-                <div>
-                    <p class="section-label">system health</p>
-                    <h2 class="monitor-feature-card__title">Stable and accountable.</h2>
-                </div>
-                <div class="monitor-health-flags">
-                    <span
-                        class="monitor-flag {% if health.is_connected %}is-ok{% else %}is-danger{% endif %}">connected</span>
-                    <span class="monitor-flag {% if health.integrity_ok %}is-ok{% else %}is-danger{% endif %}">integrity
-                        ok</span>
-                </div>
-            </div>
-            <p class="monitor-feature-card__lede">Connection status and database size.</p>
-            <div class="monitor-keyline">
-                <span>database footprint</span>
-                <strong><span data-field="db_size_mb">{{ stats.db_size_mb }}</span> MB</strong>
-            </div>
-        </article>
-
-        <article class="monitor-feature-card monitor-feature-card--pipeline">
-            <div class="monitor-feature-card__header">
-                <div>
-                    <p class="section-label">pipeline quality</p>
-                    <h2 class="monitor-feature-card__title">Coverage, backlog & friction.</h2>
-                </div>
-                <div class="monitor-inline-badge">{{ failures_total }} total failures</div>
-            </div>
-            <p class="monitor-feature-card__lede">How many articles made it through the pipeline.</p>
-            <div class="monitor-progress-stack">
-                <div class="monitor-progress-card">
-                    <div class="monitor-progress-card__meta"><span>parsed</span><strong data-field="articles.parsed">{{
-                            articles.parsed }}</strong></div>
-                    <div class="monitor-bar monitor-bar--emerald"><span data-bar="articles.parsed"
-                            data-width="{{ parsed_rate }}"></span></div>
-                    <div class="monitor-progress-card__note" data-note="articles.parsed">{{ '%.1f' % parsed_rate }}% of
-                        tracked articles</div>
-                </div>
-                <div class="monitor-progress-card">
-                    <div class="monitor-progress-card__meta"><span>awaiting parse</span><strong
-                            data-field="articles.unparsed">{{ articles.unparsed }}</strong></div>
-                    <div class="monitor-bar"><span data-bar="articles.unparsed" data-width="{{ unparsed_rate }}"></span>
+        <!-- Left Column: Pipeline Quality -->
+        <div class="monitor-column">
+            <article class="monitor-feature-card monitor-feature-card--pipeline">
+                <div class="monitor-feature-card__header">
+                    <div>
+                        <p class="section-label">pipeline quality</p>
+                        <h2 class="monitor-feature-card__title">Coverage, backlog & friction.</h2>
                     </div>
-                    <div class="monitor-progress-card__note" data-note="articles.unparsed">{{ '%.1f' % unparsed_rate }}%
-                        still in queue</div>
+                    <div class="monitor-inline-badge">{{ failures_total }} total failures</div>
                 </div>
-                <div class="monitor-progress-card">
-                    <div class="monitor-progress-card__meta"><span>no content</span><strong
-                            data-field="articles.no_content">{{ articles.no_content }}</strong></div>
-                    <div class="monitor-bar monitor-bar--warn"><span data-bar="articles.no_content"
-                            data-width="{{ no_content_rate }}"></span></div>
-                    <div class="monitor-progress-card__note" data-note="articles.no_content">{{ '%.1f' % no_content_rate
-                        }}% source friction</div>
-                </div>
-            </div>
-            <div class="monitor-inline-meta">
-                <span>failures <strong data-field-derived="failures_total">{{ failures_total }}</strong>
-                    <span class="stat-note">{{ articles.download_failures }} download · {{ articles.parse_failures }}
-                        parse</span></span>
-                <span>oldest unparsed <strong data-field="articles.oldest_unparsed_at" data-format="datetime">{{
-                        articles.oldest_unparsed_at or
-                        '—' }}</strong></span>
-            </div>
-        </article>
-
-        <article class="monitor-panel monitor-panel--elevated">
-            <div class="monitor-section__header">
-                <div>
-                    <p class="section-label">plan activity</p>
-                    <h2 class="monitor-section__headline">Agent execution state</h2>
-                </div>
-            </div>
-            <p class="monitor-feature-card__lede">What the agent layer is working on — pending, running, done, or
-                broken.</p>
-            <div class="monitor-stat-grid monitor-stat-grid--4">
-                <article class="stat">
-                    <div class="stat-kicker">pending</div>
-                    <div class="stat-value" data-field="plans.pending">{{ plans.pending }}</div>
-                </article>
-                <article class="stat">
-                    <div class="stat-kicker">executing</div>
-                    <div class="stat-value" data-field="plans.executing">{{ plans.executing }}</div>
-                </article>
-                <article class="stat">
-                    <div class="stat-kicker">completed</div>
-                    <div class="stat-value" data-field="plans.completed">{{ plans.completed }}</div>
-                </article>
-                <article class="stat{% if plans.failed %} monitor-stat--danger{% endif %}">
-                    <div class="stat-kicker">failed</div>
-                    <div class="stat-value" data-field="plans.failed">{{ plans.failed }}</div>
-                </article>
-            </div>
-        </article>
-
-        <article class="monitor-panel monitor-panel--elevated">
-            <div class="monitor-section__header">
-                <div>
-                    <p class="section-label">article velocity</p>
-                    <h2 class="monitor-section__headline">Freshness & volume</h2>
-                </div>
-            </div>
-            <p class="monitor-feature-card__lede">How many articles have landed today and this week.</p>
-            <div class="monitor-stat-grid monitor-stat-grid--3">
-                <article class="stat">
-                    <div class="stat-kicker">today</div>
-                    <div class="stat-value" data-field="articles.articles_today">{{ articles.articles_today }}</div>
-                </article>
-                <article class="stat">
-                    <div class="stat-kicker">this week</div>
-                    <div class="stat-value" data-field="articles.articles_this_week">{{ articles.articles_this_week }}
+                <p class="monitor-feature-card__lede">How many articles made it through the pipeline.</p>
+                <div class="monitor-progress-stack">
+                    <div class="monitor-progress-card">
+                        <div class="monitor-progress-card__meta"><span>parsed</span><strong
+                                data-field="articles.parsed">{{
+                                articles.parsed }}</strong></div>
+                        <div class="monitor-bar monitor-bar--emerald"><span data-bar="articles.parsed"
+                                data-width="{{ parsed_rate }}"></span></div>
+                        <div class="monitor-progress-card__note" data-note="articles.parsed">{{ '%.1f' % parsed_rate }}%
+                            of
+                            tracked articles</div>
                     </div>
-                </article>
-            </div>
-        </article>
+                    <div class="monitor-progress-card">
+                        <div class="monitor-progress-card__meta"><span>awaiting parse</span><strong
+                                data-field="articles.unparsed">{{ articles.unparsed }}</strong></div>
+                        <div class="monitor-bar"><span data-bar="articles.unparsed"
+                                data-width="{{ unparsed_rate }}"></span>
+                        </div>
+                        <div class="monitor-progress-card__note" data-note="articles.unparsed">{{ '%.1f' % unparsed_rate
+                            }}%
+                            still in queue</div>
+                    </div>
+                    <div class="monitor-progress-card">
+                        <div class="monitor-progress-card__meta"><span>no content</span><strong
+                                data-field="articles.no_content">{{ articles.no_content }}</strong></div>
+                        <div class="monitor-bar monitor-bar--warn"><span data-bar="articles.no_content"
+                                data-width="{{ no_content_rate }}"></span></div>
+                        <div class="monitor-progress-card__note" data-note="articles.no_content">{{ '%.1f' %
+                            no_content_rate
+                            }}% source friction</div>
+                    </div>
+                </div>
+                <div class="monitor-inline-meta">
+                    <span>failures <strong data-field-derived="failures_total">{{ failures_total }}</strong>
+                        <span class="stat-note">{{ articles.download_failures }} download · {{ articles.parse_failures
+                            }}
+                            parse</span></span>
+                    <span>oldest unparsed <strong data-field="articles.oldest_unparsed_at" data-format="datetime">{{
+                            articles.oldest_unparsed_at or
+                            '—' }}</strong></span>
+                </div>
+            </article>
+        </div>
+
+        <!-- Right Column: System Health → Plan Activity -->
+        <div class="monitor-column">
+            <article
+                class="monitor-feature-card monitor-feature-card--health{% if not health.is_connected or not health.integrity_ok %} monitor-feature-card--danger{% endif %}">
+                <div class="monitor-feature-card__header">
+                    <div>
+                        <p class="section-label">system health</p>
+                        <h2 class="monitor-feature-card__title">Stable and accountable.</h2>
+                    </div>
+                    <div class="monitor-health-flags">
+                        <span
+                            class="monitor-flag {% if health.is_connected %}is-ok{% else %}is-danger{% endif %}">connected</span>
+                        <span
+                            class="monitor-flag {% if health.integrity_ok %}is-ok{% else %}is-danger{% endif %}">integrity
+                            ok</span>
+                    </div>
+                </div>
+                <p class="monitor-feature-card__lede">Connection status and database size.</p>
+                <div class="monitor-keyline">
+                    <span>database footprint</span>
+                    <strong><span data-field="db_size_mb">{{ stats.db_size_mb }}</span> MB</strong>
+                </div>
+            </article>
+
+            <article class="monitor-panel monitor-panel--elevated">
+                <div class="monitor-section__header">
+                    <div>
+                        <p class="section-label">plan activity</p>
+                        <h2 class="monitor-section__headline">Agent execution state</h2>
+                    </div>
+                </div>
+                <p class="monitor-feature-card__lede">What the agent layer is working on — pending, running, done, or
+                    broken.</p>
+                <div class="monitor-stat-grid monitor-stat-grid--4">
+                    <article class="stat">
+                        <div class="stat-kicker">pending</div>
+                        <div class="stat-value" data-field="plans.pending">{{ plans.pending }}</div>
+                    </article>
+                    <article class="stat">
+                        <div class="stat-kicker">executing</div>
+                        <div class="stat-value" data-field="plans.executing">{{ plans.executing }}</div>
+                    </article>
+                    <article class="stat">
+                        <div class="stat-kicker">completed</div>
+                        <div class="stat-value" data-field="plans.completed">{{ plans.completed }}</div>
+                    </article>
+                    <article class="stat{% if plans.failed %} monitor-stat--danger{% endif %}">
+                        <div class="stat-kicker">failed</div>
+                        <div class="stat-value" data-field="plans.failed">{{ plans.failed }}</div>
+                    </article>
+                </div>
+            </article>
+        </div>
     </section>
 
     <section class="monitor-section monitor-section--sentiment" aria-labelledby="monitor-sentiment-label">
@@ -252,37 +243,6 @@
     </section>
 
     <section class="monitor-data-grid">
-        <article class="monitor-panel monitor-panel--elevated">
-            <div class="monitor-section__header">
-                <div>
-                    <p class="section-label">retention discipline</p>
-                    <h2 class="monitor-section__headline">Latest {{ retention.threshold_hours }}h window</h2>
-                </div>
-            </div>
-            <p class="monitor-feature-card__lede">Articles older than the threshold get cleaned up automatically.</p>
-            <div class="monitor-stat-grid monitor-stat-grid--3">
-                <article class="stat">
-                    <div class="stat-kicker">within window</div>
-                    <div class="stat-value" data-field="retention.articles_within_48h">{{ retention.articles_within_48h
-                        }}</div>
-                </article>
-                <article class="stat">
-                    <div class="stat-kicker">retention rate</div>
-                    <div class="stat-value" data-field="retention.retention_rate">{{ retention.retention_rate }}</div>
-                </article>
-            </div>
-            <div class="monitor-bar monitor-bar--dark"><span data-bar="retention.retention_rate"
-                    data-width="{{ retention_width }}"></span></div>
-            <div class="monitor-inline-meta">
-                <span>oldest <strong data-field="retention.oldest_article" data-format="datetime">{{
-                        retention.oldest_article or '—'
-                        }}</strong></span>
-                <span>newest <strong data-field="retention.newest_article" data-format="datetime">{{
-                        retention.newest_article or '—'
-                        }}</strong></span>
-            </div>
-        </article>
-
         <article class="monitor-panel monitor-panel--elevated">
             <div class="monitor-section__header">
                 <div>
