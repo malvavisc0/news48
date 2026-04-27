@@ -26,6 +26,7 @@ Ensure ALL are true before writing content:
 
 ### Content Checks
 - [ ] **No HTML tags** in title, summary, or content — all output must be plain text. Strip HTML entities and tags completely.
+- [ ] **No markdown syntax** in title, summary, or content — all output must be plain text prose. No `**bold**`, `*italic*`, `# headings`, `---` horizontal rules, `>` blockquotes, `- bullet lists`, `` `backticks` ``, or `[text](url)` link syntax. Write prose paragraphs only.
 - [ ] **No navigation/UI artifacts** in title, summary, or content — strip phrases like "Continue reading", "Continue reading on the website", "Read more", "Read the full article", "Full story", "Click here to read", "Subscribe to read", "Sign in to continue", "Keep reading", "Read on", "More on this story", "Related stories"
 - [ ] **Content is at least 1200 characters** (sources genuinely brief may have 400+ chars — below 400 chars is unacceptable regardless of source)
 - [ ] **Content has 3+ substantive paragraphs, each at least 150 characters**
@@ -84,3 +85,4 @@ Must use codes from the canonical error taxonomy:
 | `parse.unchanged_title` | Output title is identical or near-identical to source title |
 | `parse.meta_summary` | Summary starts with meta-references instead of substantive content |
 | `parse.navigation_artifacts` | Summary or content contains UI/navigation prompts like "Continue reading", "Read more", etc. |
+| `parse.markdown_in_output` | Markdown syntax found in title, summary, or content (bold, italic, headings, lists, code, links, etc.) |

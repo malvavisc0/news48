@@ -69,7 +69,9 @@ def cleanup_purge(
         "-n",
         help="Show what would be deleted without deleting",
     ),
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Skip confirmation"
+    ),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Purge articles older than the retention threshold.
@@ -172,7 +174,9 @@ def cleanup_summaries(
         "-n",
         help="Show what would be cleaned without updating",
     ),
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Skip confirmation"
+    ),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Clean truncation markers from article summaries.
@@ -191,7 +195,9 @@ def cleanup_summaries(
 
     # Find articles with truncation markers
     with SessionLocal() as session:
-        rows = session.execute(text("""
+        rows = session.execute(
+            text(
+                """
                 SELECT id, summary FROM articles
                 WHERE summary IS NOT NULL
                 AND (
@@ -205,7 +211,9 @@ def cleanup_summaries(
                     OR summary LIKE '%(more)%'
                     OR summary LIKE '%(continued)%'
                 )
-            """)).fetchall()
+            """
+            )
+        ).fetchall()
 
         articles = [dict(row._mapping) for row in rows]
 
@@ -247,7 +255,8 @@ def cleanup_summaries(
                 with SessionLocal() as session:
                     session.execute(
                         sql_text(
-                            "UPDATE articles SET summary = :summary WHERE id = :id"
+                            "UPDATE articles SET summary = :summary"
+                            " WHERE id = :id"
                         ),
                         {"summary": cleaned_summary, "id": article["id"]},
                     )
@@ -267,3 +276,158 @@ def cleanup_summaries(
             print(f"[DRY RUN] Would clean {cleaned} summaries")
         else:
             print(f"Cleaned {cleaned} article summaries")
+
+
+# Markdown patterns that indicate LLM-generated formatting.
+_MD_PATTERNS_RE = re.compile(
+    r"\*\*[^*]+\*\*"  # **bold**
+    r"|__[^_]+__"  # __bold__
+    r"|(?<!\*)\*(?!\*)[^*]+\*(?!\*)"  # *italic* (not **)
+    r"|^#{1,6}\s+"  # # heading at line start
+    r"|^\s{0,3}>\s?"  # > blockquote at line start
+    r"|^\s{0,3}[-*+]\s+"  # - list item at line start
+    r"|^\s{0,3}\d+\.\s+"  # 1. ordered list at line start
+    r"|^\s{0,3}---\s*$"  # --- horizontal rule
+    r"|\[[^\]]+\]\([^)]+\)"  # [text](url) links
+    r"|`[^`]+`"  # `inline code`
+    r"|~~[^~]+~~",  # ~~strikethrough~~
+    re.MULTILINE,
+)
+
+
+@cleanup_app.command(name="markdown")
+def cleanup_markdown(
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        "-n",
+        help="Show what would be cleaned without updating",
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Skip confirmation"
+    ),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Strip markdown formatting from article content, titles, and summaries.
+
+    Removes bold, italic, headings, links, blockquotes, list markers,
+    horizontal rules, code, and strikethrough from all parsed articles.
+    Use --dry-run to preview changes.
+
+    Examples:
+        news48 cleanup markdown
+        news48 cleanup markdown --dry-run
+        news48 cleanup markdown --force --json
+    """
+    require_db()
+
+    from sqlalchemy import text as sql_text
+
+    from news48.core.helpers.text import strip_markdown
+
+    # Find parsed articles that contain markdown patterns.
+    with SessionLocal() as session:
+        rows = session.execute(
+            sql_text(
+                """
+                SELECT id, title, summary, content FROM articles
+                WHERE parsed_at IS NOT NULL
+                AND (
+                    content LIKE '%**%'
+                    OR title LIKE '%**%'
+                    OR summary LIKE '%**%'
+                    OR content LIKE '%## %'
+                    OR title LIKE '%## %'
+                    OR content LIKE '%](http%'
+                    OR content LIKE '%`%'
+                )
+            """
+            )
+        ).fetchall()
+
+        articles = [dict(row._mapping) for row in rows]
+
+    if not articles:
+        if output_json:
+            emit_json(
+                {"cleaned": 0, "message": "No articles with markdown found"}
+            )
+        else:
+            print("No articles with markdown formatting found")
+        return
+
+    # Filter to only articles where stripping actually changes something.
+    needs_cleaning = []
+    for article in articles:
+        changes = {}
+        for field in ("title", "summary", "content"):
+            original = article.get(field) or ""
+            cleaned = strip_markdown(original)
+            if cleaned != original:
+                changes[field] = cleaned
+        if changes:
+            needs_cleaning.append({"id": article["id"], "changes": changes})
+
+    if not needs_cleaning:
+        if output_json:
+            emit_json(
+                {"cleaned": 0, "message": "No articles need markdown removal"}
+            )
+        else:
+            print("No articles need markdown removal")
+        return
+
+    # Show preview
+    if not output_json and not dry_run:
+        print(
+            f"Found {len(needs_cleaning)} articles with markdown formatting:"
+        )
+        for item in needs_cleaning[:5]:
+            fields = ", ".join(item["changes"].keys())
+            print(f"  - [{item['id']}] fields: {fields}")
+        if len(needs_cleaning) > 5:
+            print(f"  ... and {len(needs_cleaning) - 5} more")
+        print()
+
+    # Confirm
+    if not force and not dry_run and not output_json:
+        confirm = typer.confirm(
+            f"Strip markdown from {len(needs_cleaning)} articles?"
+        )
+        if not confirm:
+            print("Cleanup cancelled")
+            return
+
+    # Execute cleanup
+    cleaned = 0
+    for item in needs_cleaning:
+        if not dry_run:
+            sets = []
+            params = {"id": item["id"]}
+            for field, value in item["changes"].items():
+                sets.append(f"{field} = :{field}")
+                params[field] = value
+            set_clause = ", ".join(sets)
+            with SessionLocal() as session:
+                session.execute(
+                    sql_text(
+                        f"UPDATE articles SET {set_clause}" " WHERE id = :id"
+                    ),
+                    params,
+                )
+                session.commit()
+        cleaned += 1
+
+    if output_json:
+        emit_json(
+            {
+                "total_found": len(needs_cleaning),
+                "cleaned": cleaned,
+                "dry_run": dry_run,
+            }
+        )
+    else:
+        if dry_run:
+            print(f"[DRY RUN] Would strip markdown from {cleaned} articles")
+        else:
+            print(f"Stripped markdown from {cleaned} articles")

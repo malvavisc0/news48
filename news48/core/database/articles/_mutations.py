@@ -6,6 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from news48.core.helpers.text import strip_html_tags as _strip_html_tags
+from news48.core.helpers.text import strip_markdown as _strip_markdown
 
 from ..connection import SessionLocal, _utcnow
 from ..models import Article
@@ -62,7 +63,8 @@ def insert_articles(
 
         if entries:
             _log.info(
-                "insert_articles: %d entries, %d new, " "%d duplicates, %d no-url",
+                "insert_articles: %d entries, %d new, "
+                "%d duplicates, %d no-url",
                 len(entries),
                 count,
                 duplicates,
@@ -94,9 +96,9 @@ def update_article(
     updated if the current value is NULL/empty, preserving accurate
     feed-provided values over LLM extractions.
     """
-    summary = _strip_html_tags(summary) or None
-    title = _strip_html_tags(title) or None
-    content = _strip_html_tags(content) or ""
+    summary = _strip_markdown(_strip_html_tags(summary)) or None
+    title = _strip_markdown(_strip_html_tags(title)) or None
+    content = _strip_markdown(_strip_html_tags(content)) or ""
 
     if sentiment:
         sentiment = sentiment.lower()
@@ -188,7 +190,7 @@ def patch_article_fields(
         if not article:
             return
         if summary:
-            article.summary = _strip_html_tags(summary)
+            article.summary = _strip_markdown(_strip_html_tags(summary))
         if categories:
             article.categories = categories.lower()
         if sentiment:
@@ -272,7 +274,10 @@ def increment_view_count(article_id: int) -> None:
     """Atomically increment the view count for an article."""
     with SessionLocal() as session:
         session.execute(
-            text("UPDATE articles SET view_count = view_count + 1 WHERE id = :id"),
+            text(
+                "UPDATE articles SET view_count = view_count + 1"
+                " WHERE id = :id"
+            ),
             {"id": article_id},
         )
         session.commit()

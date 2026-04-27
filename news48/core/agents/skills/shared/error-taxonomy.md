@@ -28,6 +28,7 @@ Error codes follow the pattern `category.detail` — a category prefix, a dot, a
 | `parse.invalid_field` | Invalid field | Country code, category, or sentiment normalization failed |
 | `parse.fidelity` | Fidelity violation | Invented facts or missing core facts |
 | `parse.html_in_output` | HTML in output | HTML tags found in title, summary, or content |
+| `parse.markdown_in_output` | Markdown in output | Markdown syntax found in title, summary, or content (bold, italic, headings, lists, code, links, etc.) |
 | `parse.clickbait_title` | Clickbait title | Title is vague, deictic, or clickbait without a descriptive subject |
 | `parse.verbatim_copy` | Verbatim copy | Content contains verbatim or near-verbatim passages from source |
 | `parse.shallow_content` | Shallow content | Content is too brief or lacks substantive depth (below 1200 chars or fewer than 3 substantive paragraphs) |
@@ -52,3 +53,4 @@ Error codes follow the pattern `category.detail` — a category prefix, a dot, a
 - `parse.verbatim_copy` — content contains phrases of 4+ consecutive words matching the source.
 - `parse.shallow_content` — content below 1200 chars or fewer than 3 substantive paragraphs.
 - `parse.unchanged_title` — output title matches source title verbatim or with only trivial changes.
+- `parse.markdown_in_output` — markdown syntax detected in title, summary, or content.

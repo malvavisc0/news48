@@ -32,7 +32,23 @@ Output must be substantive and comprehensive — never a hollow summary that str
 - Use clear, plain English — avoid jargon unless the subject demands it
 - Maintain factual accuracy and preserve attribution for disputed or unverified claims
 
-### 4. Strip Navigation and UI Artifacts
+### 4. Plain Text Only — No Markdown
+All output must be plain text prose. Do not use any markdown formatting syntax.
+
+**Forbidden patterns:**
+- `**bold text**` or `__bold text__` — just write the words
+- `*italic text*` or `_italic text_` — just write the words
+- `# Heading` or `## Subheading` — use paragraph structure instead
+- `---` horizontal rules — use paragraph breaks instead
+- `> blockquote` — integrate quoted material into prose
+- `- bullet list` or `1. numbered list` — write as flowing sentences
+- `` `code` `` backticks — just write the term normally
+- `[text](url)` link syntax — reference sources by name in prose
+- `~~strikethrough~~` — just omit the struck text
+
+**Rule:** If you need emphasis, use word choice and sentence structure — not markup. Write every paragraph as continuous prose separated by blank lines.
+
+### 5. Strip Navigation and UI Artifacts
 Source articles — especially from RSS feeds or website excerpts — often include navigation prompts, "read more" links, or subscription calls-to-action. These must be completely removed from the output.
 
 **Common patterns to strip:**

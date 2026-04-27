@@ -26,6 +26,8 @@ Evidence commands are loaded separately in the shared evidence commands referenc
 
 ## Cleanup Commands
 - `news48 cleanup purge --json` — delete articles older than retention window.
+- `news48 cleanup summaries --force --json` — remove truncation markers from article summaries.
+- `news48 cleanup markdown --force --json` — strip markdown formatting from article content, titles, and summaries.
 
 ## Commands Without `--json`
 Do not pass `--json` to these commands:

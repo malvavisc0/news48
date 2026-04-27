@@ -1493,6 +1493,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "redis" },
     { name = "sqlalchemy" },
+    { name = "trafilatura" },
 ]
 
 [package.optional-dependencies]
@@ -1505,7 +1506,6 @@ all = [
     { name = "mcp", extra = ["cli"] },
     { name = "periodiq" },
     { name = "rich" },
-    { name = "trafilatura" },
     { name = "typer" },
     { name = "uvicorn" },
 ]
@@ -1516,7 +1516,6 @@ cli = [
     { name = "mcp", extra = ["cli"] },
     { name = "periodiq" },
     { name = "rich" },
-    { name = "trafilatura" },
     { name = "typer" },
 ]
 web = [
@@ -1555,7 +1554,7 @@ requires-dist = [
     { name = "redis" },
     { name = "rich", marker = "extra == 'cli'" },
     { name = "sqlalchemy" },
-    { name = "trafilatura", marker = "extra == 'cli'" },
+    { name = "trafilatura" },
     { name = "typer", marker = "extra == 'cli'" },
     { name = "uvicorn", marker = "extra == 'web'" },
 ]

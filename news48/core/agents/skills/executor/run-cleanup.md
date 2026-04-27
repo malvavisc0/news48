@@ -7,9 +7,11 @@ Active when plan family is retention or cleanup.
 1. **Check state**: `news48 cleanup status --json`
 2. **Run purge**: `news48 cleanup purge --force --json`
 3. **Clean summaries**: `news48 cleanup summaries --force --json`
-4. **Verify**: `news48 cleanup status --json` shows zero articles older than 48h.
+4. **Strip markdown**: `news48 cleanup markdown --force --json`
+5. **Verify**: `news48 cleanup status --json` shows zero articles older than 48h.
 
 ## Constraints
 - Never run `news48 cleanup purge` without checking `news48 cleanup status` first.
 - Always pass `--force` so the command does not prompt for interactive confirmation.
 - Run `news48 cleanup summaries` after purge to remove truncation markers like "Continue reading" from article summaries.
+- Run `news48 cleanup markdown` after summaries to strip any markdown formatting (bold, italic, headings, links, etc.) that the LLM agents may have inserted into article content, titles, or summaries.

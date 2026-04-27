@@ -57,6 +57,7 @@ The task includes:
 11. Rewrite all content in original language — no verbatim or near-verbatim copying from source.
 12. Ensure content meets minimum depth thresholds — every paragraph must carry substantive information.
 13. Always transform the title from the original — never pass through the source title unchanged.
+14. **All output must be plain text — no markdown formatting.** Do not use `**bold**`, `*italic*`, `# headings`, `---` horizontal rules, `>` blockquotes, `- bullet lists`, `` `backticks` ``, or `[text](url)` link syntax. Write prose paragraphs separated by blank lines only.
 
 ## Parse Outcome Contract
 
