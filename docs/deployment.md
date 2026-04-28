@@ -613,6 +613,18 @@ open http://localhost:9999
 open http://localhost:8001
 ```
 
+### CLI Wrapper (Docker installs)
+
+The install script (`scripts/install.sh`) adds a `news48` command to `~/.local/bin` that wraps `docker compose exec dramatiq-worker`. This lets you run CLI commands without typing the full docker compose invocation:
+
+```bash
+news48 stats              # instead of: docker compose ... exec dramatiq-worker news48 stats
+news48 feeds list         # instead of: docker compose ... exec dramatiq-worker news48 feeds list
+news48 briefing           # instead of: docker compose ... exec dramatiq-worker news48 briefing
+```
+
+The wrapper `cd`s to the install directory and uses the same compose file flags as the installer. If `~/.local/bin` is not in your PATH, the installer adds it to your shell rc file (`.bashrc` or `.zshrc`).
+
 ---
 
 ## Troubleshooting

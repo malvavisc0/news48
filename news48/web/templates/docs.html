@@ -106,42 +106,8 @@
             news48 exposes its news data via the
             <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">Model Context Protocol</a>,
             so AI assistants like Claude, Cursor, and others can browse,
-            search, and inspect stories in real time. Two connection modes are
-            available — local (stdio) for desktop tools, and remote (HTTP) for
-            browser-based clients and third-party integrations.
+            search, and inspect stories in real time.
         </p>
-
-        <!-- Connection Modes -->
-        <div class="docs__mcp-mode">
-            <h3>Connection Modes</h3>
-            <div class="docs__arch-grid">
-                <div class="docs__arch-card">
-                    <h3>Local (stdio)</h3>
-                    <p>
-                        Runs as a subprocess of your AI assistant. No authentication required.
-                        Ideal for Claude Desktop, Cursor, or custom scripts running on the
-                        same machine.
-                    </p>
-                    <div class="docs__code-block">
-                        <div class="docs__code-header"><span>Shell</span></div>
-                        <pre><code>news48 mcp serve</code></pre>
-                    </div>
-                </div>
-                <div class="docs__arch-card">
-                    <h3>Remote (HTTP)</h3>
-                    <p>
-                        Runs inside the web container and is accessible via HTTP.
-                        Uses Bearer token authentication backed by Redis.
-                        CORS is handled directly by the endpoint.
-                    </p>
-                    <div class="docs__code-block">
-                        <div class="docs__code-header"><span>Endpoint</span></div>
-                        <pre><code>POST http://your-server:8000/mcp
-Authorization: Bearer n48-your-key</code></pre>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <!-- Remote MCP Setup -->
         <div class="docs__mcp-mode">
@@ -320,48 +286,23 @@ docker compose exec dramatiq-worker news48 mcp revoke-key n48-...</code></pre>
             via Redis message queues. Includes MySQL database, Redis cache, and local LLM integration via llama.cpp.
             Everything older than 48 hours is deleted automatically—by design.
         </p>
+        <div class="docs__mcp-mode">
+            <h3>CLI Access</h3>
+            <p>
+                The installer adds a <code>news48</code> command to your PATH that runs CLI commands
+                inside the worker container. After installation:
+            </p>
+            <div class="docs__code-block">
+                <div class="docs__code-header">
+                    <span>Terminal</span>
+                </div>
+                <pre><code>news48 stats              # System statistics
+news48 feeds list         # List all feeds
+news48 briefing           # News briefing
+news48 mcp create-key     # Create MCP API key</code></pre>
+            </div>
+        </div>
     </section>
 
 </div>
-{% endblock %} <div class="docs__tool">
-    <code>list_categories</code>
-    <span>All active categories with article counts</span>
-</div>
-<div class="docs__tool">
-    <code>list_countries</code>
-    <span>Countries mentioned in recent articles</span>
-</div>
-</div>
-</div>
-
-<!-- Troubleshooting -->
-<div class="docs__mcp-mode">
-    <h3>Troubleshooting</h3>
-    <p>
-        Common issues when connecting to the MCP endpoint and how to resolve them:
-    </p>
-    <div class="docs__code-block">
-        <div class="docs__code-header">
-            <span>Symptoms & Fixes</span>
-        </div>
-        <pre><code>❌ "Failed to fetch (check CORS?)"
-   → The web container is not running, or a reverse proxy is stripping
-     CORS headers. Check: docker compose ps web
-
-❌ "401 Unauthorized"
-   → Missing or invalid API key. Create one:
-     docker compose exec dramatiq-worker news48 mcp create-key --label "my-client"
-
-❌ "307 Temporary Redirect"
-   → Old server version. Update to latest — both /mcp and /mcp/ now work.
-
-❌ Connection refused
-   → Wrong port or host. Verify the port mapping in docker-compose.override.yml
-     (dev: 8765, prod: 8000).</code></pre>
-    </div>
-    <p>
-        Full documentation: <a href="https://github.com/malvavisc0/news48/blob/main/docs/mcp-tools.md" target="_blank"
-            rel="noopener">docs/mcp-tools.md</a>
-    </p>
-</div>
-</section>
+{% endblock %}

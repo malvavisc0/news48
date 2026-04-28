@@ -851,6 +851,10 @@ a:focus-visible {
     line-height: var(--leading-body);
 }
 
+.landing-code-block+.landing-setup__copy {
+    margin-top: var(--space-md);
+}
+
 .landing-links {
     display: flex;
     flex-wrap: wrap;

@@ -87,21 +87,6 @@ Lists all countries mentioned in recent articles with article counts. Use it to 
 
 ## Connecting
 
-### Local (stdio)
-
-For local agents like Claude Desktop, Cursor, or custom scripts:
-
-```json
-{
-  "mcpServers": {
-    "news48": {
-      "command": "news48",
-      "args": ["mcp", "serve"]
-    }
-  }
-}
-```
-
 ### Remote (HTTP)
 
 For remote agents or third-party integrations. Requires an API key:

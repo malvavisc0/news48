@@ -434,16 +434,33 @@ docker compose -f docker-compose.yml -f docker-compose.external-llm.yml up -d
 
 This disables the Docker llama.cpp container and model download — ideal for hosted LLM APIs or when running llama.cpp on the host machine.
 
+### CLI Wrapper
+
+The install script adds a `news48` command to `~/.local/bin` that wraps `docker compose exec dramatiq-worker`. After installation (and sourcing your shell rc), you can run:
+
+```bash
+news48 stats                    # System statistics
+news48 feeds list               # List all feeds
+news48 briefing                 # News briefing
+news48 search articles "query"  # Full-text search
+news48 mcp create-key --label "Dev"  # Create MCP API key
+```
+
+The wrapper `cd`s to the install directory and runs commands inside the `dramatiq-worker` container. It uses the same compose file flags as the installer (`-f docker-compose.yml -f docker-compose.prod.yml`).
+
 ### Seeding in Docker
 
 The sentinel agent auto-detects an empty database and creates a seed plan — so if `seed.txt` is in the image, seeding happens automatically.
 
 ```bash
-# Manual seed
+# Manual seed (using the wrapper)
+news48 seed /app/seed.txt
+
+# Or with full docker compose command
 docker compose exec dramatiq-worker news48 seed /app/seed.txt
 
 # Verify
-docker compose exec dramatiq-worker news48 feeds list
+news48 feeds list
 ```
 
 ### Worker Observability

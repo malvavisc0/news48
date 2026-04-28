@@ -78,49 +78,110 @@ printf "${BOLD}${CYAN}╚══════════════════�
 printf "\n"
 
 # ─── Preflight Checks ───────────────────────────────────────────────────────
+printf "\n${BOLD}Checking system requirements...${RESET}\n\n"
 
-# Docker
-if ! command -v docker &>/dev/null; then
-    warn "Docker is not installed."
+CHECKS_PASSED=0
+CHECKS_FAILED=0
+CHECKS_SKIPPED=0
+
+# Check curl
+printf "  ⏳ ${BOLD}curl${RESET} ... "
+if command -v curl &>/dev/null; then
+    CURL_VERSION=$(curl --version 2>/dev/null | head -1)
+    printf "${GREEN}✓${RESET} %s\n" "$CURL_VERSION"
+    ((CHECKS_PASSED++))
+else
+    printf "${RED}✗${RESET} Not found\n"
+    ((CHECKS_FAILED++))
+fi
+
+# Check openssl
+printf "  ⏳ ${BOLD}openssl${RESET} ... "
+if command -v openssl &>/dev/null; then
+    OPENSSL_VERSION=$(openssl version 2>/dev/null | head -1)
+    printf "${GREEN}✓${RESET} %s\n" "$OPENSSL_VERSION"
+    ((CHECKS_PASSED++))
+else
+    printf "${RED}✗${RESET} Not found\n"
+    ((CHECKS_FAILED++))
+fi
+
+# Check git (optional but useful)
+printf "  ⏳ ${BOLD}git${RESET} (optional) ... "
+if command -v git &>/dev/null; then
+    GIT_VERSION=$(git --version 2>/dev/null)
+    printf "${GREEN}✓${RESET} %s\n" "$GIT_VERSION"
+    ((CHECKS_PASSED++))
+else
+    printf "${YELLOW}⊘${RESET} Not found (optional, not required)\n"
+    ((CHECKS_SKIPPED++))
+fi
+
+# Check Docker
+printf "  ⏳ ${BOLD}docker${RESET} ... "
+if command -v docker &>/dev/null; then
+    DOCKER_VERSION=$(docker --version 2>/dev/null)
+    printf "${GREEN}✓${RESET} %s\n" "$DOCKER_VERSION"
+    ((CHECKS_PASSED++))
+else
+    printf "${RED}✗${RESET} Not found\n"
+    warn "Docker is required for news48."
     read -rp "Install Docker now? (y/N): " install_docker <&3
     if [[ "$install_docker" =~ ^[Yy]$ ]]; then
         info "Installing Docker..."
         curl -fsSL https://get.docker.com | sh
         sudo usermod -aG docker "$USER"
         success "Docker installed. You may need to log out and back in for group changes."
+        printf "  ⏳ ${BOLD}docker${RESET} ... "
+        DOCKER_VERSION=$(docker --version 2>/dev/null)
+        printf "${GREEN}✓${RESET} %s\n" "$DOCKER_VERSION"
+        ((CHECKS_PASSED++))
+        ((CHECKS_FAILED--))
     else
         error "Docker is required. Aborting."
         exit 1
     fi
 fi
 
-# Docker daemon
-if ! docker info &>/dev/null; then
-    error "Docker daemon is not running. Please start Docker and try again."
-    exit 1
-fi
-success "Docker is available"
-
-# Docker Compose v2
-if ! docker compose version &>/dev/null; then
-    error "Docker Compose v2 is required (docker compose)."
-    error "Please update Docker or install the compose plugin."
-    exit 1
-fi
-COMPOSE_VERSION=$(docker compose version --short 2>/dev/null || echo "unknown")
-success "Docker Compose v2 available (version: $COMPOSE_VERSION)"
-
-# curl
-if ! command -v curl &>/dev/null; then
-    error "curl is required. Please install it and try again."
-    exit 1
+# Check Docker daemon
+printf "  ⏳ ${BOLD}docker daemon${RESET} ... "
+if docker info &>/dev/null; then
+    printf "${GREEN}✓${RESET} Running\n"
+    ((CHECKS_PASSED++))
+else
+    printf "${RED}✗${RESET} Not running\n"
+    ((CHECKS_FAILED++))
 fi
 
-# openssl (used for generating secure passwords)
-if ! command -v openssl &>/dev/null; then
-    error "openssl is required. Please install it and try again."
+# Check Docker Compose v2
+printf "  ⏳ ${BOLD}docker compose${RESET} ... "
+if docker compose version &>/dev/null; then
+    COMPOSE_VERSION=$(docker compose version --short 2>/dev/null || echo "unknown")
+    printf "${GREEN}✓${RESET} v2 (version $COMPOSE_VERSION)\n"
+    ((CHECKS_PASSED++))
+else
+    printf "${RED}✗${RESET} Not available\n"
+    ((CHECKS_FAILED++))
+fi
+
+printf "\n${BOLD}Requirements Summary:${RESET}\n"
+printf "  ${GREEN}✓ Passed:${RESET}  %d\n" "$CHECKS_PASSED"
+if [ $CHECKS_FAILED -gt 0 ]; then
+    printf "  ${RED}✗ Failed:${RESET}  %d\n" "$CHECKS_FAILED"
+fi
+if [ $CHECKS_SKIPPED -gt 0 ]; then
+    printf "  ${YELLOW}⊘ Skipped:${RESET} %d (optional)\n" "$CHECKS_SKIPPED"
+fi
+printf "\n"
+
+# Exit if critical checks failed
+if [ $CHECKS_FAILED -gt 0 ]; then
+    error "Some required dependencies are missing or not working."
+    error "Please install or fix the above items and try again."
     exit 1
 fi
+
+success "All requirements satisfied. Ready to proceed."
 
 # ─── Download Repository ─────────────────────────────────────────────────────
 printf "\n${BOLD}Downloading news48 to $INSTALL_DIR...${RESET}\n"
@@ -452,6 +513,51 @@ printf "\n${BOLD}Service status:${RESET}\n"
 "${COMPOSE_CMD[@]}" ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || \
     "${COMPOSE_CMD[@]}" ps
 
+# ─── Install CLI wrapper ───────────────────────────────────────────────────
+printf "\n${BOLD}Installing CLI wrapper...${RESET}\n"
+
+WRAPPER_DIR="${HOME}/.local/bin"
+WRAPPER_PATH="${WRAPPER_DIR}/news48"
+
+mkdir -p "$WRAPPER_DIR"
+
+cat > "$WRAPPER_PATH" << WRAPPER_EOF
+#!/usr/bin/env bash
+# news48 CLI — installed by the news48 Docker installer.
+# Runs commands inside the dramatiq-worker container.
+cd "${INSTALL_DIR}" || { echo "news48: cannot cd to ${INSTALL_DIR}" >&2; exit 1; }
+exec docker compose -f docker-compose.yml -f docker-compose.prod.yml \\
+    exec -T dramatiq-worker news48 "\$@"
+WRAPPER_EOF
+
+chmod +x "$WRAPPER_PATH"
+
+# Ensure ~/.local/bin is in PATH
+SHELL_RC=""
+if [ -f "$HOME/.zshrc" ] && { [ -n "${ZSH_VERSION:-}" ] || command -v zsh &>/dev/null; }; then
+    SHELL_RC="$HOME/.zshrc"
+elif [ -f "$HOME/.bashrc" ]; then
+    SHELL_RC="$HOME/.bashrc"
+fi
+
+if ! echo "$PATH" | tr ':' '\n' | grep -qx "${WRAPPER_DIR}"; then
+    if [ -n "$SHELL_RC" ]; then
+        {
+            echo ''
+            echo '# news48 CLI wrapper'
+            echo 'export PATH="$HOME/.local/bin:$PATH"'
+        } >> "$SHELL_RC"
+        success "Added ~/.local/bin to PATH in $(basename "$SHELL_RC")"
+        info "Run 'source $(basename "$SHELL_RC")' or open a new terminal to use 'news48' directly"
+    else
+        info "Add ~/.local/bin to your PATH to use 'news48' directly"
+    fi
+else
+    success "~/.local/bin already in PATH"
+fi
+
+success "CLI wrapper installed at $WRAPPER_PATH"
+
 # ─── Seed Database ──────────────────────────────────────────────────────────
 COMPOSE_CMD_STR="${COMPOSE_CMD[*]}"
 printf "\n${BOLD}Seeding database...${RESET}\n"
@@ -471,23 +577,54 @@ HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 
 # ─── Summary ─────────────────────────────────────────────────────────────────
 printf "\n"
-printf "${BOLD}${GREEN}╔═══════════════════════════════════════════════╗${RESET}\n"
-printf "${BOLD}${GREEN}║          ✅  news48 installed!                ║${RESET}\n"
-printf "${BOLD}${GREEN}╚═══════════════════════════════════════════════╝${RESET}\n"
+printf "${BOLD}${GREEN}╔════════════════════════════════════════════════════════╗${RESET}\n"
+printf "${BOLD}${GREEN}║                                                        ║${RESET}\n"
+printf "${BOLD}${GREEN}║          🎉  news48 Installation Complete  🎉          ║${RESET}\n"
+printf "${BOLD}${GREEN}║                                                        ║${RESET}\n"
+printf "${BOLD}${GREEN}╚════════════════════════════════════════════════════════╝${RESET}\n"
 printf "\n"
-printf "  ${BOLD}Location:${RESET} %s\n" "$INSTALL_DIR"
-printf "  ${BOLD}Mode:${RESET}     %s\n" "$([ "$DEPLOY_MODE" = "standard" ] && echo "Standard (NVIDIA GPU)" || echo "External LLM")"
-printf "  ${BOLD}Web UI:${RESET}   ${CYAN}http://${HOST_IP}:8000${RESET}\n"
-printf "  ${BOLD}Health:${RESET}   ${CYAN}http://${HOST_IP}:8000/health${RESET}\n"
+
+printf "${BOLD}📦  Installation Details${RESET}\n"
+printf "   └─ ${BOLD}Location:${RESET}   $INSTALL_DIR\n"
+printf "   └─ ${BOLD}Mode:${RESET}       $([ "$DEPLOY_MODE" = "standard" ] && echo "Standard (NVIDIA GPU)" || echo "External LLM")\n"
+printf "   └─ ${BOLD}Wrapper:${RESET}    ${CYAN}$WRAPPER_PATH${RESET}\n"
 printf "\n"
-printf "  ${BOLD}Useful commands:${RESET}\n"
-printf "    View logs:     ${DIM}%s logs -f${RESET}\n" "$COMPOSE_CMD_STR"
-printf "    Shell access:  ${DIM}%s exec dramatiq-worker bash${RESET}\n" "$COMPOSE_CMD_STR"
-printf "    Run CLI:       ${DIM}%s exec dramatiq-worker news48 stats${RESET}\n" "$COMPOSE_CMD_STR"
-printf "    Seed feeds:    ${DIM}%s exec dramatiq-worker news48 seed /app/seed.txt${RESET}\n" "$COMPOSE_CMD_STR"
-printf "    Update:        ${DIM}curl -fsSL $REPO_RAW/scripts/install.sh | bash${RESET}\n"
-printf "    Stop:          ${DIM}%s down${RESET}\n" "$COMPOSE_CMD_STR"
+
+printf "${BOLD}🌐  Access Your Installation${RESET}\n"
+printf "   ├─ ${BOLD}Web UI:${RESET}      ${CYAN}http://${HOST_IP}:8000${RESET}\n"
+printf "   ├─ ${BOLD}Health Check:${RESET} ${CYAN}http://${HOST_IP}:8000/health${RESET}\n"
+printf "   └─ ${BOLD}Local Access:${RESET}  Open a new terminal and use 'news48' directly\n"
+printf "      ${DIM}(or run: source ~/.bashrc or source ~/.zshrc)${RESET}\n"
 printf "\n"
-printf "  ${DIM}Edit seed.txt to add your RSS feed URLs, then run the seed command.${RESET}\n"
-printf "  ${DIM}The sentinel agent will auto-seed if the database is empty.${RESET}\n"
+
+printf "${BOLD}⚡  Quick Start Commands${RESET}\n"
+printf "   ${DIM}# After opening a new terminal:${RESET}\n"
+printf "   ├─ ${CYAN}news48 stats${RESET}             ${DIM}View system information${RESET}\n"
+printf "   ├─ ${CYAN}news48 feeds list${RESET}        ${DIM}Show all configured feeds${RESET}\n"
+printf "   ├─ ${CYAN}news48 briefing${RESET}          ${DIM}Get the latest news briefing${RESET}\n"
+printf "   └─ ${CYAN}news48 mcp create-key${RESET}    ${DIM}Create MCP API key${RESET}\n"
+printf "\n"
+
+printf "${BOLD}🐳  Docker Management${RESET}\n"
+printf "   ${DIM}# Run from: %s${RESET}\n" "$INSTALL_DIR"
+printf "   ├─ ${CYAN}%s logs -f${RESET}\n" "$COMPOSE_CMD_STR"
+printf "   ├─ ${CYAN}%s ps${RESET}\n" "$COMPOSE_CMD_STR"
+printf "   ├─ ${CYAN}%s restart dramatiq-worker${RESET}\n" "$COMPOSE_CMD_STR"
+printf "   └─ ${CYAN}%s down${RESET}\n" "$COMPOSE_CMD_STR"
+printf "\n"
+
+printf "${BOLD}📝  Next Steps${RESET}\n"
+printf "   1. ${DIM}Edit${RESET} ${BOLD}${INSTALL_DIR}/seed.txt${RESET} ${DIM}to add your RSS feed URLs${RESET}\n"
+printf "   2. ${DIM}Seed the database:${RESET} ${CYAN}news48 seed /app/seed.txt${RESET}\n"
+printf "   3. ${DIM}Monitor progress:${RESET} ${CYAN}%s logs -f dramatiq-worker${RESET}\n" "$COMPOSE_CMD_STR"
+printf "\n"
+
+printf "${BOLD}📚  Documentation${RESET}\n"
+printf "   ├─ Deployment Guide:   ${CYAN}${INSTALL_DIR}/docs/deployment.md${RESET}\n"
+printf "   ├─ MCP Tools:          ${CYAN}${INSTALL_DIR}/docs/mcp-tools.md${RESET}\n"
+printf "   └─ GitHub Repo:        ${CYAN}https://github.com/malvavisc0/news48${RESET}\n"
+printf "\n"
+
+printf "${DIM}💡 Note: The sentinel agent will auto-seed if the database is empty.${RESET}\n"
+printf "${DIM}📧 For troubleshooting, check logs: ${COMPOSE_CMD_STR} logs${RESET}\n"
 printf "\n"
