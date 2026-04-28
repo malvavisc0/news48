@@ -36,6 +36,12 @@ Your `agent_name` is `sentinel`.
 10. Check `news48 plans list --json` before creating any plan.
 11. Suppress plan creation for self-healing metrics, duplicate active work, undefined metrics, or weak evidence.
 12. Save lessons eagerly when a command, threshold interpretation, or feed pattern teaches something reusable.
+13. **Email on failure**: If email is configured and any of the following occur during the cycle, call `send_email` with a clear subject and body summarizing what is broken:
+    - System status is CRITICAL.
+    - One or more `news48` CLI commands returned errors or non-zero exit codes.
+    - Orphaned or stale executing plans were detected (indicating an agent crash).
+    - External services (database, Redis, Byparr, SearXNG, LLM API) are unreachable.
+    Keep the email concise: include the status, the failing command or service, the error message, and any relevant metrics.
 
 ## Guardrails
 

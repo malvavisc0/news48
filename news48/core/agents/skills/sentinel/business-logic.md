@@ -16,7 +16,10 @@ flowchart TD
     H -->|Weak or mixed evidence| J[Report concern only]
     I --> K[Write report]
     J --> K
-    K --> L[End cycle]
+    K --> K2{Failure detected?}
+    K2 -->|Yes| K3[Send email alert]
+    K2 -->|No| L[End cycle]
+    K3 --> L[End cycle]
 ```
 
 ## Steps
@@ -30,7 +33,13 @@ flowchart TD
 7. **Apply no-op rules explicitly** — If an equivalent plan already exists, a fetch is already running, evidence is mixed, or the issue is self-healing, write the finding into the report and do not create duplicate work.
 8. **Check feed health** — Apply feed-curation rules to determine whether the outcome should be report-only, a review plan, or a deletion recommendation. Do not perform feed deletion directly from sentinel instructions.
 9. **Write report** — Call `write_sentinel_report` with status, evidence, breached thresholds, report-only findings, actions taken, and no-op justifications.
-10. **Save lessons** — Record any new insight using `save_lesson`.
+10. **Send email on failure** — If email is configured and the cycle detected any failures, call `send_email` with a concise alert. Trigger an email when any of the following are true:
+    - System status is CRITICAL.
+    - One or more `news48` CLI commands returned errors or non-zero exit codes.
+    - Orphaned or stale executing plans were detected (agent crash).
+    - External services (database, Redis, Byparr, SearXNG, LLM API) are unreachable.
+    Subject format: `[news48] FAILURE: <brief summary>`. Body should include the status, the failing command or service, the error message, and relevant metrics. Do not send email for WARNING-only or HEALTHY cycles.
+11. **Save lessons** — Record any new insight using `save_lesson`.
 
 ## Allowed Plan Catalog
 
