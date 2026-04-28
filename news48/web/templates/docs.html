@@ -107,16 +107,45 @@
             <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">Model Context Protocol</a>,
             so AI assistants like Claude, Cursor, and others can browse,
             search, and inspect stories in real time. Two connection modes are
-            available:
+            available — local (stdio) for desktop tools, and remote (HTTP) for
+            browser-based clients and third-party integrations.
         </p>
 
-        <!-- Remote MCP (Docker / Production) -->
+        <!-- Connection Modes -->
         <div class="docs__mcp-mode">
-            <h3>Remote (HTTP) — Self-Hosted Production</h3>
-            <p>
-                The MCP endpoint runs inside your Docker container and is accessible via HTTP.
-                It uses Bearer token authentication and returns fully parsed articles ready for AI tools to browse.
-            </p>
+            <h3>Connection Modes</h3>
+            <div class="docs__arch-grid">
+                <div class="docs__arch-card">
+                    <h3>Local (stdio)</h3>
+                    <p>
+                        Runs as a subprocess of your AI assistant. No authentication required.
+                        Ideal for Claude Desktop, Cursor, or custom scripts running on the
+                        same machine.
+                    </p>
+                    <div class="docs__code-block">
+                        <div class="docs__code-header"><span>Shell</span></div>
+                        <pre><code>news48 mcp serve</code></pre>
+                    </div>
+                </div>
+                <div class="docs__arch-card">
+                    <h3>Remote (HTTP)</h3>
+                    <p>
+                        Runs inside the web container and is accessible via HTTP.
+                        Uses Bearer token authentication backed by Redis.
+                        CORS is handled directly by the endpoint.
+                    </p>
+                    <div class="docs__code-block">
+                        <div class="docs__code-header"><span>Endpoint</span></div>
+                        <pre><code>POST http://your-server:8000/mcp
+Authorization: Bearer n48-your-key</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Remote MCP Setup -->
+        <div class="docs__mcp-mode">
+            <h3>Remote Setup — Step by Step</h3>
 
             <h4>1. Generate an API Key</h4>
             <p>From your project directory where docker-compose.yml lives:</p>
@@ -127,13 +156,14 @@
                 <pre><code>docker compose exec dramatiq-worker news48 mcp create-key --label "my-assistant"</code></pre>
             </div>
             <p>
-                This prints a key like <code>n48-abc123...</code>. Save it—you cannot recover it later.
+                This prints a key like <code>n48-abc123...</code>. Save it — you cannot recover it later.
                 You can create multiple keys for different tools or revoke them at any time.
+                Keys are stored in Redis and prefixed <code>n48-</code> for secret scanner detection.
             </p>
 
             <h4>2. Configure Your MCP Client</h4>
             <p>Replace <code>your-server-ip</code> with your server's IP or hostname, and <code>8000</code> with the
-                port where news48 is running (default: 8000).</p>
+                port where news48 is running (default: 8000, dev: 8765).</p>
             <div class="docs__code-block">
                 <div class="docs__code-header">
                     <span>Claude Desktop / Cursor — <code>mcp_config.json</code></span>
@@ -149,6 +179,11 @@
   }
 }</code></pre>
             </div>
+            <p>
+                Both <code>/mcp</code> and <code>/mcp/</code> work — the endpoint handles both paths
+                without redirects. This is critical for browser-based MCP clients that break on
+                307 redirects during CORS preflight.
+            </p>
 
             <h4>3. Manage Keys</h4>
             <p>From your project directory:</p>
@@ -156,13 +191,20 @@
                 <div class="docs__code-header">
                     <span>Docker</span>
                 </div>
-                <pre><code>docker compose exec dramatiq-worker news48 mcp list-keys</code></pre>
-            </div>
+                <pre><code># List active keys (masked)
+docker compose exec dramatiq-worker news48 mcp list-keys
 
-            <h4>Available Tools</h4>
+# Revoke a key
+docker compose exec dramatiq-worker news48 mcp revoke-key n48-...</code></pre>
+            </div>
+        </div>
+
+        <!-- Available Tools -->
+        <div class="docs__mcp-mode">
+            <h3>Available Tools</h3>
             <p>
-                Both local and remote endpoints expose the same useful set of
-                tools:
+                Both local and remote endpoints expose the same 6 tools.
+                The remote endpoint returns only fully parsed articles.
             </p>
             <div class="docs__tools-grid">
                 <div class="docs__tool">
@@ -171,25 +213,91 @@
                 </div>
                 <div class="docs__tool">
                     <code>search_news</code>
-                    <span>Full-text search with filters</span>
+                    <span>Full-text search with sentiment & category filters</span>
                 </div>
                 <div class="docs__tool">
                     <code>get_article</code>
-                    <span>Full article with fact-check claims</span>
+                    <span>Full article with fact-check claims & related coverage</span>
+                </div>
+                <div class="docs__tool">
+                    <code>browse_category</code>
+                    <span>Browse articles by category or tag</span>
                 </div>
                 <div class="docs__tool">
                     <code>list_categories</code>
-                    <span>All categories with article counts</span>
+                    <span>All active categories with article counts</span>
                 </div>
                 <div class="docs__tool">
-                    <code>list_clusters</code>
-                    <span>Topic clusters with grouped stories</span>
-                </div>
-                <div class="docs__tool">
-                    <code>get_stats</code>
-                    <span>Pipeline and article statistics</span>
+                    <code>list_countries</code>
+                    <span>Countries mentioned in recent articles</span>
                 </div>
             </div>
+        </div>
+
+        <!-- Troubleshooting -->
+        <div class="docs__mcp-mode">
+            <h3>Troubleshooting</h3>
+            <p>
+                Common issues when connecting to the MCP endpoint and how to resolve them:
+            </p>
+            <div class="docs__code-block">
+                <div class="docs__code-header">
+                    <span>Symptoms & Fixes</span>
+                </div>
+                <pre><code>❌ "Failed to fetch (check CORS?)"
+    → The web container is not running, or a reverse proxy is stripping
+      CORS headers. Check: docker compose ps web
+
+❌ "401 Unauthorized"
+    → Missing or invalid API key. Create one:
+      docker compose exec dramatiq-worker news48 mcp create-key --label "my-client"
+
+❌ "307 Temporary Redirect"
+    → Old server version. Update to latest — both /mcp and /mcp/ now work.
+
+❌ Connection refused
+    → Wrong port or host. Verify the port mapping in docker-compose.override.yml
+      (dev: 8765, prod: 8000).</code></pre>
+            </div>
+            <p>
+                Full documentation: <a href="https://github.com/malvavisc0/news48/blob/main/docs/mcp-tools.md"
+                    target="_blank" rel="noopener">docs/mcp-tools.md</a>
+            </p>
+
+            <h4>Behind a Reverse Proxy (nginx)?</h4>
+            <p>
+                If you're deploying behind nginx, the proxy must preserve streaming responses and pass through CORS
+                headers.
+                Add this location block to your nginx config:
+            </p>
+            <div class="docs__code-block">
+                <div class="docs__code-header">
+                    <span>nginx Configuration</span>
+                </div>
+                <pre><code>location /mcp/ {
+    proxy_pass http://backend:8000/mcp/;
+    
+    # Streaming support (critical)
+    proxy_buffering off;           # Disable buffering for streaming
+    proxy_http_version 1.1;        # HTTP/1.1 required
+    proxy_set_header Connection "";  # Keep-alive
+    
+    # Headers
+    proxy_set_header Authorization $http_authorization;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    
+    # CORS
+    add_header Access-Control-Allow-Origin * always;
+    add_header Access-Control-Allow-Methods "GET, POST, DELETE, OPTIONS" always;
+    add_header Access-Control-Allow-Headers "*" always;
+}</code></pre>
+            </div>
+            <p>
+                <strong>Critical:</strong> <code>proxy_buffering off</code> must be set, otherwise nginx will buffer the
+                entire response and break streaming.
+                The <code>add_header ... always</code> ensures CORS headers are returned even on error responses.
+            </p>
         </div>
     </section>
 
@@ -215,4 +323,45 @@
     </section>
 
 </div>
-{% endblock %}
+{% endblock %} <div class="docs__tool">
+    <code>list_categories</code>
+    <span>All active categories with article counts</span>
+</div>
+<div class="docs__tool">
+    <code>list_countries</code>
+    <span>Countries mentioned in recent articles</span>
+</div>
+</div>
+</div>
+
+<!-- Troubleshooting -->
+<div class="docs__mcp-mode">
+    <h3>Troubleshooting</h3>
+    <p>
+        Common issues when connecting to the MCP endpoint and how to resolve them:
+    </p>
+    <div class="docs__code-block">
+        <div class="docs__code-header">
+            <span>Symptoms & Fixes</span>
+        </div>
+        <pre><code>❌ "Failed to fetch (check CORS?)"
+   → The web container is not running, or a reverse proxy is stripping
+     CORS headers. Check: docker compose ps web
+
+❌ "401 Unauthorized"
+   → Missing or invalid API key. Create one:
+     docker compose exec dramatiq-worker news48 mcp create-key --label "my-client"
+
+❌ "307 Temporary Redirect"
+   → Old server version. Update to latest — both /mcp and /mcp/ now work.
+
+❌ Connection refused
+   → Wrong port or host. Verify the port mapping in docker-compose.override.yml
+     (dev: 8765, prod: 8000).</code></pre>
+    </div>
+    <p>
+        Full documentation: <a href="https://github.com/malvavisc0/news48/blob/main/docs/mcp-tools.md" target="_blank"
+            rel="noopener">docs/mcp-tools.md</a>
+    </p>
+</div>
+</section>

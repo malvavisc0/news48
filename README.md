@@ -481,7 +481,7 @@ uv run news48 mcp serve
 
 ### Remote Endpoint (HTTP)
 
-The web app exposes an authenticated endpoint at `/mcp/`. Keys are stored in Redis.
+The web app exposes an authenticated endpoint at `/mcp`. Keys are stored in Redis.
 
 ```bash
 # Create a key
@@ -500,7 +500,7 @@ uv run news48 mcp revoke-key n48-...
 {
   "mcpServers": {
     "news48-remote": {
-      "url": "https://your-domain.com/mcp/",
+      "url": "https://your-domain.com/mcp",
       "headers": {
         "Authorization": "Bearer n48-your-api-key-here"
       }
@@ -509,9 +509,23 @@ uv run news48 mcp revoke-key n48-...
 }
 ```
 
+Both `/mcp` and `/mcp/` work — the endpoint handles both paths without redirects, which is critical for browser-based MCP clients (Inspector, Claude, Cursor). CORS preflight (`OPTIONS`) is handled directly by the endpoint with `Access-Control-Allow-Origin: *`.
+
 **Tools:** `get_briefing`, `search_news`, `get_article`, `browse_category`, `list_categories`, `list_countries`
 
 > 🔒 All keys are prefixed `n48-` for secret scanner detection. If Redis is unreachable, all MCP requests are denied (fail-closed).
+
+<details>
+<summary><strong>Troubleshooting MCP connections</strong></summary>
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `Failed to fetch (check CORS?)` | Browser CORS preflight blocked | Verify the web container is running; check no reverse proxy strips `Access-Control-*` headers |
+| `401 Unauthorized` | Missing or invalid API key | Create a key with `news48 mcp create-key` and pass it in the `Authorization` header |
+| `307 Temporary Redirect` | Old server version redirecting `/mcp` → `/mcp/` | Update to latest — both paths now work without redirects |
+
+For full details see [`docs/mcp-tools.md`](docs/mcp-tools.md).
+</details>
 
 ---
 

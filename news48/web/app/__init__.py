@@ -49,12 +49,38 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[],
-    allow_methods=["GET"],
-    allow_headers=[],
+    allow_origins=["*"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    allow_credentials=False,
 )
 
-app.mount("/mcp", mcp_endpoint)
+
+# MCP endpoint — ASGI middleware that rewrites /mcp → /mcp/ and delegates
+# directly to the MCP endpoint, avoiding Starlette's 307 trailing-slash
+# redirect.  The 307 response lacks CORS headers and browsers never follow
+# redirects for CORS preflight (OPTIONS) requests, which breaks every
+# browser-based MCP client.
+class _MCPRewriter:
+    """Route /mcp requests to the MCP endpoint without a 307 redirect."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if (
+            scope["type"] == "http"
+            and scope.get("path", "").rstrip("/") == "/mcp"
+        ):
+            scope["path"] = "/mcp/"
+            scope["raw_path"] = b"/mcp/"
+            await mcp_endpoint(scope, receive, send)
+        else:
+            await self.app(scope, receive, send)
+
+
+app.add_middleware(_MCPRewriter)
+
 
 # Static files
 _web_dir = Path(__file__).parent.parent

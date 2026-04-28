@@ -85,6 +85,8 @@ All four agents can save lessons when they discover something useful — correct
 
 news48 exposes tools via the Model Context Protocol so AI assistants can interact with the pipeline. Available as a local stdio server (no auth) or remote HTTP endpoint (API key auth).
 
+**Remote endpoint:** `POST /mcp` — both `/mcp` and `/mcp/` work without redirects. CORS preflight is handled directly by the endpoint with `Access-Control-Allow-Origin: *`. Authentication via Bearer token backed by Redis.
+
 **MCP Tools:** get_briefing, search_news, get_article, browse_category, list_categories, list_countries
 
 ## Tech Stack

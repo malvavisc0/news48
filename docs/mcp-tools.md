@@ -111,7 +111,67 @@ POST https://your-instance.example/mcp
 Authorization: Bearer <your-api-key>
 ```
 
-The remote endpoint exposes the same 6 tools with identical schemas. API keys are managed through the news48 admin interface.
+The remote endpoint exposes the same 6 tools with identical schemas. API keys are managed through the news48 admin interface. Both `/mcp` and `/mcp/` paths work — the server handles both without redirects, which is critical for browser-based MCP clients.
+
+> **Note for browser-based clients (MCP Inspector, Claude, etc.):** The endpoint handles CORS preflight (`OPTIONS`) requests directly and returns `Access-Control-Allow-Origin: *` on all responses, including auth errors. This ensures browser-based tools can read error details instead of getting generic "Failed to fetch" errors.
+
+#### Troubleshooting Remote Connections
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `Failed to fetch (check CORS?)` | Browser blocked by CORS preflight | Verify the server is running and reachable; check that no reverse proxy strips CORS headers |
+| `401 Unauthorized` | Missing or invalid API key | Generate a key with `news48 mcp create-key` and pass it in the `Authorization` header |
+| `Connection refused` | Server not running or wrong port | Check `docker compose ps web` and verify the port mapping |
+| `307 Temporary Redirect` | Old server version with trailing-slash redirect | Update to latest — the endpoint now handles both `/mcp` and `/mcp/` directly |
+
+#### Deploying Behind a Reverse Proxy (nginx)
+
+If your MCP endpoint is behind an nginx reverse proxy, you must configure it to preserve streaming responses and pass through CORS headers. The backend applies CORS headers automatically, but nginx must not strip or buffer them.
+
+**nginx location block:**
+
+```nginx
+location /mcp/ {
+    proxy_pass http://backend:8000/mcp/;
+    
+    # --- Streaming support (critical for Streamable HTTP) ---
+    proxy_buffering off;           # Disable response buffering — required for streaming
+    proxy_http_version 1.1;        # HTTP/1.1 for keep-alive
+    proxy_set_header Connection ""; # Allow connection reuse
+    
+    # --- Header forwarding ---
+    proxy_set_header Authorization $http_authorization;  # Must forward Bearer token
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    
+    # --- CORS headers (pass through or set at proxy) ---
+    add_header Access-Control-Allow-Origin * always;
+    add_header Access-Control-Allow-Methods "GET, POST, DELETE, OPTIONS" always;
+    add_header Access-Control-Allow-Headers "*" always;
+}
+```
+
+**Key requirements:**
+1. **`proxy_buffering off`** — Without this, nginx buffers the entire response, breaking streaming and causing hangs
+2. **`proxy_set_header Authorization $http_authorization`** — Must forward Bearer tokens to the backend
+3. **`add_header ... always`** — Ensures CORS headers are returned even on error responses
+4. **`proxy_http_version 1.1`** and **`proxy_set_header Connection ""`** — Enable HTTP/1.1 connection reuse
+
+**Test the configuration:**
+
+```bash
+# Verify CORS preflight returns 200 with proper headers
+curl -i -X OPTIONS http://your-domain/mcp/ \
+  -H "Origin: http://localhost:3000"
+
+# Test with a Bearer token
+curl -i -X POST http://your-domain/mcp/ \
+  -H "Authorization: Bearer YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "method": "list_tools", "id": 1}'
+```
+
+For complete deployment guidance, see [Reverse Proxy Configuration (nginx)](./deployment.md#reverse-proxy-configuration-nginx) in the deployment guide.
 
 ## Response Format
 

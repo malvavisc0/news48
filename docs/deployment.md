@@ -426,6 +426,82 @@ The production compose file (`docker-compose.prod.yml`) applies these security m
 
 ---
 
+## Reverse Proxy Configuration (nginx)
+
+When deploying behind an nginx reverse proxy, you must configure CORS headers and streaming support for the MCP endpoint. The backend applies CORS headers, but nginx must not strip them and must preserve the streaming nature of Streamable HTTP responses.
+
+### Basic nginx Configuration
+
+Add this location block to your nginx server config:
+
+```nginx
+location /mcp/ {
+    proxy_pass http://backend:8000/mcp/;
+    
+    # --- Streaming support (critical for Streamable HTTP) ---
+    proxy_buffering off;           # Disable response buffering
+    proxy_http_version 1.1;        # Required for HTTP/1.1
+    proxy_set_header Connection ""; # Allow connection reuse
+    
+    # --- Header forwarding ---
+    proxy_set_header Authorization $http_authorization;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host $server_name;
+    
+    # --- CORS headers (pass through or set at proxy) ---
+    add_header Access-Control-Allow-Origin * always;
+    add_header Access-Control-Allow-Methods "GET, POST, DELETE, OPTIONS" always;
+    add_header Access-Control-Allow-Headers "*" always;
+    add_header Access-Control-Max-Age 86400 always;
+    
+    # --- Optional: increase timeouts for long-running operations ---
+    proxy_connect_timeout 60s;
+    proxy_send_timeout 60s;
+    proxy_read_timeout 60s;
+}
+```
+
+### Key Directives Explained
+
+| Directive | Why | Example |
+|-----------|-----|---------|
+| `proxy_buffering off` | **Critical** — enables streaming responses. Without it, nginx buffers the entire response before sending, breaking SSE/chunked encoding | Cannot omit |
+| `proxy_http_version 1.1` | Required for HTTP/1.1 keep-alive and chunked responses | `1.1` |
+| `proxy_set_header Connection ""` | Allows connection reuse between proxy and backend | Empty string |
+| `proxy_set_header Authorization $http_authorization` | **Critical for MCP** — forwards Bearer tokens to backend | Automatic |
+| `add_header ... always` | Ensures headers are added even on error responses | `always` |
+
+### Testing the Configuration
+
+After applying the nginx config, verify CORS and connectivity:
+
+```bash
+# Test CORS preflight (should return 200 with Access-Control-* headers)
+curl -i -X OPTIONS http://your-domain.com/mcp/ \
+  -H "Origin: http://localhost:3000"
+
+# Test with valid Bearer token
+curl -i -X POST http://your-domain.com/mcp/ \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "method": "list_tools", "id": 1}'
+
+# Monitor real-time proxy activity
+tail -f /var/log/nginx/access.log | grep /mcp
+```
+
+### Common ProxyIssues
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| `Failed to fetch (check CORS?)` | nginx stripping CORS headers or buffering response | Add `add_header ... always` and `proxy_buffering off` |
+| 502 Bad Gateway | Backend unreachable or timeout | Check backend health; increase `proxy_*_timeout` values |
+| Connection hangs | `proxy_buffering` enabled or missing `Connection: ""` | Set `proxy_buffering off` and `proxy_set_header Connection ""` |
+| OPTIONS returns 405 | nginx not passing preflight to backend | Ensure location block catches OPTIONS requests |
+
+---
+
 ## Architecture
 
 ### Services Overview
@@ -554,3 +630,6 @@ open http://localhost:8001
 | Jetson: connection refused | Port not listening on host | Ensure llama.cpp binds to `0.0.0.0` (not `127.0.0.1`) |
 | Containers keep restarting | `docker compose logs <service>` | Check for crash loops; inspect healthcheck failures |
 | Redis data loss | Redis not persisting | Verify `redis-data` volume exists: `docker volume ls` |
+| MCP: `Failed to fetch (check CORS?)` | Browser CORS preflight blocked | Verify web container is running; check no reverse proxy strips `Access-Control-*` headers; see `docs/mcp-tools.md` troubleshooting |
+| MCP: `401 Unauthorized` | Missing or invalid API key | Create a key: `docker compose exec dramatiq-worker news48 mcp create-key --label "my-client"` |
+| MCP: `307 Temporary Redirect` | Old server version redirecting `/mcp` → `/mcp/` | Update to latest — the endpoint now handles both paths without redirects |

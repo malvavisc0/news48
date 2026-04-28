@@ -27,7 +27,7 @@ from news48.web.mcp.auth import verify_key
 
 logger = logging.getLogger(__name__)
 
-mcp_app = Server("news48-web")
+mcp_app = Server("news48")
 
 
 @mcp_app.list_tools()
@@ -96,11 +96,34 @@ class MCPEndpoint:
             self._transport = None
         logger.info("MCP web endpoint stopped")
 
+    # -- CORS headers for direct responses ----------------------------------
+    # The MCPEndpoint is reached via a middleware that bypasses the main
+    # app's CORSMiddleware send-wrapper for responses it produces directly
+    # (JSONResponse for auth / readiness errors).  We attach CORS headers
+    # ourselves so browser-based MCP clients can read the error body.
+    _CORS = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+    }
+
     # -- ASGI handler --------------------------------------------------------
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    async def __call__(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> None:
         """ASGI entry point — validate auth then delegate to transport."""
         if scope["type"] != "http":
+            return
+
+        # --- CORS preflight -------------------------------------------------
+        if scope.get("method") == "OPTIONS":
+            resp = JSONResponse(
+                {},
+                status_code=200,
+                headers={**self._CORS, "Access-Control-Max-Age": "86400"},
+            )
+            await resp(scope, receive, send)
             return
 
         # --- authenticate ---------------------------------------------------
@@ -110,6 +133,7 @@ class MCPEndpoint:
             response = JSONResponse(
                 {"detail": "Missing Bearer token"},
                 status_code=401,
+                headers=self._CORS,
             )
             await response(scope, receive, send)
             return
@@ -119,6 +143,7 @@ class MCPEndpoint:
             response = JSONResponse(
                 {"detail": "Invalid or revoked MCP API key"},
                 status_code=401,
+                headers=self._CORS,
             )
             await response(scope, receive, send)
             return
@@ -128,11 +153,29 @@ class MCPEndpoint:
             response = JSONResponse(
                 {"detail": "MCP endpoint not ready"},
                 status_code=503,
+                headers=self._CORS,
             )
             await response(scope, receive, send)
             return
 
-        await self._transport.handle_request(scope, receive, send)
+        # Wrap send to inject CORS headers on all transport responses
+        async def send_with_cors(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                # Add CORS headers if not already present
+                cors_names = {
+                    b"access-control-allow-origin",
+                    b"access-control-allow-methods",
+                    b"access-control-allow-headers",
+                }
+                existing_cors = {name.lower() for name, _ in headers}
+                if not existing_cors & cors_names:
+                    for key, value in self._CORS.items():
+                        headers.append((key.lower().encode(), value.encode()))
+                message["headers"] = headers
+            await send(message)
+
+        await self._transport.handle_request(scope, receive, send_with_cors)
 
 
 # Module-level singleton — mounted by ``news48.web.app``.
