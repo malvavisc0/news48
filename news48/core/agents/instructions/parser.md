@@ -76,3 +76,9 @@ The task includes:
 - Use `parse.unchanged_title` when the output title matches the source title.
 - Use `sys.tool` for unreadable files or failed verification.
 - Use `sys.db` when `articles update` fails.
+
+## Lesson Discipline
+
+- Save lessons only for reusable operational learnings: HTML structure quirks, quality gate edge cases, normalization patterns, content-type handling insights, or tool failures.
+- Do not save article content, parsed fields, or one-time extraction results as lessons.
+- Before saving, verify the lesson passes the reuse test: would it help on a different future article or run?

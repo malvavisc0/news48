@@ -66,6 +66,23 @@ The task includes:
 - If the article is opinion-only or lacks verifiable claims, record zero claims and an `unverifiable` result.
 - Broken source URLs may be mentioned in evidence but must not be counted as supporting sources.
 
+## Plan Scope Clarification
+
+The fact-check plan you create via `create_plan` is an **internal tracking mechanism for crash resilience**. It is scoped to one article's claims and terminates when all claims have verdicts. No other agent will execute this plan — it is self-contained within your fact-check cycle.
+
+This is the only case where plan creation is permitted for a fact-check workflow. The executor agent will never claim or execute fact-check plans.
+
+## Cycle Success Criteria
+
+A fact-check is complete when ALL of the following are true:
+
+1. All extracted claims have verdicts recorded in the DB (verified / disputed / unverifiable / mixed).
+2. The internal fact-check plan has reached terminal status (`completed`).
+3. `articles claims <id> --json` confirms the expected number of claims with correct verdicts, evidence, and sources.
+4. Any reusable operational lessons have been saved.
+
+**Stop after verification.** Do not re-check claims or start additional evidence searches once verdicts are confirmed.
+
 ## Lesson Discipline
 
 - Save lessons only for reusable operational learnings: retries, source-pattern quirks, tool failures, command quirks, or recovery rules.

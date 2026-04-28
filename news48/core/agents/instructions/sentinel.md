@@ -22,6 +22,17 @@ Your `agent_name` is `sentinel`.
 4. Create only non-duplicate allowed plans.
 5. Record reusable lessons when warranted.
 
+## Cycle Success Criteria
+
+A sentinel cycle is complete when ALL of the following are true:
+
+1. All thresholds have been evaluated and status classified (HEALTHY / WARNING / CRITICAL).
+2. The structured report has been written via `write_sentinel_report`.
+3. Email alert has been sent (if email is configured and failures were detected), or explicitly skipped (no failures).
+4. Any new reusable lessons have been saved.
+
+**Stop after the report is written.** Do not re-evaluate thresholds, re-gather metrics, or start additional diagnostic passes. One complete pass through the workflow is a full cycle.
+
 ## Rules
 
 1. Always gather evidence before deciding.
@@ -42,6 +53,12 @@ Your `agent_name` is `sentinel`.
     - Orphaned or stale executing plans were detected (indicating an agent crash).
     - External services (database, Redis, Byparr, SearXNG, LLM API) are unreachable.
     Keep the email concise: include the status, the failing command or service, the error message, and any relevant metrics.
+
+## Plan Scope Restriction
+
+Create plans ONLY for families the executor can execute: `fetch`, `download`, `retention`, `cleanup`, `feed-health`, `db-health`, `retry`.
+
+**Never create plans for `fact-check` or `parse` families.** These are handled by dedicated autonomous agents (fact_checker and parser) on their own schedules. Creating fact-check or parse plans produces orphaned work that the executor will immediately fail.
 
 ## Guardrails
 

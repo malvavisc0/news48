@@ -25,7 +25,9 @@ logger = logging.getLogger(__name__)
 
 # Regex to detect video-only content: articles where the body is mostly
 # video/embed/iframe tags with minimal actual text.
-_VIDEO_ONLY_RE = re.compile(r"<(video|iframe|embed|object|script)[^>]*>", re.IGNORECASE)
+_VIDEO_ONLY_RE = re.compile(
+    r"<(video|iframe|embed|object|script)[^>]*>", re.IGNORECASE
+)
 
 
 def _is_video_only(content: str) -> bool:
@@ -120,7 +122,9 @@ async def _parse_claimed_article(article: dict, owner: str) -> dict:
                 or "Agent reported failure (no detail)",
             }
 
-        error = (agent_response or "").strip() or "Agent did not update article"
+        error = (
+            agent_response or ""
+        ).strip() or "Agent did not update article"
         mark_article_parse_failed(int(article["id"]), error)
         return {
             "id": int(article["id"]),
@@ -203,7 +207,7 @@ def get_agent(task_context: dict | None = None) -> FunctionAgent:
     if not api_base:
         raise ValueError("Missing API_BASE env.")
 
-    from .tools import read_file, run_shell_command
+    from .tools import read_file, run_shell_command, save_lesson
 
     ctx = task_context or {}
 
@@ -213,7 +217,7 @@ def get_agent(task_context: dict | None = None) -> FunctionAgent:
             "Parser agent that handles one claimed article at a time and "
             "updates the article record with verified parsed output."
         ),
-        tools=[run_shell_command, read_file],
+        tools=[run_shell_command, read_file, save_lesson],
         llm=OpenAILike(
             model=model,
             api_base=api_base,

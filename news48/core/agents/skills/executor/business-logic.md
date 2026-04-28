@@ -47,11 +47,19 @@ flowchart TD
 | `run-db-health` | plan_family:db-health |
 | `run-retry` | plan_family:retry |
 
+## Out-of-Scope Plan Families
+
+The following plan families have **no executor path** and must be failed immediately upon claiming:
+
+| Family | Reason | Error code |
+|--------|--------|------------|
+| `fact-check` | Handled autonomously by the scheduled `fact_checker` agent (10-min interval, up to 3 concurrent). Executor fact-check attempts exceed the 10-minute runtime limit and cause timeout→requeue loops. | `sys.plan` |
+| `parse` | Handled autonomously by the scheduled `parser` agent (5-min interval). Parser claims articles directly from the database, not via plans. | `sys.plan` |
+
+When failing an out-of-scope plan, use result: `"Plan family '<family>' has no executor path — handled by dedicated <agent_name> agent."`
+
 ## Notes
 
-- Parse-family and fact-check-family plans have no executor path and must fail explicitly.
-  Fact-checking is handled autonomously by the scheduled `fact_checker` agent (5-min interval, up to 3 concurrent).
-  Do NOT execute fact-check plans — they exceed the executor's 30-minute runtime limit and cause infinite timeout→requeue loops.
 - The executor follows one claimed plan only and must always end with a
   terminal plan status.
 - If a plan step cannot be mapped to an exact documented command or skill-defined
