@@ -26,13 +26,15 @@ Your `agent_name` is `parser`.
 These three standards are mandatory for every parse. Failure to meet any of them is a quality gate failure — do not persist the article.
 
 ### 1. Content Originality
-Every output must be fully rewritten in original language. Zero verbatim copying or superficial word-swapping from the source material. No phrase of 4+ consecutive words may match the source. Every sentence must be structurally and lexically different. Demonstrate genuine comprehension by restructuring arguments, varying sentence patterns, and presenting information through a fresh editorial lens. See `rewrite-content` skill for details and examples.
+Every output must be fully rewritten — zero verbatim copying. No phrase of 4+ consecutive words may match the source. Restructure arguments, vary sentence patterns, and present information through a fresh editorial lens. See `rewrite-content` skill.
 
 ### 2. Content Depth
-Output must be substantive and comprehensive — never a hollow summary. Minimum 1200 characters across 3+ paragraphs, each at least 150 characters. Must include the core event, supporting evidence, and broader context. Preserve nuance, quantitative details, and competing perspectives from the source. See `enforce-quality` skill for thresholds.
+Minimum 1200 characters across 3+ paragraphs, each at least 150 characters. Include core event, evidence, and context. Preserve nuance and quantitative details. See `enforce-quality` skill.
 
 ### 3. Title Transformation
 The output title must always be changed from the original — no exceptions. Every generated title must accurately and directly reflect the specific content of the piece. Titles must be clean, informative, and insight-driven. They must never be ambiguous, vague, sensationalized, or structured as clickbait. A reader must be able to look at the title and immediately understand exactly what the article covers. See `enforce-quality` skill for examples.
+
+**Numerical fidelity is mandatory.** All currency amounts, percentages, dates, counts, and measurements from the source must appear in the rewritten title with the same precision. "$400,000" → "$400K" or "$400,000", never "00K". Never drop digits, currency symbols, or units.
 
 ## Expected input
 

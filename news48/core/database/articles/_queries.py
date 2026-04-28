@@ -35,7 +35,9 @@ def get_unparsed_articles(
             .limit(fetch_limit)
         )
         if feed_domain:
-            query = query.filter(Feed.url.like(f"%{escape_like(feed_domain)}%"))
+            query = query.filter(
+                Feed.url.like(f"%{escape_like(feed_domain)}%")
+            )
 
         rows = query.all()
 
@@ -72,15 +74,20 @@ def get_parse_failed_articles(
             .limit(limit)
         )
         if feed_domain:
-            query = query.filter(Feed.url.like(f"%{escape_like(feed_domain)}%"))
+            query = query.filter(
+                Feed.url.like(f"%{escape_like(feed_domain)}%")
+            )
 
         rows = query.all()
         return [
-            {**article.to_dict(), "feed_url": feed_url} for article, feed_url in rows
+            {**article.to_dict(), "feed_url": feed_url}
+            for article, feed_url in rows
         ]
 
 
-def get_empty_articles(limit: int = 50, feed_domain: str | None = None) -> list[dict]:
+def get_empty_articles(
+    limit: int = 50, feed_domain: str | None = None
+) -> list[dict]:
     """Get articles that have no content."""
     with SessionLocal() as session:
         query = (
@@ -94,11 +101,14 @@ def get_empty_articles(limit: int = 50, feed_domain: str | None = None) -> list[
             .limit(limit)
         )
         if feed_domain:
-            query = query.filter(Feed.url.like(f"%{escape_like(feed_domain)}%"))
+            query = query.filter(
+                Feed.url.like(f"%{escape_like(feed_domain)}%")
+            )
 
         rows = query.all()
         return [
-            {**article.to_dict(), "feed_url": feed_url} for article, feed_url in rows
+            {**article.to_dict(), "feed_url": feed_url}
+            for article, feed_url in rows
         ]
 
 
@@ -115,11 +125,14 @@ def get_download_failed_articles(
             .limit(limit)
         )
         if feed_domain:
-            query = query.filter(Feed.url.like(f"%{escape_like(feed_domain)}%"))
+            query = query.filter(
+                Feed.url.like(f"%{escape_like(feed_domain)}%")
+            )
 
         rows = query.all()
         return [
-            {**article.to_dict(), "feed_url": feed_url} for article, feed_url in rows
+            {**article.to_dict(), "feed_url": feed_url}
+            for article, feed_url in rows
         ]
 
 
@@ -135,6 +148,7 @@ def get_articles_paginated(
     hours: int | None = None,
     include_source: bool = False,
     parsed: bool = False,
+    fact_check_status: str | None = None,
 ) -> tuple[list[dict], int]:
     """Return filtered, paginated articles and total count."""
     status_conditions = {
@@ -146,7 +160,10 @@ def get_articles_paginated(
         "parsed": "articles.parsed_at IS NOT NULL",
         "download-failed": "articles.download_failed = 1",
         "parse-failed": "articles.parse_failed = 1",
-        "fact-checked": "articles.fact_check_status IS NOT NULL",
+        "fact-checked": (
+            "articles.fact_check_status IS NOT NULL"
+            " AND articles.fact_check_status != 'fact_check_error'"
+        ),
         "fact-unchecked": (
             "articles.parsed_at IS NOT NULL AND articles.fact_check_status IS NULL"
         ),
@@ -189,6 +206,10 @@ def get_articles_paginated(
     if parsed:
         where_clauses.append("articles.parsed_at IS NOT NULL")
 
+    if fact_check_status:
+        where_clauses.append("articles.fact_check_status = :fact_check_status")
+        params["fact_check_status"] = fact_check_status
+
     where_sql = ""
     if where_clauses:
         where_sql = "WHERE " + " AND ".join(where_clauses)
@@ -229,7 +250,9 @@ def get_articles_paginated(
             )
 
         # Get paginated results (deduplicated)
-        limit_clause = "LIMIT :limit OFFSET :offset" if limit is not None else ""
+        limit_clause = (
+            "LIMIT :limit OFFSET :offset" if limit is not None else ""
+        )
         results_sql = (
             f"SELECT {select_cols} FROM articles "
             f"JOIN feeds ON articles.feed_id = feeds.id "
@@ -275,7 +298,8 @@ def get_articles_with_missing_fields(
     """
     with SessionLocal() as session:
         rows = session.execute(
-            text("""
+            text(
+                """
             SELECT a.*, f.url as feed_url,
                    f.title as feed_source_name
             FROM articles a
@@ -286,7 +310,8 @@ def get_articles_with_missing_fields(
                    OR a.sentiment IS NULL OR a.sentiment = '')
             ORDER BY a.created_at DESC
             LIMIT :limit
-        """),
+        """
+            ),
             {"limit": limit},
         ).fetchall()
 
@@ -315,7 +340,8 @@ def get_article_detail(article_id: int, parsed: bool = False) -> dict | None:
 
     with SessionLocal() as session:
         row = session.execute(
-            text(f"""
+            text(
+                f"""
             SELECT a.*, f.title as source_name,
                    f.url as feed_url,
                    f.icon_url as feed_icon_url,
@@ -324,7 +350,8 @@ def get_article_detail(article_id: int, parsed: bool = False) -> dict | None:
             JOIN feeds f ON a.feed_id = f.id
             WHERE a.id = :article_id
               {parsed_filter}
-        """),
+        """
+            ),
             {"article_id": article_id},
         ).fetchone()
 
@@ -336,20 +363,24 @@ def get_articles_older_than_hours(hours: int = 48) -> list[dict]:
     with SessionLocal() as session:
         threshold = _hours_ago_iso(hours)
         rows = session.execute(
-            text("""
+            text(
+                """
             SELECT a.*, f.url as feed_url
             FROM articles a
             JOIN feeds f ON a.feed_id = f.id
             WHERE a.created_at < :threshold
             ORDER BY a.created_at ASC
-        """),
+        """
+            ),
             {"threshold": threshold},
         ).fetchall()
 
         return [dict(row._mapping) for row in rows]
 
 
-def get_expiring_articles(within_hours: int = 6, parsed: bool = False) -> list[dict]:
+def get_expiring_articles(
+    within_hours: int = 6, parsed: bool = False
+) -> list[dict]:
     """Get articles that will expire within the given number of hours."""
     outer = _hours_ago_iso(48)
     inner = _hours_ago_iso(48 - within_hours)
@@ -357,7 +388,8 @@ def get_expiring_articles(within_hours: int = 6, parsed: bool = False) -> list[d
 
     with SessionLocal() as session:
         rows = session.execute(
-            text(f"""
+            text(
+                f"""
             SELECT a.id, a.title, a.slug, a.url, a.created_at,
                    a.source_name, f.title as feed_source_name
             FROM articles a
@@ -366,7 +398,8 @@ def get_expiring_articles(within_hours: int = 6, parsed: bool = False) -> list[d
               {parsed_filter}
             ORDER BY a.created_at ASC
             LIMIT 10
-        """),
+        """
+            ),
             {"outer": outer, "inner": inner},
         ).fetchall()
 

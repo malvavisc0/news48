@@ -5,24 +5,29 @@
 ```mermaid
 flowchart TD
     A[Start fact-check cycle] --> B[Read article info + content]
-    B --> C[Extract 2-5 key claims (max 5)]
-    C --> D[For each claim: search web evidence]
-    D --> E[Assign per-claim verdict]
-    E --> F[Build claims JSON array]
-    F --> G[articles check --claims-json-file ...]
-    G --> H[articles claims <id> --json]
-    H --> I{Verification ok?}
-    I -->|No| J[Report failure]
-    I -->|Yes| K[Return results]
+    B --> C[Extract claims]
+    C --> D[Save claims to DB — DB enforces max 5]
+    D --> E[Query DB: articles claims id --json]
+    E --> F[Create plan with one step per DB claim]
+    F --> G[For each plan step: mark executing]
+    G --> H[Search evidence + assign verdict]
+    H --> I[Mark step completed with result]
+    I --> J{More steps?}
+    J -->|Yes| G
+    J -->|No| K[Re-submit with real verdicts via articles check]
+    K --> L[articles claims id --json]
+    L --> M{Verification ok?}
+    M -->|No| N[Report failure]
+    M -->|Yes| O[Return results]
 ```
 
 ## Skills
 
-- **fc-extract-claims** — Extract 2–5 key,
-  externally verifiable claims from the article (hard limit: 5 max).
+- **fc-extract-claims** — Extract claims, save to DB, query back.
+- **fc-follow-plan** — Create a plan with one step per claim, execute step by step.
 - **fc-search-evidence** — Search the web for
   supporting or refuting evidence and assign a per-claim verdict.
-- **fc-record-verdict** — Persist the claims via
+- **fc-record-verdict** — Re-submit claims with real verdicts via
   `articles check --claims-json-file` and verify with `articles claims`.
 - **cli-reference-fact-checker** —
   Authoritative reference for `articles check` and `articles claims`.

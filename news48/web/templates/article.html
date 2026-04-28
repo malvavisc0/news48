@@ -49,13 +49,16 @@
         <a href="{{ article.url }}" target="_blank" rel="noopener" title="Opens the original source in a new tab">Open
             original source ↗</a>
         {% if article.fact_check_status == "verified" %}
-        <span class="badge verified">Verified</span>
+        <span class="badge verified">✓ Verified</span>
+        {% elif article.fact_check_status == "disputed" %}
+        <span class="badge disputed">✗ Disputed</span>
+        {% elif article.fact_check_status == "mixed" %}
+        <span class="badge mixed">~ Mixed</span>
+        {% elif article.fact_check_status == "unverifiable" %}
+        <span class="badge unverifiable">? Unverifiable</span>
         {% endif %}
         {% if article.is_breaking %}
         <span class="badge breaking">Breaking</span>
-        {% endif %}
-        {% if article.fact_check_status == "disputed" %}
-        <span class="badge disputed">Disputed</span>
         {% endif %}
     </div>
 
@@ -92,7 +95,12 @@
 {% if claims %}
 <section class="claims-section" aria-labelledby="claims-label">
     <h2 class="section-label" id="claims-label">fact-check breakdown</h2>
+    {% if claims_summary.verified == 0 and claims_summary.disputed == 0 and claims_summary.mixed == 0 %}
+    <p class="section-hint">No independent sources were found to verify these claims. This does not mean the claims are
+        false — only that corroborating evidence was not available.</p>
+    {% else %}
     <p class="section-hint">Each claim shows its verdict and supporting evidence.</p>
+    {% endif %}
     <div class="claims-rollup" role="status" aria-live="polite">
         <span class="claims-rollup__item"><strong>{{ claims_summary.total }}</strong> claims checked</span>
         {% if claims_summary.verified > 0 %}
@@ -135,7 +143,7 @@
             {% else %}
             <div class="claim-sources">
                 <span class="sources-label">sources</span>
-                <span class="claim-source-empty">No claim sources available yet</span>
+                <span class="claim-source-empty">No sources found</span>
             </div>
             {% endif %}
         </div>
@@ -157,7 +165,13 @@
             <div class="related-meta">
                 <span>{{ item.source_name or "Unknown" }} · {{ item.created_at | relative_time }}</span>
                 {% if item.fact_check_status == "verified" %}
-                <span class="badge verified">Verified</span>
+                <span class="badge verified">✓ Verified</span>
+                {% elif item.fact_check_status == "disputed" %}
+                <span class="badge disputed">✗ Disputed</span>
+                {% elif item.fact_check_status == "mixed" %}
+                <span class="badge mixed">~ Mixed</span>
+                {% elif item.fact_check_status == "unverifiable" %}
+                <span class="badge unverifiable">? Unverifiable</span>
                 {% endif %}
             </div>
         </article>

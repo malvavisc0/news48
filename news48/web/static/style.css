@@ -475,6 +475,65 @@ a:focus-visible {
     background: var(--surface);
 }
 
+/* === Fact-check filter === */
+
+.factcheck-filter {
+    margin-top: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.factcheck-filter+.section {
+    margin-top: var(--space-lg);
+}
+
+.factcheck-filter .count-verified {
+    color: var(--verified);
+}
+
+.factcheck-filter .count-verified.active {
+    background: var(--verified);
+    border-color: var(--verified);
+    color: var(--verified-fg);
+}
+
+.factcheck-filter .count-disputed {
+    color: var(--disputed);
+}
+
+.factcheck-filter .count-disputed.active {
+    background: var(--disputed);
+    border-color: var(--disputed);
+    color: var(--on-primary);
+}
+
+.factcheck-filter .count-mixed {
+    color: var(--ink-light);
+}
+
+.factcheck-filter .count-mixed.active {
+    background: var(--ink-light);
+    border-color: var(--ink-light);
+    color: var(--on-primary);
+}
+
+.factcheck-filter .count-unverifiable {
+    color: var(--ink-faint);
+}
+
+.factcheck-filter .count-unverifiable.active {
+    background: var(--ink-faint);
+    border-color: var(--ink-faint);
+    color: var(--on-primary);
+}
+
+.factcheck-filter .category-pill.active {
+    background: var(--ink-light);
+    border-color: var(--ink-light);
+    color: var(--on-primary);
+}
+
 /* === View all link (index only) === */
 
 .view-all-link {
@@ -517,6 +576,17 @@ a:focus-visible {
 .status-line strong {
     color: var(--ink);
     font-weight: 700;
+}
+
+.status-line a {
+    text-decoration: none;
+    border-bottom: 1px dotted currentColor;
+    padding-bottom: 1px;
+}
+
+.status-line a:hover {
+    border-bottom-style: solid;
+    text-decoration: none;
 }
 
 .live-dot {
@@ -795,6 +865,18 @@ a:focus-visible {
     color: var(--disputed);
     background: transparent;
     border: 1px solid var(--disputed);
+}
+
+.badge.mixed {
+    color: var(--ink-light);
+    background: transparent;
+    border: 1px solid var(--ink-light);
+}
+
+.badge.unverifiable {
+    color: var(--ink-faint);
+    background: transparent;
+    border: 1px solid var(--ink-faint);
 }
 
 /* === Pill === */

@@ -224,7 +224,6 @@ class TestGetRelatedArticles:
         )
 
         related = get_related_articles(id1, limit=5)
-        related_ids = [r["id"] for r in related]
         assert len(related) >= 1
         # a2 shares "ai" tag, should be related
         # a3 has no overlap, should not be related

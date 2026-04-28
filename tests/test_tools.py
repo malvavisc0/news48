@@ -7,8 +7,6 @@ and edge cases. External dependencies (SMTP, HTTP, filesystem) are mocked.
 
 import json
 import os
-import stat
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

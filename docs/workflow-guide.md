@@ -299,13 +299,16 @@ uv run news48 articles list --status parsed --json | jq '.total'
 
 ```bash
 # Fact-check up to 10 articles
-uv run news48 fact-check
+uv run news48 fact-check run
 
 # Fact-check with custom limit
-uv run news48 fact-check --limit 5
+uv run news48 fact-check run --limit 5
 
 # Fact-check with JSON output for scripting
-uv run news48 fact-check --json
+uv run news48 fact-check run --json
+
+# Check fact-check pipeline status
+uv run news48 fact-check status --json
 ```
 
 ### Check Fact-Check Results
@@ -389,7 +392,7 @@ uv run news48 download --limit 10
 uv run news48 parse --limit 10
 
 # 7. Fact-check parsed articles
-uv run news48 fact-check --limit 5
+uv run news48 fact-check run --limit 5
 
 # 8. View final statistics
 uv run news48 stats
@@ -686,7 +689,7 @@ uv run news48 agents run --agent fact_checker --json
 - Prevents duplicate parse work across concurrent parser processes
 
 #### Fact-Checker Agent
-- Triggered automatically after articles are parsed (or manually via `news48 fact-check`)
+- Triggered automatically after articles are parsed (or manually via `news48 fact-check run`)
 - Claims fact-unchecked articles directly from the database
 - Searches for evidence using SearXNG
 - Records verdicts (verified, false, unverified, mixed)
@@ -721,7 +724,7 @@ uv run news48 agents run --agent fact_checker --json
 | Operation | Manual CLI Command | Autonomous Agent |
 |-----------|-------------------|------------------|
 | Run recurring pipeline cycle | `uv run news48 fetch && uv run news48 download --limit 10 && uv run news48 parse --limit 10` | Periodiq-scheduled feed/download/parser actors + executor plans |
-| Fact-check articles | `uv run news48 fact-check` | Triggered after parsing (sentinel retries after 30 min) |
+| Fact-check articles | `uv run news48 fact-check run` | Triggered after parsing (sentinel retries after 30 min) |
 | Check database health | `uv run news48 cleanup health` | Sentinel Agent (every 5m) |
 | View retention status | `uv run news48 cleanup status` | Sentinel Agent (alerts) |
 | View system stats | `uv run news48 stats` | Sentinel Agent report context |
@@ -754,7 +757,7 @@ uv run news48 download --limit 10
 uv run news48 parse --limit 10
 
 # 7. Fact-check parsed articles
-uv run news48 fact-check --limit 5
+uv run news48 fact-check run --limit 5
 
 # 8. View final statistics
 uv run news48 stats

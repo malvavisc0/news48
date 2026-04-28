@@ -34,6 +34,14 @@ evidence. These go into the `sources` array submitted to `articles check`
 the claim on the website. Do **not** include URLs you merely searched but
 did not use as evidence.
 
+## Source exclusion — article's own URL
+
+**Never use the article's own URL as a source.** The article being
+fact-checked cannot serve as evidence for its own claims — that would be
+circular verification. If the article's URL appears in search results,
+skip it entirely: do not fetch it, and do not add it to the `sources`
+array. Only independent, external references are valid sources.
+
 ## Budget and limits
 
 - Up to 2 additional search/fetch retries per claim path before falling back

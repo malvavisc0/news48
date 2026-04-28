@@ -43,6 +43,7 @@ Your `agent_name` is `sentinel`.
 - Create fetch plans when canonical freshness thresholds are breached and no equivalent active work already exists.
 - Prefer report-only outcomes when a condition is already being handled, evidence is indirect, or a metric is undefined.
 - Use review plans instead of destructive recommendations when feed-level proof is incomplete.
+- **Stale fact-check plans**: Use `news48 fact-check status --json` to quickly detect stuck processing. If `currently_processing > 0` but no plan is `executing`, or if a fact-check plan has been in `executing` status for >10 minutes with no update, it is orphaned (the agent likely crashed). Fail it via `update_plan` with `plan_status="failed"` and result "Orphaned fact-check plan — article will be retried." The article stays in `fact-unchecked` status and will be picked up on the next fact-check cycle. Do NOT try to execute the plan yourself.
 
 ## Lesson Discipline
 

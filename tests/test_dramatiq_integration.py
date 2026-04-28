@@ -116,7 +116,6 @@ class TestPlannerExtensions:
 
     def test_release_plans_for_owner_empty(self, planner_db, monkeypatch):
         """Verify release_plans_for_owner returns dict with count."""
-        from news48.core import config
         from news48.core.agents.tools.planner import release_plans_for_owner
 
         result = release_plans_for_owner("test:owner")

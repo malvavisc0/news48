@@ -10,6 +10,7 @@ Ensure ALL are true before writing content:
 - [ ] Title is non-empty, factual, 8-140 characters
 - [ ] **Title uses sentence case** — capitalize only the first word and proper nouns. Do NOT use Title Case, ALL CAPS, or camelCase.
 - [ ] **Proper nouns are always capitalized** — country names (Pakistan, Iran, US), city names (Gaza, Washington), people's names, organizations (NATO, WHO), acronyms (UK, EU, UN), and languages must never be lowercased. Sentence case means sentence case, not lowercase-everything.
+- [ ] **Title preserves all numerical facts from the source** — currency amounts ($400,000 → $400K or $400,000), percentages (38% → 38%), dates, counts, and measurements must appear in the rewritten title with the same precision. Never drop digits, currency symbols, or units. If the source says "$400,000", the output must say "$400,000" or "$400K" — not "00K" or "a large sum".
 - [ ] **Title differs from the source article title** — this is non-negotiable. The output title must always be transformed from the original. See title transformation rules below.
 - [ ] Title is descriptive and specific — it must tell the reader what happened
 - [ ] Title is insight-driven — a reader can look at it and immediately understand what the article covers

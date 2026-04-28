@@ -6,13 +6,22 @@ claims.
 
 ## Steps
 
-1. After evaluating every claim, build a JSON array. Each entry must have
-   these keys (see **cli-reference-fact-checker** for the authoritative schema):
-   - `text` — the factual claim extracted from the article (keep it faithful).
+This is the **second submission** — claims were already saved to DB with
+placeholder verdicts during **fc-extract-claims**. Now you re-submit with
+real verdicts and evidence.
+
+1. **First, query the DB** to get the canonical claim text:
+   ```
+   news48 articles claims <id> --json
+   ```
+2. After evaluating every claim (from **fc-search-evidence**), build a JSON
+   array. Each entry must have these keys:
+   - `text` — **MUST** be copied from the `claim_text` field returned by
+     `articles claims <id> --json`. Never leave this empty or omit it.
    - `verdict` — one of `verified`, `disputed`, `unverifiable`, `mixed`.
    - `evidence` — a short explanation of what you found (1–2 sentences).
-   - `sources` — the array of URLs that actually provided evidence.
-2. Write the claims JSON array to a temp file:
+   - `sources` — the array of URLs that actually provided evidence. **Never include the article's own URL** — that would be circular verification.
+2. Write the claims JSON array to the same temp file:
    ```bash
    cat > /tmp/fc-claims-<article_id>.json << 'CLAIMS_EOF'
    <json_array>
@@ -20,14 +29,17 @@ claims.
    ```
 3. Write the `--result` summary — one or two sentences explaining the
    overall rollup verdict.
-4. Run:
+4. Run with `--force` (replaces placeholder claims and sets verdict):
    ```
    news48 articles check <id> \
        --claims-json-file /tmp/fc-claims-<article_id>.json \
        --result "<summary>" \
+       --force \
        --json
    ```
-   Do **not** pass `--status` — the rollup is derived automatically.
+   The `--force` flag is required because placeholder claims were
+   already saved via `--pending`. Do **not** pass `--status` — the
+   rollup is derived automatically.
 5. Immediately verify with:
    ```
    news48 articles claims <id> --json

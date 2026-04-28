@@ -51,8 +51,11 @@ news48 articles check <article_id> \
 - `--status` — **do not pass this flag in the per-claim workflow.** The
   overall verdict is derived from the per-claim verdicts. Only use
   `--status` as a last-resort fallback when claim evaluation is impossible.
-- `--force` — only pass this when a prior fact-check exists and you have
-  been explicitly instructed to re-check.
+- `--force` — required when re-submitting claims after a `--pending`
+  submission. Also used when explicitly instructed to re-check.
+- `--pending` — insert claims into DB without setting `fact_check_status`.
+  Used in the first pass (placeholder claims) so the article stays in
+  `fact-unchecked` status until real verdicts are determined.
 - `--json` — always pass this.
 
 #### Example

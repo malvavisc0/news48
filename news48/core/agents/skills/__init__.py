@@ -17,8 +17,7 @@ files before an agent starts running.
     │   ├── thresholds.md
     │   ├── cli-reference-evidence.md  # Shared evidence cmds
     │   ├── cli-reference-executor.md
-    │   ├── cli-reference-parser.md
-    │   └── handle-worker-restart.md
+    │   └── cli-reference-parser.md
     ├── sentinel/
     │   ├── business-logic.md     # Mermaid diagram + skill reference
     │   └── feed-curation.md
@@ -49,6 +48,7 @@ files before an agent starts running.
     └── fact_checker/
         ├── business-logic.md     # Mermaid diagram + skill reference
         ├── extract-claims.md
+        ├── follow-plan.md
         ├── search-evidence.md
         └── record-verdict.md
 """
@@ -91,16 +91,10 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
         agents=("executor", "fact_checker", "sentinel"),
         always=True,
     ),
-    "handle-worker-restart": SkillDef(
-        id="handle-worker-restart",
-        file="shared/handle-worker-restart.md",
-        agents=("executor", "parser", "fact_checker", "sentinel"),
-        always=True,
-    ),
     "system-overview": SkillDef(
         id="system-overview",
         file="shared/system-overview.md",
-        agents=("executor", "parser", "fact_checker", "sentinel"),
+        agents=("executor", "parser", "sentinel"),
         always=True,
     ),
     "use-json-output": SkillDef(
@@ -130,7 +124,7 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
     "thresholds": SkillDef(
         id="thresholds",
         file="shared/thresholds.md",
-        agents=("fact_checker", "sentinel"),
+        agents=("sentinel",),
         always=True,
     ),
     "error-taxonomy": SkillDef(
@@ -329,6 +323,12 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
     "fc-record-verdict": SkillDef(
         id="fc-record-verdict",
         file="fact_checker/record-verdict.md",
+        agents=("fact_checker",),
+        always=True,
+    ),
+    "fc-follow-plan": SkillDef(
+        id="fc-follow-plan",
+        file="fact_checker/follow-plan.md",
         agents=("fact_checker",),
         always=True,
     ),

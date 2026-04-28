@@ -81,7 +81,8 @@ def get_all_countries(hours: int = 48, parsed: bool = False) -> list[dict]:
 
     with SessionLocal() as session:
         rows = session.execute(
-            text("""
+            text(
+                """
             SELECT a.countries FROM articles a
             INNER JOIN (
                 SELECT MIN(id) as min_id FROM articles
@@ -90,7 +91,8 @@ def get_all_countries(hours: int = 48, parsed: bool = False) -> list[dict]:
                   AND parsed_at IS NOT NULL
                 GROUP BY title
             ) _dedup ON a.id = _dedup.min_id
-        """),
+        """
+            ),
             {"threshold": threshold},
         ).fetchall()
 
@@ -124,7 +126,8 @@ def get_all_categories(hours: int = 48, parsed: bool = False) -> list[dict]:
 
     with SessionLocal() as session:
         rows = session.execute(
-            text(f"""
+            text(
+                f"""
             SELECT a.categories FROM articles a
             INNER JOIN (
                 SELECT MIN(id) as min_id FROM articles
@@ -133,7 +136,8 @@ def get_all_categories(hours: int = 48, parsed: bool = False) -> list[dict]:
                   {"AND parsed_at IS NOT NULL" if parsed else ""}
                 GROUP BY title
             ) _dedup ON a.id = _dedup.min_id
-        """),
+        """
+            ),
             {"threshold": threshold},
         ).fetchall()
 
@@ -177,13 +181,16 @@ def get_topic_clusters(
         "stories",
     }
     if excluded_tags:
-        ignored.update(tag.strip().lower() for tag in excluded_tags if tag.strip())
+        ignored.update(
+            tag.strip().lower() for tag in excluded_tags if tag.strip()
+        )
 
     parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
 
     with SessionLocal() as session:
         rows = session.execute(
-            text(f"""
+            text(
+                f"""
             SELECT a.id, a.title, a.slug, a.summary, a.url,
                    a.published_at, a.created_at,
                    a.source_name, a.fact_check_status, a.tags,
@@ -195,7 +202,8 @@ def get_topic_clusters(
               AND a.tags != ''
               {parsed_filter}
             ORDER BY a.parsed_at DESC
-        """),
+        """
+            ),
             {"threshold": threshold},
         ).fetchall()
 
@@ -264,6 +272,7 @@ def get_articles_by_category(
     offset: int = 0,
     parsed: bool = False,
     sentiment: str | None = None,
+    fact_check_status: str | None = None,
 ) -> tuple[list[dict], int]:
     """Get articles matching a category within the time window.
 
@@ -275,6 +284,11 @@ def get_articles_by_category(
     threshold = _hours_ago_db(hours)
     parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
     sentiment_filter = "AND a.sentiment = :sentiment" if sentiment else ""
+    fact_check_filter = (
+        "AND a.fact_check_status = :fact_check_status"
+        if fact_check_status
+        else ""
+    )
     limit_clause = "LIMIT :limit OFFSET :offset" if limit is not None else ""
 
     # Normalize the incoming slug: hyphens -> spaces so LIKE works
@@ -292,6 +306,7 @@ def get_articles_by_category(
           AND a.created_at >= :threshold
           {parsed_filter}
           {sentiment_filter}
+          {fact_check_filter}
     """
     dedup_sub = f"""
         SELECT MIN(a.id) as min_id
@@ -307,6 +322,8 @@ def get_articles_by_category(
         }
         if sentiment:
             params["sentiment"] = sentiment
+        if fact_check_status:
+            params["fact_check_status"] = fact_check_status
 
         total = session.execute(
             text(f"SELECT COUNT(*) FROM ({dedup_sub}) _dedup"),
@@ -315,10 +332,13 @@ def get_articles_by_category(
 
         query_params = {
             **params,
-            **({"limit": limit, "offset": offset} if limit is not None else {}),
+            **(
+                {"limit": limit, "offset": offset} if limit is not None else {}
+            ),
         }
         rows = session.execute(
-            text(f"""
+            text(
+                f"""
             SELECT a.*, f.title as source_name,
                    f.icon_url as feed_icon_url,
                    f.favicon_url as feed_favicon_url
@@ -327,7 +347,8 @@ def get_articles_by_category(
             INNER JOIN ({dedup_sub}) _dedup ON a.id = _dedup.min_id
             ORDER BY a.parsed_at DESC
             {limit_clause}
-        """),
+        """
+            ),
             query_params,
         ).fetchall()
 
@@ -372,10 +393,13 @@ def get_articles_by_tag(
 
         query_params = {
             **params,
-            **({"limit": limit, "offset": offset} if limit is not None else {}),
+            **(
+                {"limit": limit, "offset": offset} if limit is not None else {}
+            ),
         }
         rows = session.execute(
-            text(f"""
+            text(
+                f"""
             SELECT a.id, a.title, a.slug, a.summary, a.url,
                    a.published_at, a.created_at,
                    a.source_name, a.fact_check_status, a.tags,
@@ -385,7 +409,8 @@ def get_articles_by_tag(
             INNER JOIN ({dedup_sub}) _dedup ON a.id = _dedup.min_id
             ORDER BY a.parsed_at DESC
             {limit_clause}
-        """),
+        """
+            ),
             query_params,
         ).fetchall()
 
@@ -406,7 +431,9 @@ def get_related_articles(
         tokens: list[str] = []
         if article.categories:
             tokens.extend(
-                t.strip().lower() for t in article.categories.split(",") if t.strip()
+                t.strip().lower()
+                for t in article.categories.split(",")
+                if t.strip()
             )
         if article.tags:
             tokens.extend(
@@ -429,7 +456,8 @@ def get_related_articles(
         parsed_filter = "AND a.parsed_at IS NOT NULL" if parsed else ""
 
         rows = session.execute(
-            text(f"""
+            text(
+                f"""
             SELECT a.*, f.title as source_name,
                    f.icon_url as feed_icon_url,
                    f.favicon_url as feed_favicon_url
@@ -439,7 +467,8 @@ def get_related_articles(
               {parsed_filter}
             ORDER BY a.parsed_at DESC
             LIMIT :limit
-        """),
+        """
+            ),
             {**params, "limit": limit},
         ).fetchall()
 

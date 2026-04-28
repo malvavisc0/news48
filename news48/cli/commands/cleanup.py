@@ -69,9 +69,7 @@ def cleanup_purge(
         "-n",
         help="Show what would be deleted without deleting",
     ),
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Skip confirmation"
-    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Purge articles older than the retention threshold.
@@ -174,9 +172,7 @@ def cleanup_summaries(
         "-n",
         help="Show what would be cleaned without updating",
     ),
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Skip confirmation"
-    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Clean truncation markers from article summaries.
@@ -195,9 +191,7 @@ def cleanup_summaries(
 
     # Find articles with truncation markers
     with SessionLocal() as session:
-        rows = session.execute(
-            text(
-                """
+        rows = session.execute(text("""
                 SELECT id, summary FROM articles
                 WHERE summary IS NOT NULL
                 AND (
@@ -211,9 +205,7 @@ def cleanup_summaries(
                     OR summary LIKE '%(more)%'
                     OR summary LIKE '%(continued)%'
                 )
-            """
-            )
-        ).fetchall()
+            """)).fetchall()
 
         articles = [dict(row._mapping) for row in rows]
 
@@ -255,8 +247,7 @@ def cleanup_summaries(
                 with SessionLocal() as session:
                     session.execute(
                         sql_text(
-                            "UPDATE articles SET summary = :summary"
-                            " WHERE id = :id"
+                            "UPDATE articles SET summary = :summary" " WHERE id = :id"
                         ),
                         {"summary": cleaned_summary, "id": article["id"]},
                     )
@@ -303,9 +294,7 @@ def cleanup_markdown(
         "-n",
         help="Show what would be cleaned without updating",
     ),
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Skip confirmation"
-    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Strip markdown formatting from article content, titles, and summaries.
@@ -327,9 +316,7 @@ def cleanup_markdown(
 
     # Find parsed articles that contain markdown patterns.
     with SessionLocal() as session:
-        rows = session.execute(
-            sql_text(
-                """
+        rows = session.execute(sql_text("""
                 SELECT id, title, summary, content FROM articles
                 WHERE parsed_at IS NOT NULL
                 AND (
@@ -341,17 +328,13 @@ def cleanup_markdown(
                     OR content LIKE '%](http%'
                     OR content LIKE '%`%'
                 )
-            """
-            )
-        ).fetchall()
+            """)).fetchall()
 
         articles = [dict(row._mapping) for row in rows]
 
     if not articles:
         if output_json:
-            emit_json(
-                {"cleaned": 0, "message": "No articles with markdown found"}
-            )
+            emit_json({"cleaned": 0, "message": "No articles with markdown found"})
         else:
             print("No articles with markdown formatting found")
         return
@@ -370,18 +353,14 @@ def cleanup_markdown(
 
     if not needs_cleaning:
         if output_json:
-            emit_json(
-                {"cleaned": 0, "message": "No articles need markdown removal"}
-            )
+            emit_json({"cleaned": 0, "message": "No articles need markdown removal"})
         else:
             print("No articles need markdown removal")
         return
 
     # Show preview
     if not output_json and not dry_run:
-        print(
-            f"Found {len(needs_cleaning)} articles with markdown formatting:"
-        )
+        print(f"Found {len(needs_cleaning)} articles with markdown formatting:")
         for item in needs_cleaning[:5]:
             fields = ", ".join(item["changes"].keys())
             print(f"  - [{item['id']}] fields: {fields}")
@@ -391,9 +370,7 @@ def cleanup_markdown(
 
     # Confirm
     if not force and not dry_run and not output_json:
-        confirm = typer.confirm(
-            f"Strip markdown from {len(needs_cleaning)} articles?"
-        )
+        confirm = typer.confirm(f"Strip markdown from {len(needs_cleaning)} articles?")
         if not confirm:
             print("Cleanup cancelled")
             return
@@ -410,9 +387,7 @@ def cleanup_markdown(
             set_clause = ", ".join(sets)
             with SessionLocal() as session:
                 session.execute(
-                    sql_text(
-                        f"UPDATE articles SET {set_clause}" " WHERE id = :id"
-                    ),
+                    sql_text(f"UPDATE articles SET {set_clause}" " WHERE id = :id"),
                     params,
                 )
                 session.commit()

@@ -1,6 +1,7 @@
 """Article fact-check CLI commands: check, claims."""
 
 import json
+import logging
 import os
 
 import typer
@@ -18,6 +19,11 @@ from news48.core.database import (
 
 from .._common import emit_error, emit_json, require_db
 from . import articles_app
+
+logger = logging.getLogger(__name__)
+
+# Hard limit on the number of claims per article.
+_MAX_CLAIMS = 5
 
 
 @articles_app.command(name="check")
@@ -48,6 +54,12 @@ def check_article(
         "-f",
         help="Overwrite existing fact-check and override active claims",
     ),
+    pending: bool = typer.Option(
+        False,
+        "--pending",
+        help="Insert claims without setting fact_check_status "
+        "(for placeholder claims before verification)",
+    ),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Set the fact-check status and result for an article."""
@@ -69,7 +81,7 @@ def check_article(
                 as_json=output_json,
             )
 
-    if status is None and claims is None:
+    if status is None and claims is None and not pending:
         emit_error(
             "Must specify --status or --claims-json-file",
             as_json=output_json,
@@ -100,7 +112,7 @@ def check_article(
             as_json=output_json,
         )
 
-    if article.get("fact_check_status") and not force:
+    if article.get("fact_check_status") and not force and not pending:
         emit_error(
             f"Article {article['id']} is already fact-checked. "
             "Use --force to overwrite the existing result.",
@@ -123,18 +135,88 @@ def check_article(
 
     if claims is not None:
         normalized_claims = []
+        article_url = article.get("url", "")
         for c in claims:
+            sources = c.get("sources", [])
+            # Filter out the article's own URL from sources
+            # to prevent circular verification.
+            if article_url and article_url in sources:
+                sources = [s for s in sources if s != article_url]
+                logger.warning(
+                    "Filtered article's own URL from claim "
+                    "sources for article %s",
+                    article["id"],
+                )
+            # Accept multiple key names for claim text — LLMs
+            # may use "text", "claim_text", "claim", or "statement".
+            claim_text = (
+                c.get("claim_text")
+                or c.get("text")
+                or c.get("claim")
+                or c.get("statement")
+                or ""
+            )
             normalized = {
-                "claim_text": c.get("claim_text", c.get("text", "")),
+                "claim_text": claim_text,
                 "verdict": c.get("verdict", "unverifiable"),
-                "evidence_summary": c.get("evidence_summary", c.get("evidence", "")),
-                "sources": c.get("sources", []),
+                "evidence_summary": c.get(
+                    "evidence_summary", c.get("evidence", "")
+                ),
+                "sources": sources,
             }
             normalized_claims.append(normalized)
 
+        # Filter out claims with empty text.
+        normalized_claims = [
+            c for c in normalized_claims if c["claim_text"].strip()
+        ]
+        if not normalized_claims:
+            clear_article_processing_claim(article["id"], owner=claim_owner)
+            emit_error(
+                "No valid claims — all had empty text.",
+                as_json=output_json,
+            )
+
+        # Enforce hard claim limit.
+        if len(normalized_claims) > _MAX_CLAIMS:
+            logger.warning(
+                "Claims count (%d) exceeds limit (%d) for "
+                "article %s — truncating to first %d claims.",
+                len(normalized_claims),
+                _MAX_CLAIMS,
+                article["id"],
+                _MAX_CLAIMS,
+            )
+            normalized_claims = normalized_claims[:_MAX_CLAIMS]
+
         insert_claims(article["id"], normalized_claims)
+
+        if pending:
+            # --pending: insert claims only, do not set
+            # fact_check_status. Used for placeholder claims
+            # before evidence search.
+            clear_article_processing_claim(article["id"], owner=claim_owner)
+            data = {
+                "checked": True,
+                "id": article["id"],
+                "url": article["url"],
+                "title": article["title"],
+                "fact_check_status": article.get("fact_check_status"),
+                "claims_count": len(normalized_claims),
+                "pending": True,
+            }
+            if output_json:
+                emit_json(data)
+            else:
+                title = article["title"] or "Untitled"
+                print(f"Saved {len(normalized_claims)} claims (pending)")
+                print(f"  Article: {title} (ID: {article['id']})")
+            return
+
         final_status = (
-            status.lower() if status else compute_overall_verdict(normalized_claims)
+            status.lower()
+            if status
+            else compute_overall_verdict(normalized_claims)
         )
     else:
         final_status = status.lower()
@@ -222,7 +304,9 @@ def article_claims(
         print(f"  ID: {article['id']}")
         print(f"  Total claims: {len(claims)}")
         if verdict_counts:
-            counts = ", ".join(f"{v}: {c}" for v, c in sorted(verdict_counts.items()))
+            counts = ", ".join(
+                f"{v}: {c}" for v, c in sorted(verdict_counts.items())
+            )
             print(f"  Verdicts: {counts}")
         print()
         for c in claims:

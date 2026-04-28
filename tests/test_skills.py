@@ -3,7 +3,6 @@
 import json
 from pathlib import Path
 
-from news48.core import config
 from news48.core.agents.skills import (
     PLAN_FAMILY_SKILLS,
     SKILL_REGISTRY,

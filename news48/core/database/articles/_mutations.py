@@ -1,6 +1,7 @@
 """Article mutation operations: insert, update, delete, and flag management."""
 
 import logging
+import re
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -10,6 +11,48 @@ from news48.core.helpers.text import strip_markdown as _strip_markdown
 
 from ..connection import SessionLocal, _utcnow
 from ..models import Article
+
+logger = logging.getLogger(__name__)
+
+# Matches currency ($400,000, €5B), percentages (38%), and plain
+# numbers with optional magnitude suffixes (12K, 1.5M, etc.).
+_NUMBER_RE = re.compile(
+    r"[\$€£]?\d[\d,.]*\s*[KkMmBbTt]?(?:\s*(?:million|billion|trillion))?"
+    r"|\d+%"
+)
+
+
+def _extract_numbers(text: str) -> set[str]:
+    """Extract normalized number tokens from text for comparison."""
+    return {m.group().strip().lower() for m in _NUMBER_RE.finditer(text)}
+
+
+def _numbers_ok(original: str, rewritten: str) -> bool:
+    """Check whether currency amounts from *original* survive in *rewritten*.
+
+    The most common LLM failure is dropping the currency symbol and
+    leading digits from monetary amounts (e.g. "$400,000" → "00K").
+    This function checks that every currency-prefixed number in the
+    original has a corresponding currency-prefixed number in the
+    rewrite.  Abbreviations are fine as long as the currency symbol
+    and leading digit are preserved.
+    """
+    try:
+        # Find currency amounts in original: $400,000, €8B, £3.2M, etc.
+        _CURRENCY_RE = re.compile(
+            r"[\$€£]\s*\d[\d,.]*\s*[KkMmBbTt]?(?:\s*(?:million|billion|trillion))?"
+        )
+        orig_currencies = _CURRENCY_RE.findall(original)
+        if not orig_currencies:
+            return True
+        new_currencies = _CURRENCY_RE.findall(rewritten)
+        # If the original had more currency amounts than the
+        # rewrite, the LLM dropped some.
+        if len(new_currencies) < len(orig_currencies):
+            return False
+        return True
+    except Exception:
+        return True  # On error, don't block the update.
 
 
 def insert_articles(
@@ -112,6 +155,34 @@ def update_article(
     with SessionLocal() as session:
         article = session.get(Article, article_id)
         if article:
+            # Guard against LLM number-drop: if the rewrite lost
+            # significant digit sequences (e.g. "$400,000" → "00K"),
+            # fall back to the original text for that field.
+            if (
+                title
+                and article.title
+                and not _numbers_ok(article.title, title)
+            ):
+                logger.error(
+                    "Article %d: title rewrite dropped numbers — "
+                    "keeping original. original=%r rewritten=%r",
+                    article_id,
+                    article.title[:120],
+                    title[:120],
+                )
+                title = article.title
+            if (
+                content
+                and article.content
+                and not _numbers_ok(article.content, content)
+            ):
+                logger.error(
+                    "Article %d: content rewrite dropped numbers — "
+                    "keeping original.",
+                    article_id,
+                )
+                content = article.content
+
             article.content = content
             # Only update metadata if current value is NULL/empty
             if author and not article.author:

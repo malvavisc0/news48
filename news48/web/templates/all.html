@@ -16,8 +16,10 @@
 <a class="back-link" href="/">← back to homepage</a>
 
 <header class="page-hero">
-    <h1 class="page-title">The full feed</h1>
-    <div class="tagline">{{ total }} stories, all categories, one window.</div>
+    <h1 class="page-title">{% if fact_check_status %}{{ fact_check_status | title }} stories{% else %}The full feed{%
+        endif %}</h1>
+    <div class="tagline">{{ total }} stories{% if fact_check_status %}, fact-check status: {{ fact_check_status }}{%
+        else %}, all categories, one window{% endif %}.</div>
 </header>
 
 <section class="filter-stack" aria-labelledby="all-mood-label">
@@ -51,6 +53,37 @@
         <a href="{{ base_url }}?sentiment=negative" class="sentiment-pill">negative</a>
         {% endif %}
     </nav>
+
+    <nav class="factcheck-filter filter-panel" aria-label="Filter by fact-check status">
+        <div class="filter-panel__header">
+            <h2 class="section-label" id="all-factcheck-label">filter by verification</h2>
+        </div>
+        {% if fact_check_status %}
+        <a href="/all" class="category-pill">any</a>
+        {% else %}
+        <a href="/all" class="category-pill active">any</a>
+        {% endif %}
+        {% if fact_check_status == "verified" %}
+        <a href="/all" class="category-pill count-verified active">✓ verified</a>
+        {% else %}
+        <a href="/all?fact_check_status=verified" class="category-pill count-verified">✓ verified</a>
+        {% endif %}
+        {% if fact_check_status == "disputed" %}
+        <a href="/all" class="category-pill count-disputed active">✗ disputed</a>
+        {% else %}
+        <a href="/all?fact_check_status=disputed" class="category-pill count-disputed">✗ disputed</a>
+        {% endif %}
+        {% if fact_check_status == "mixed" %}
+        <a href="/all" class="category-pill count-mixed active">~ mixed</a>
+        {% else %}
+        <a href="/all?fact_check_status=mixed" class="category-pill count-mixed">~ mixed</a>
+        {% endif %}
+        {% if fact_check_status == "unverifiable" %}
+        <a href="/all" class="category-pill count-unverifiable active">? unverifiable</a>
+        {% else %}
+        <a href="/all?fact_check_status=unverifiable" class="category-pill count-unverifiable">? unverifiable</a>
+        {% endif %}
+    </nav>
 </section>
 
 <section class="section" aria-labelledby="all-stories-label">
@@ -71,13 +104,16 @@
                     <span><strong>{{ story.source_name or story.feed_source_name or "Unknown" }}</strong></span>
                     <span>{{ story.created_at | relative_time }}</span>
                     {% if story.fact_check_status == "verified" %}
-                    <span class="badge verified">Verified</span>
+                    <span class="badge verified">✓ Verified</span>
+                    {% elif story.fact_check_status == "disputed" %}
+                    <span class="badge disputed">✗ Disputed</span>
+                    {% elif story.fact_check_status == "mixed" %}
+                    <span class="badge mixed">~ Mixed</span>
+                    {% elif story.fact_check_status == "unverifiable" %}
+                    <span class="badge unverifiable">? Unverifiable</span>
                     {% endif %}
                     {% if story.is_breaking %}
                     <span class="badge breaking">Breaking</span>
-                    {% endif %}
-                    {% if story.fact_check_status == "disputed" %}
-                    <span class="badge disputed">Disputed</span>
                     {% endif %}
                     {% for tag in story.tags | parse_tags %}
                     <span class="pill">{{ tag }}</span>

@@ -34,7 +34,7 @@ from news48.cli.commands import (
     seed,
     stats,
 )
-from news48.cli.commands.fact_check import fact_check
+from news48.cli.commands.fact_check import fact_check_app
 
 app = typer.Typer(
     help=(
@@ -53,7 +53,7 @@ app.command()(fetch)
 app.command()(parse)
 app.command()(seed)
 app.command()(download)
-app.command(name="fact-check")(fact_check)
+app.add_typer(fact_check_app, name="fact-check")
 app.command()(stats)
 app.command()(doctor)
 app.command()(briefing)

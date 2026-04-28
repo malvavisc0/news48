@@ -100,6 +100,24 @@ _BLOCKED_PATTERNS = re.compile(
 )
 
 
+def _strip_heredocs(command: str) -> str:
+    """Remove heredoc content from a command before validation.
+
+    Heredocs (``<< 'EOF' ... EOF``) may contain arbitrary article text
+    that legitimately includes words matching blocked patterns (e.g.
+    "shutdown" in "cold shutdown").  We strip the data portion so only
+    the actual command tokens are validated.
+    """
+    # Match << or <<-, optional quoted delimiter, then everything until
+    # the delimiter appears on its own line.
+    return re.sub(
+        r"<<-?\s*['\"]?(\w+)['\"]?\b.*?\n.*?^\1\s*$",
+        "",
+        command,
+        flags=re.DOTALL | re.MULTILINE,
+    )
+
+
 def _validate_command(command: str) -> str | None:
     """Validate that a shell command is allowed.
 
@@ -109,9 +127,10 @@ def _validate_command(command: str) -> str | None:
     if not stripped:
         return "Empty command"
 
-    # Check for blocked patterns anywhere in the command.
-    # This catches dangerous commands even behind pipes or in subshells.
-    blocked_match = _BLOCKED_PATTERNS.search(stripped)
+    # Check for blocked patterns in the command portion only,
+    # stripping heredoc data to avoid false positives from article text.
+    checkable = _strip_heredocs(stripped)
+    blocked_match = _BLOCKED_PATTERNS.search(checkable)
     if blocked_match:
         return (
             f"Command contains blocked pattern: '{blocked_match.group()}'. "
@@ -161,7 +180,9 @@ def _prepare_shell_command(command: str) -> tuple[list[str], str]:
     return ["/bin/bash", "-lc", resolved_command], resolved_command
 
 
-def run_shell_command(reason: str, command: str, timeout: Optional[int] = 120) -> str:
+def run_shell_command(
+    reason: str, command: str, timeout: Optional[int] = 120
+) -> str:
     """Execute a shell command and return its output.
 
     ## When to Use
@@ -198,7 +219,9 @@ def run_shell_command(reason: str, command: str, timeout: Optional[int] = 120) -
     # Validate command before execution
     validation_error = _validate_command(command)
     if validation_error:
-        logger.warning("Blocked shell command: %s — %s", command, validation_error)
+        logger.warning(
+            "Blocked shell command: %s — %s", command, validation_error
+        )
         return _safe_json({"result": "", "error": validation_error})
 
     env_vars = dict(os.environ)

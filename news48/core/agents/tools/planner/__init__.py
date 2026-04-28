@@ -18,7 +18,7 @@ from ._constants import (
     _TERMINAL_PLAN_STATUSES,
     _TERMINAL_STEP_STATUSES,
 )
-from ._db import _close_conn, db_claim_plan  # noqa: F401
+from ._db import _close_conn, db_checkpoint, db_claim_plan  # noqa: F401
 from ._lifecycle import _auto_complete_campaigns  # noqa: F401
 from ._lifecycle import (
     _derive_plan_status_from_steps,
@@ -65,6 +65,7 @@ __all__ = [
     # _db
     "_close_conn",
     "db_claim_plan",
+    "db_checkpoint",
     # _lifecycle
     "_auto_complete_campaigns",
     "_derive_plan_status_from_steps",

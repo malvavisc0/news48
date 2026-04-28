@@ -22,7 +22,7 @@ flowchart TD
 ## Steps
 
 1. **Check service connectivity** — Run `news48 doctor --json` first to verify all external services (database, Redis, Byparr, SearXNG, LLM API) are reachable and all required environment variables are configured. If any service reports `error` status, include the error details and fix suggestion in your report. If the database is unreachable, skip remaining steps and report CRITICAL. If Redis is unreachable, report CRITICAL (agents cannot run). If Byparr, SearXNG, or LLM API are unreachable, report WARNING (pipeline stages will fail but the system is not down).
-2. **Gather metrics** — Run `news48 stats --json`, `news48 feeds list --json`, `news48 plans list --json`, `news48 cleanup health --json`, and any other documented evidence commands needed to prove a claim.
+2. **Gather metrics** — Run `news48 stats --json`, `news48 feeds list --json`, `news48 plans list --json`, `news48 cleanup health --json`, `news48 fact-check status --json`, and any other documented evidence commands needed to prove a claim. The `fact-check status` command provides a focused view of the fact-check pipeline: article counts by verdict, active processing, and plan breakdown — use it to assess fact-check backlog and detect stuck processing.
 3. **Check for empty database** — If total feeds is 0, the database needs seeding. Create a plan for the executor with one step: `news48 seed /app/seed.txt --json`. The file `seed.txt` contains feed URLs and lives in the project root. Skip all other threshold-driven actions because the system is not yet seeded.
 4. **Evaluate thresholds** — Compare metrics against the thresholds skill and classify the system as HEALTHY, WARNING, or CRITICAL. Use only documented metrics and respect undefined-rate semantics when denominators are zero.
 5. **Separate actionable vs report-only findings** — Treat download backlog, parse backlog, fact-check backlog, malformed article counts, and any undefined rate as report-only unless another skill explicitly authorizes action. Do not manufacture plans for self-healing or unprovable conditions.
@@ -37,8 +37,6 @@ flowchart TD
 - **Seed plan** — Trigger: total feeds is 0. Step: `news48 seed seed.txt --json`.
 - **Fetch plan** — Trigger: fetch freshness threshold breached or `articles_today` is 0 for more than 1 hour, and no equivalent active plan exists. Step: `news48 fetch --json`.
 - **Human review plan** — Trigger: a feed or system condition appears harmful, but evidence is not strong enough for direct destructive action. Include the exact evidence to verify.
-
-- **Fact-check retry plan** — Trigger: `fact-unchecked` articles exist for more than 30 minutes and no equivalent active plan exists. Step: `news48 fact-check --json`. This catches articles that were missed because the parser-triggered fact-check failed or the agent errored.
 
 - **Patch missing fields plan** — Trigger: `missing_fields` count ≥ 5 (WARNING) or ≥ 20 (CRITICAL) and no equivalent active plan exists. Step: `news48 articles patch-missing --limit 20 --json`. This fixes parsed articles that are missing summary, categories, sentiment, or tags without re-parsing.
 

@@ -2,6 +2,7 @@ import json
 import re
 from string import printable
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 
 def _is_binary(sample: bytes) -> bool:
@@ -22,9 +23,9 @@ def _is_binary(sample: bytes) -> bool:
 
     if sample:
         printable_bytes = set(printable.encode("utf-8"))
-        non_printable_ratio = sum(byte not in printable_bytes for byte in sample) / len(
-            sample
-        )
+        non_printable_ratio = sum(
+            byte not in printable_bytes for byte in sample
+        ) / len(sample)
         if non_printable_ratio > 0.30:
             return True
 
@@ -56,7 +57,9 @@ def _clean_text(text: str) -> str:
     # Remove phonetic transcriptions: /…/ possibly
     # followed by a pronunciation guide
     text = re.sub(r"\s*\([^)]*\)\s*", " ", text)
-    text = re.sub(r"/[^/]{2,}/\s*[A-Z]+-[a-z]+;?\s*", " ", text)  # /ˈiːlɒn/ EE-lon;
+    text = re.sub(
+        r"/[^/]{2,}/\s*[A-Z]+-[a-z]+;?\s*", " ", text
+    )  # /ˈiːlɒn/ EE-lon;
 
     # Remove social-media metric clusters
     # e.g. "· 4.5K · 11K · 100K · 13K"
@@ -128,6 +131,24 @@ def _clean_text(text: str) -> str:
     return text
 
 
+def urls_match(url_a: str, url_b: str) -> bool:
+    """Check if two URLs refer to the same page.
+
+    Ignores scheme, ``www.`` prefix, trailing slashes, and query strings
+    so that minor URL variants are still caught.
+    """
+    if not url_a or not url_b:
+        return False
+
+    def _norm(u: str) -> str:
+        p = urlparse(u)
+        host = (p.hostname or "").removeprefix("www.")
+        path = p.path.rstrip("/")
+        return f"{host}{path}".lower()
+
+    return _norm(url_a) == _norm(url_b)
+
+
 def _safe_json(
     data: Dict[str, Any],
     *,
@@ -152,4 +173,6 @@ def _safe_json(
             ensure_ascii=ensure_ascii,
         )
     except (TypeError, ValueError) as exc:
-        return json.dumps({"error": "Serialization failed", "details": str(exc)})
+        return json.dumps(
+            {"error": "Serialization failed", "details": str(exc)}
+        )

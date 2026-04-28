@@ -1,9 +1,15 @@
 """Claims database operations — per-claim fact-check results."""
 
 import json
+import logging
 
 from .connection import SessionLocal, _utcnow
 from .models import Claim
+
+logger = logging.getLogger(__name__)
+
+# Hard limit on the number of claims per article.
+_MAX_CLAIMS = 5
 
 
 def insert_claims(article_id: int, claims: list[dict]) -> int:
@@ -22,11 +28,27 @@ def insert_claims(article_id: int, claims: list[dict]) -> int:
     """
     delete_claims_for_article(article_id)
 
+    # Enforce hard claim limit as a safety net.
+    if len(claims) > _MAX_CLAIMS:
+        logger.warning(
+            "insert_claims: truncating %d claims to %d for article %d",
+            len(claims),
+            _MAX_CLAIMS,
+            article_id,
+        )
+        claims = claims[:_MAX_CLAIMS]
+
     now = _utcnow()
     inserted = 0
 
     with SessionLocal() as session:
         for claim in claims:
+            if not claim.get("claim_text", "").strip():
+                logger.warning(
+                    "Skipping claim with empty text for article %d",
+                    article_id,
+                )
+                continue
             sources = claim.get("sources", [])
             if isinstance(sources, list):
                 sources_json = json.dumps(sources)
@@ -99,7 +121,9 @@ def delete_claims_for_article(article_id: int) -> int:
         Number of claims deleted.
     """
     with SessionLocal() as session:
-        count = session.query(Claim).filter(Claim.article_id == article_id).count()
+        count = (
+            session.query(Claim).filter(Claim.article_id == article_id).count()
+        )
 
         session.query(Claim).filter(Claim.article_id == article_id).delete()
         session.commit()

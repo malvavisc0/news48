@@ -239,13 +239,16 @@ if not _actors_already_registered():
         periodic=cron("*/5 * * * *"),  # every 5 minutes
     )
     def heal_plan_deadlocks() -> Any:
-        """Detect and repair campaign-parent deadlocks in pending plans."""
+        """Detect and repair campaign-parent deadlocks in pending plans.
+
+        Also runs a WAL checkpoint to keep the journal file small.
+        """
         from .tools.planner import (
             _auto_complete_campaigns,
             _normalize_plan_for_consistency,
             _write_plan,
         )
-        from .tools.planner._db import db_iter_plans
+        from .tools.planner._db import db_checkpoint, db_iter_plans
 
         healed = 0
 
@@ -255,6 +258,13 @@ if not _actors_already_registered():
                 healed += 1
 
         auto_completed = _auto_complete_campaigns()
+
+        # Flush WAL to prevent unbounded growth.
+        try:
+            db_checkpoint()
+        except Exception as exc:
+            logger.warning("WAL checkpoint failed: %s", exc)
+
         return {"healed": healed + auto_completed}
 
 else:
@@ -266,7 +276,9 @@ else:
     parser_cycle = _require_registered_actor("parser_cycle")
     scheduled_parser = _require_registered_actor("scheduled_parser")
     fact_check_cycle = _require_registered_actor("fact_check_cycle")
-    scheduled_fact_checker = _require_registered_actor("scheduled_fact_checker")
+    scheduled_fact_checker = _require_registered_actor(
+        "scheduled_fact_checker"
+    )
     feed_fetch_cycle = _require_registered_actor("feed_fetch_cycle")
     download_cycle = _require_registered_actor("download_cycle")
     scheduled_feed_fetch = _require_registered_actor("scheduled_feed_fetch")

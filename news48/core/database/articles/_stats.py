@@ -11,7 +11,9 @@ from ._browsing import get_topic_clusters
 def get_article_stats() -> dict:
     """Get consolidated article statistics in a single query."""
     with SessionLocal() as session:
-        row = session.execute(text("""
+        row = session.execute(
+            text(
+                """
             SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN parsed_at IS NOT NULL THEN 1 ELSE 0 END)
@@ -46,7 +48,9 @@ def get_article_stats() -> dict:
                          OR sentiment IS NULL OR sentiment = '')
                     THEN 1 ELSE 0 END) AS missing_fields
             FROM articles
-        """)).fetchone()
+        """
+            )
+        ).fetchone()
 
         result = {
             "total": row[0] or 0,
@@ -65,27 +69,39 @@ def get_article_stats() -> dict:
         }
 
         # Oldest unparsed article
-        oldest = session.execute(text("""
+        oldest = session.execute(
+            text(
+                """
             SELECT MIN(created_at) AS oldest_unparsed_at
             FROM articles
             WHERE content IS NOT NULL
               AND parsed_at IS NULL
               AND parse_failed = 0
-        """)).fetchone()
+        """
+            )
+        ).fetchone()
         result["oldest_unparsed_at"] = oldest[0] if oldest else None
 
         # Articles created today (UTC)
-        today = session.execute(text("""
+        today = session.execute(
+            text(
+                """
             SELECT COUNT(*) FROM articles
             WHERE DATE(created_at) = CURDATE()
-        """)).scalar()
+        """
+            )
+        ).scalar()
         result["articles_today"] = today or 0
 
         # Articles created this week (UTC, Monday-based)
-        week = session.execute(text("""
+        week = session.execute(
+            text(
+                """
             SELECT COUNT(*) FROM articles
             WHERE YEARWEEK(created_at, 1) = YEARWEEK(CURDATE(), 1)
-        """)).scalar()
+        """
+            )
+        ).scalar()
         result["articles_this_week"] = week or 0
 
         return result
@@ -99,7 +115,8 @@ def get_feed_stats(stale_days: int = 7) -> dict:
 
     with SessionLocal() as session:
         row = session.execute(
-            text("""
+            text(
+                """
             SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN last_fetched_at IS NULL THEN 1 ELSE 0 END)
@@ -107,7 +124,8 @@ def get_feed_stats(stale_days: int = 7) -> dict:
                 SUM(CASE WHEN last_fetched_at < :threshold THEN 1 ELSE 0 END)
                     AS stale
             FROM feeds
-        """),
+        """
+            ),
             {"threshold": stale_threshold},
         ).fetchone()
 
@@ -118,14 +136,18 @@ def get_feed_stats(stale_days: int = 7) -> dict:
         }
 
         # Top feeds by article count
-        top_rows = session.execute(text("""
+        top_rows = session.execute(
+            text(
+                """
             SELECT f.title, f.url, COUNT(a.id) AS article_count
             FROM feeds f
             LEFT JOIN articles a ON f.id = a.feed_id
             GROUP BY f.id
             ORDER BY article_count DESC
             LIMIT 10
-        """)).fetchall()
+        """
+            )
+        ).fetchall()
 
         result["top_feeds"] = [dict(r._mapping) for r in top_rows]
         return result
@@ -134,13 +156,17 @@ def get_feed_stats(stale_days: int = 7) -> dict:
 def get_fetch_stats() -> dict:
     """Get fetch statistics and recent fetch history."""
     with SessionLocal() as session:
-        row = session.execute(text("""
+        row = session.execute(
+            text(
+                """
             SELECT
                 COUNT(*) AS total_runs,
                 MAX(started_at) AS last_run_at,
                 ROUND(AVG(articles_found), 1) AS avg_articles_per_run
             FROM fetches
-        """)).fetchone()
+        """
+            )
+        ).fetchone()
 
         result = {
             "total_runs": row[0] or 0,
@@ -148,13 +174,17 @@ def get_fetch_stats() -> dict:
             "avg_articles_per_run": row[2],
         }
 
-        recent_rows = session.execute(text("""
+        recent_rows = session.execute(
+            text(
+                """
             SELECT id, started_at, completed_at, status,
                    feeds_fetched, articles_found
             FROM fetches
             ORDER BY started_at DESC
             LIMIT 5
-        """)).fetchall()
+        """
+            )
+        ).fetchall()
 
         result["recent_runs"] = [dict(r._mapping) for r in recent_rows]
         return result
@@ -168,25 +198,36 @@ def get_web_stats(hours: int = 48, parsed: bool = False) -> dict:
 
     with SessionLocal() as session:
         row = session.execute(
-            text(f"""
+            text(
+                f"""
             SELECT
                 COUNT(*) AS live_stories,
-                SUM(CASE WHEN fact_check_status IS NOT NULL
+                SUM(CASE WHEN fact_check_status = 'verified'
                          THEN 1 ELSE 0 END) AS verified,
+                SUM(CASE WHEN fact_check_status = 'disputed'
+                         THEN 1 ELSE 0 END) AS disputed,
+                SUM(CASE WHEN fact_check_status = 'mixed'
+                         THEN 1 ELSE 0 END) AS mixed,
+                SUM(CASE WHEN fact_check_status = 'unverifiable'
+                         THEN 1 ELSE 0 END) AS unverifiable,
                 COUNT(DISTINCT feed_id) AS sources,
                 {last_updated_column} AS last_updated
             FROM articles
             WHERE created_at >= :threshold
               {parsed_filter}
-        """),
+        """
+            ),
             {"threshold": threshold},
         ).fetchone()
 
         result = {
             "live_stories": row[0] or 0,
             "verified": row[1] or 0,
-            "sources": row[2] or 0,
-            "last_updated": row[3],
+            "disputed": row[2] or 0,
+            "mixed": row[3] or 0,
+            "unverifiable": row[4] or 0,
+            "sources": row[5] or 0,
+            "last_updated": row[6],
         }
 
         # Count clusters

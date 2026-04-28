@@ -20,7 +20,17 @@
         design.</div>
     <div class="status-line">
         <span><span class="live-dot"></span><strong>{{ stats.live_stories }}</strong> stories</span>
-        <span><strong>{{ stats.verified }}</strong> verified</span>
+        {% if stats.verified %}<a href="/all?fact_check_status=verified" class="count-verified"><strong>{{
+                stats.verified }}</strong> verified</a>{%
+        endif %}
+        {% if stats.mixed %}<a href="/all?fact_check_status=mixed" class="count-mixed"><strong>{{ stats.mixed
+                }}</strong> mixed</a>{% endif %}
+        {% if stats.disputed %}<a href="/all?fact_check_status=disputed" class="count-disputed"><strong>{{
+                stats.disputed }}</strong> disputed</a>{%
+        endif %}
+        {% if stats.unverifiable %}<a href="/all?fact_check_status=unverifiable" class="count-unverifiable"><strong>{{
+                stats.unverifiable }}</strong>
+            unverifiable</a>{% endif %}
         <span><strong>{{ stats.clusters }}</strong> clusters</span>
         <span><strong>{{ stats.sources }}</strong> sources</span>
         {% if stats.last_updated %}
@@ -85,13 +95,16 @@
                     <span><strong>{{ story.source_name or story.feed_source_name or "Unknown" }}</strong></span>
                     <span>{{ story.created_at | relative_time }}</span>
                     {% if story.fact_check_status == "verified" %}
-                    <span class="badge verified">Verified</span>
+                    <span class="badge verified">✓ Verified</span>
+                    {% elif story.fact_check_status == "disputed" %}
+                    <span class="badge disputed">✗ Disputed</span>
+                    {% elif story.fact_check_status == "mixed" %}
+                    <span class="badge mixed">~ Mixed</span>
+                    {% elif story.fact_check_status == "unverifiable" %}
+                    <span class="badge unverifiable">? Unverifiable</span>
                     {% endif %}
                     {% if story.is_breaking %}
                     <span class="badge breaking">Breaking</span>
-                    {% endif %}
-                    {% if story.fact_check_status == "disputed" %}
-                    <span class="badge disputed">Disputed</span>
                     {% endif %}
                     {% for tag in story.tags | parse_tags %}
                     <span class="pill">{{ tag }}</span>

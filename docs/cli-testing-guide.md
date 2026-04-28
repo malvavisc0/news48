@@ -564,29 +564,41 @@ rm -f data/lessons.db
 
 ## 15. Fact-check
 
-### 15.1 Fact-check -- text output
+### 15.1 Fact-check run -- text output
 ```bash
-uv run news48 fact-check
+uv run news48 fact-check run
 ```
 Expected: `Fact-checked N articles`
 
-### 15.2 Fact-check -- JSON output
+### 15.2 Fact-check run -- JSON output
 ```bash
-uv run news48 fact-check --json
+uv run news48 fact-check run --json
 ```
 Expected: `{"checked": N, ...}` JSON object
 
-### 15.3 Fact-check -- with limit
+### 15.3 Fact-check run -- with limit
 ```bash
-uv run news48 fact-check --limit 3 --json
+uv run news48 fact-check run --limit 3 --json
 ```
 Expected: at most 3 articles processed
 
-### 15.4 Fact-check -- nothing to check
+### 15.4 Fact-check run -- nothing to check
 ```bash
-uv run news48 fact-check --json
+uv run news48 fact-check run --json
 ```
 Expected (when no parsed articles exist): `{"checked": 0, ...}`
+
+### 15.5 Fact-check status -- text output
+```bash
+uv run news48 fact-check status
+```
+Expected: fact-check pipeline status with article counts and plan breakdown
+
+### 15.6 Fact-check status -- JSON output
+```bash
+uv run news48 fact-check status --json
+```
+Expected: `{"articles": {"fact_unchecked": N, "fact_checked": M, ...}, "plans": {...}}`
 
 ---
 
