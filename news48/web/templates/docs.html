@@ -5,51 +5,47 @@
 {% block body_class %}page-docs{% endblock %}
 
 {% block content %}
-<a class="back-link" href="/">← back to live feed</a>
+<a class="back-link" href="/live">← back to live feed</a>
 <div class="docs">
 
-    <!-- Hero -->
-    <header class="docs__hero">
-        <p class="docs__eyebrow">Documentation</p>
-        <h1 class="docs__title">news that cleans up after itself</h1>
-        <p class="docs__subtitle">
-            It finds stories, rewrites them for clarity, checks the claims,
-            groups the overlap, and deletes everything after 48&nbsp;hours.
-        </p>
-    </header>
+    <!-- Hero - Docs style (minimal) -->
+    <h1 class="page-heading">How news48 works</h1>
 
-    <!-- Why it stands out -->
+    <!-- Architecture & Pipeline -->
     <section class="docs__section">
-        <h2 class="docs__heading">What makes it different</h2>
+        <h2 class="docs__heading">The system</h2>
+        <p>The pipeline runs four stages in sequence, each automated and self-healing:</p>
         <div class="docs__arch-grid">
             <div class="docs__arch-card">
-                <h3>Autonomous</h3>
+                <h3>Find & Fetch</h3>
                 <p>
-                    Feeds go in, the pipeline keeps moving. news48 watches,
-                    cleans, checks, and publishes without needing constant
-                    babysitting.
+                    news48 monitors RSS feeds continuously, verifies source quality,
+                    and retrieves full articles from each URL. It handles paywalls,
+                    redirects, and anti-bot measures automatically.
                 </p>
             </div>
             <div class="docs__arch-card">
-                <h3>Skeptical</h3>
+                <h3>Parse & Rewrite</h3>
                 <p>
-                    It does not just repeat headlines. It extracts important
-                    claims and looks for evidence before showing them off.
+                    Raw HTML is extracted and parsed. Summaries are generated,
+                    claims are identified, and content is rewritten for clarity
+                    without changing the meaning. Redundancy is removed.
                 </p>
             </div>
             <div class="docs__arch-card">
-                <h3>Ephemeral</h3>
+                <h3>Fact-Check & Verify</h3>
                 <p>
-                    Everything expires after 48 hours. No giant archive, no old
-                    clutter, just a fast-moving window into what matters now.
+                    Important claims are extracted and checked against live evidence.
+                    Each claim gets a verdict (verified, disputed, mixed, unverifiable)
+                    based on available sources. Sources are linked and visible.
                 </p>
             </div>
             <div class="docs__arch-card">
-                <h3>Transparent</h3>
+                <h3>Publish & Expire</h3>
                 <p>
-                    Every fact-check links back to its evidence and sources.
-                    You can see exactly why a claim was verified or disputed,
-                    no black box.
+                    Stories are published with grouped topics, source links, and
+                    fact-check badges. They remain live for 48 hours, then are
+                    automatically deleted. No archive, by design.
                 </p>
             </div>
         </div>
@@ -58,6 +54,13 @@
     <!-- Autonomous Operation Score -->
     <section class="docs__section">
         <h2 class="docs__heading">Autonomous Operation Score</h2>
+        <p>
+            This score measures how independently news48 operates without human intervention.
+            Each dimension reflects a key capability: self-starting (begins without prompting),
+            self-monitoring (detects problems), self-healing (fixes issues), self-scaling (handles load),
+            self-optimizing (improves over time), and error containment (prevents cascade failures).
+            A score of 5.0 means fully autonomous in that dimension.
+        </p>
         {% if assessment %}
         <div class="docs__score-card">
             <p class="docs__score-overall">
@@ -66,7 +69,8 @@
             </p>
             <p class="docs__score-level">{{ assessment.level }}</p>
             <p class="docs__score-meta">
-                {{ assessment.tier }} · {{ assessment.architecture }} · assessed {{ assessment.date }}
+                Tier {{ assessment.tier.replace('T', '') }} · Assessment {{ assessment.architecture }} · Assessed {{
+                assessment.date }}
             </p>
             <div class="docs__dim-bars">
                 {% set dim_keys = [
@@ -94,90 +98,6 @@
         {% endif %}
     </section>
 
-    <!-- Pipeline overview -->
-    <section class="docs__section">
-        <h2 class="docs__heading">How it works</h2>
-        <div class="docs__pipeline">
-            <div class="docs__step">
-                <div class="docs__step-num">1</div>
-                <div class="docs__step-body">
-                    <h3>Find</h3>
-                    <p>
-                        news48 pulls stories from selected feeds, keeps an eye on
-                        source quality, and fetches the full article even when a
-                        site makes that annoying.
-                    </p>
-                </div>
-            </div>
-            <div class="docs__step">
-                <div class="docs__step-num">2</div>
-                <div class="docs__step-body">
-                    <h3>Clean</h3>
-                    <p>
-                        It turns messy source pages into clean, readable article
-                        pages with summaries, topics, tags, and less noise.
-                    </p>
-                </div>
-            </div>
-            <div class="docs__step">
-                <div class="docs__step-num">3</div>
-                <div class="docs__step-body">
-                    <h3>Check</h3>
-                    <p>
-                        Important claims are pulled out and checked against live
-                        web evidence, then labeled as verified, disputed, mixed,
-                        or still unclear.
-                    </p>
-                </div>
-            </div>
-            <div class="docs__step">
-                <div class="docs__step-num">4</div>
-                <div class="docs__step-body">
-                    <h3>Publish, then vanish</h3>
-                    <p>
-                        Stories appear with source links, fact-check badges, and
-                        grouped topics. Then the whole thing forgets them on
-                        purpose after 48 hours.
-                    </p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Why people like it -->
-    <section class="docs__section">
-        <h2 class="docs__heading">Why it works</h2>
-        <div class="docs__arch-grid">
-            <div class="docs__arch-card">
-                <h3>Less sludge</h3>
-                <p>
-                    Similar stories are clustered together, so you get fewer
-                    duplicate headlines pretending to be different news.
-                </p>
-            </div>
-            <div class="docs__arch-card">
-                <h3>More signal</h3>
-                <p>
-                    Source links stay visible, summaries stay short, and claim
-                    checks make the page more useful than a simple repost.
-                </p>
-            </div>
-            <div class="docs__arch-card">
-                <h3>Short memory</h3>
-                <p>
-                    The 48-hour window keeps the experience fresh. No endless
-                    archive, no stale junk pile, no pretending old news is new.
-                </p>
-            </div>
-            <div class="docs__arch-card">
-                <h3>Actually useful</h3>
-                <p>
-                    It is built for people who want a quick read, and for tools
-                    that want structured news through MCP.
-                </p>
-            </div>
-        </div>
-    </section>
 
     <!-- MCP Integration -->
     <section class="docs__section" id="mcp">
@@ -190,57 +110,30 @@
             available:
         </p>
 
-        <!-- Local MCP -->
+        <!-- Remote MCP (Docker / Production) -->
         <div class="docs__mcp-mode">
-            <h3>Local (stdio)</h3>
+            <h3>Remote (HTTP) — Self-Hosted Production</h3>
             <p>
-                The local server runs as a subprocess. It is the easiest option
-                for desktop AI tools and gives full access to local news48
-                data. Add this to your MCP client config:
-            </p>
-            <div class="docs__code-block">
-                <div class="docs__code-header">
-                    <span>Claude Desktop / Cursor — <code>mcp_config.json</code></span>
-                </div>
-                <pre><code>{
-  "mcpServers": {
-    "news48": {
-      "command": "uv",
-      "args": ["run", "news48-mcp"],
-      "cwd": "/path/to/news48"
-    }
-  }
-}</code></pre>
-            </div>
-            <p class="docs__note">
-                No auth needed here. It runs locally and can see everything,
-                including articles that are still mid-pipeline.
-            </p>
-        </div>
-
-        <!-- Remote MCP -->
-        <div class="docs__mcp-mode">
-            <h3>Remote (Streamable HTTP)</h3>
-            <p>
-                The remote endpoint lives at <code>/mcp</code>. It uses a
-                Bearer token and returns fully parsed articles, ready for tools
-                that connect over the network.
+                The MCP endpoint runs inside your Docker container and is accessible via HTTP.
+                It uses Bearer token authentication and returns fully parsed articles ready for AI tools to browse.
             </p>
 
             <h4>1. Generate an API Key</h4>
+            <p>From your project directory where docker-compose.yml lives:</p>
             <div class="docs__code-block">
                 <div class="docs__code-header">
-                    <span>CLI</span>
+                    <span>Docker</span>
                 </div>
-                <pre><code>news48 mcp create-key --label "my-assistant"</code></pre>
+                <pre><code>docker compose exec dramatiq-worker news48 mcp create-key --label "my-assistant"</code></pre>
             </div>
             <p>
-                This prints a key like <code>n48-abc123...</code>. Save it when
-                you see it. Later, you can rotate or revoke it, but not recover
-                the original value.
+                This prints a key like <code>n48-abc123...</code>. Save it—you cannot recover it later.
+                You can create multiple keys for different tools or revoke them at any time.
             </p>
 
             <h4>2. Configure Your MCP Client</h4>
+            <p>Replace <code>your-server-ip</code> with your server's IP or hostname, and <code>8000</code> with the
+                port where news48 is running (default: 8000).</p>
             <div class="docs__code-block">
                 <div class="docs__code-header">
                     <span>Claude Desktop / Cursor — <code>mcp_config.json</code></span>
@@ -248,7 +141,7 @@
                 <pre><code>{
   "mcpServers": {
     "news48": {
-      "url": "https://{{ mcp_domain }}/mcp",
+      "url": "http://your-server-ip:8000/mcp",
       "headers": {
         "Authorization": "Bearer n48-your-api-key-here"
       }
@@ -258,15 +151,12 @@
             </div>
 
             <h4>3. Manage Keys</h4>
+            <p>From your project directory:</p>
             <div class="docs__code-block">
                 <div class="docs__code-header">
-                    <span>CLI</span>
+                    <span>Docker</span>
                 </div>
-                <pre><code># List active keys
-news48 mcp list-keys
-
-# Revoke a key
-news48 mcp revoke-key n48-your-api-key-here</code></pre>
+                <pre><code>docker compose exec dramatiq-worker news48 mcp list-keys</code></pre>
             </div>
 
             <h4>Available Tools</h4>
@@ -305,36 +195,22 @@ news48 mcp revoke-key n48-your-api-key-here</code></pre>
 
     <!-- Self-hosting -->
     <section class="docs__section">
-        <h2 class="docs__heading">Run it yourself</h2>
+        <h2 class="docs__heading">Self-host on your hardware</h2>
         <p>
-            news48 is self-hosted, container-friendly, and built for people who
-            like owning their stack. Bring feeds, storage, an LLM, and a little
-            curiosity.
+            Deploy news48 in your own environment with Docker. Self-hosted means no data sent anywhere,
+            complete control over your feeds and content, and your own LLM integration.
+            The system runs autonomously—set your feeds, start the workers, and let it run.
         </p>
         <div class="docs__code-block">
             <div class="docs__code-header">
-                <span>Quick Start</span>
+                <span>Installation Script</span>
             </div>
-            <pre><code># Clone and configure
-git clone https://github.com/malvavisc0/news48.git
-cd news48
-cp .env.example .env   # Edit with your settings
-
-# Start everything
-docker compose up -d
-
-# Add feeds and generate an MCP key
-news48 feeds add https://feeds.bbci.co.uk/news/rss.xml
-news48 mcp create-key --label "my-key"
-
-# Open the web interface
-open http://localhost:8765</code></pre>
+            <pre><code>curl -fsSL https://raw.githubusercontent.com/malvavisc0/news48/master/scripts/install.sh | bash</code></pre>
         </div>
         <p>
-            The full stack includes storage, queues, search, anti-bot fetches,
-            the web app, workers, and optional local AI horsepower. Everything
-            is still purged after 48&nbsp;hours, because that is part of the
-            point.
+            The full stack runs independently: fetcher, parser, fact-checker, and scheduler all coordinated
+            via Redis message queues. Includes MySQL database, Redis cache, and local LLM integration via llama.cpp.
+            Everything older than 48 hours is deleted automatically—by design.
         </p>
     </section>
 

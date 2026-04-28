@@ -215,7 +215,7 @@ services:
       API_BASE: ${API_BASE}
       API_KEY: ${API_KEY}
       MODEL: ${MODEL}
-      CONTEXT_WINDOW: ${CONTEXT_WINDOW:-49152}
+      CONTEXT_WINDOW: ${CONTEXT_WINDOW:-131072}
       BYPARR_API_URL: ${BYPARR_API_URL:-http://byparr:8191/v1}
       SEARXNG_URL: ${SEARXNG_URL:-http://searxng:8080}
       SMTP_HOST: ${SMTP_HOST}
@@ -224,7 +224,7 @@ services:
       SMTP_PASS: ${SMTP_PASS}
       SMTP_FROM: ${SMTP_FROM}
       MONITOR_EMAIL_TO: ${MONITOR_EMAIL_TO}
-      PARSER_CONCURRENCY: ${PARSER_CONCURRENCY:-12}
+      PARSER_CONCURRENCY: ${PARSER_CONCURRENCY:-2}
     depends_on:
       redis:
         condition: service_healthy

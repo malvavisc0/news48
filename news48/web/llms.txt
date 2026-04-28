@@ -1,6 +1,6 @@
 # news48
 
-> news48 is a self-hosted autonomous news pipeline that ingests RSS/Atom feeds, downloads full article content with anti-bot bypass, parses unstructured HTML into structured data via LLM, fact-checks claims against external evidence, and purges stale data on a 48-hour retention window. Four self-learning AI agents run autonomously via Dramatiq + Periodiq scheduling, persisting lessons across runs to improve over time.
+> news48 is an autonomous news pipeline that ingests RSS/Atom feeds, downloads full article content with anti-bot bypass, parses unstructured HTML into structured data via LLM, fact-checks claims against external evidence, and purges stale data on a 48-hour retention window. Four self-learning AI agents run autonomously with no human intervention via Dramatiq + Periodiq scheduling, persisting lessons across runs to improve over time. Fully open source, usable via web interface, REST API, or MCP server.
 
 ## Pipeline
 

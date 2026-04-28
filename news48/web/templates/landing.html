@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}{{ seo.title if seo is defined and seo else 'news48 — Verified News That Disappears in 48 Hours' }}{%
+endblock %}
+
+{% block json_ld %}
+{% if seo is defined and seo and seo.json_ld %}
+{% for item in seo.json_ld %}
+<script type="application/ld+json">{{ item | tojson }}</script>
+{% endfor %}
+{% endif %}
+{% endblock %}
+
+{% block body_class %}page-landing{% endblock %}
+
+{% block content %}
+<header class="page-hero page-hero--home landing-hero" aria-labelledby="landing-title">
+    <h1 class="page-heading" id="landing-title">Fact-checked news, refreshed every 48 hours</h1>
+    <p class="tagline">news48 fetches your feeds, rewrites stories for clarity, checks claims against live evidence, and
+        removes everything after 48 hours. No subscription, no archives. Just relevant information, verified and ready.
+    </p>
+    <div class="landing-actions">
+        <a href="/live" class="landing-cta">Open Live Feed</a>
+        <a href="/docs" class="landing-secondary-cta">View Documentation</a>
+    </div>
+</header>
+
+<section class="section landing-preview" aria-labelledby="landing-preview-label">
+    <h2 class="section-label" id="landing-preview-label">live feed status</h2>
+    <div class="landing-preview__stats" aria-label="Live news status">
+        <span><span class="live-dot"></span><strong>{{ stats.live_stories }}</strong> stories live</span>
+        {% if stats.verified %}<span><strong>{{ stats.verified }}</strong> verified</span>{% endif %}
+        <span><strong>{{ stats.clusters }}</strong> active topics</span>
+        {% if stats.last_updated %}
+        <span>updated <strong>{{ stats.last_updated | relative_time }}</strong></span>
+        {% endif %}
+    </div>
+    <p class="landing-preview__copy">Browse the current 48-hour window. Stories are grouped by topic, verified with
+        sources visible, and automatically removed when their time expires.</p>
+    <div class="view-all-link landing-preview__link">
+        <a href="/live">view live feed</a>
+    </div>
+</section>
+
+<section class="section landing-features" aria-labelledby="landing-features-label">
+    <h2 class="section-label" id="landing-features-label">why it matters</h2>
+    <div class="landing-features__grid">
+        <div class="landing-feature">
+            <h3 class="landing-feature__title">Noise Reduction</h3>
+            <p class="landing-feature__copy">Similar stories grouped together. No duplicate headlines pretending to be
+                news. Just the core topics people are talking about.</p>
+        </div>
+        <div class="landing-feature">
+            <h3 class="landing-feature__title">Signal Boost</h3>
+            <p class="landing-feature__copy">Every claim linked to its sources. You see exactly why news48 verified or
+                disputed something. No black box decisions.</p>
+        </div>
+        <div class="landing-feature">
+            <h3 class="landing-feature__title">Fresh Start Daily</h3>
+            <p class="landing-feature__copy">Stories vanish after 48 hours. No endless archive of old noise. Just what's
+                happening now, when you need to know it.</p>
+        </div>
+    </div>
+</section>
+
+<section class="section landing-setup" aria-labelledby="landing-setup-label">
+    <h2 class="section-label" id="landing-setup-label">get started</h2>
+    <p class="landing-setup__copy">
+        Deploy your own news pipeline in minutes. No vendor lock-in, no data sent to third parties, no limits.
+        The system starts, schedules itself, and runs indefinitely on your hardware. Complete control. Full
+        transparency.
+        Everything refreshes autonomously, and everything older than 48 hours disappears by design.
+    </p>
+    <pre
+        class="landing-code-block"><code>curl -fsSL https://raw.githubusercontent.com/malvavisc0/news48/master/scripts/install.sh | bash</code></pre>
+</section>
+{% endblock %}

@@ -28,6 +28,7 @@ from ._routes import (
     category_detail,
     cluster_detail,
     homepage,
+    landing_page,
     monitor,
 )
 
@@ -89,6 +90,11 @@ def _site_url(request: Request) -> str:
 
 
 @app.get("/")
+async def landing_page_route(request: Request):
+    return await landing_page(request, templates)
+
+
+@app.get("/live")
 async def homepage_route(
     request: Request,
     sentiment: str | None = Query(
@@ -144,7 +150,7 @@ async def category_detail_route(
     )
 
 
-@app.get("/monitor")
+@app.get("/live/monitor")
 async def monitor_route(request: Request):
     return await monitor(request, templates)
 
@@ -192,6 +198,11 @@ async def sitemap(request: Request):
         {
             "canonical_url": build_canonical_url(site_url, "/"),
             "priority": "1.0",
+            "changefreq": "hourly",
+        },
+        {
+            "canonical_url": build_canonical_url(site_url, "/live"),
+            "priority": "0.9",
             "changefreq": "hourly",
         },
         {

@@ -54,7 +54,7 @@ async def monitor(request: Request, templates: Jinja2Templates):
             "Operational dashboard for system health, pipeline throughput, "
             "feed coverage, and retention status."
         ),
-        canonical_url=build_canonical_url(site_url, "/monitor"),
+        canonical_url=build_canonical_url(site_url, "/live/monitor"),
         robots="noindex,nofollow",
     )
     stats = collect_stats()
@@ -65,6 +65,32 @@ async def monitor(request: Request, templates: Jinja2Templates):
             "seo": seo,
             "stats": stats,
             "monitor_api_auth_hint": "Bearer token required for live refresh",
+        },
+    )
+
+
+async def landing_page(request: Request, templates: Jinja2Templates):
+    """Minimal landing page that funnels visitors to the live feed."""
+    from news48.core.database.articles import get_web_stats
+
+    stats = get_web_stats(hours=48, parsed=True)
+    site_url = _site_url(request)
+    canonical_url = build_canonical_url(site_url, "/")
+    seo = build_seo_meta(
+        title="news48 — Verified News That Disappears in 48 Hours",
+        description=(
+            "Self-hosted news pipeline that fetches feeds, fact-checks claims, "
+            "publishes summaries, and keeps everything on your server."
+        ),
+        canonical_url=canonical_url,
+    )
+    seo["json_ld"] = [build_website_schema(site_url)]
+    return templates.TemplateResponse(
+        request=request,
+        name="landing.html",
+        context={
+            "seo": seo,
+            "stats": stats,
         },
     )
 
@@ -99,7 +125,8 @@ async def homepage(
     max_cluster_count = max((c["article_count"] for c in clusters), default=10)
     site_url = _site_url(request)
     seo = _default_meta(request, templates)
-    canonical_url = _seo_str(seo, "canonical_url")
+    canonical_url = build_canonical_url(site_url, "/live")
+    seo["canonical_url"] = canonical_url
     seo["json_ld"] = [
         build_website_schema(site_url),
         build_collection_schema(

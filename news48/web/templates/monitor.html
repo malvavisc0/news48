@@ -6,7 +6,7 @@
 {% block body_class %}page-monitor{% endblock %}
 
 {% block content %}
-<a class="back-link" href="/">← back to live feed</a>
+<a class="back-link" href="/live">← back to live feed</a>
 {% set articles = stats.articles %}
 {% set sentiment = stats.sentiment %}
 {% set feeds = stats.feeds %}
@@ -31,7 +31,7 @@
         <div class="monitor-hero__eyebrow">live dashboard</div>
         <div class="monitor-hero__heading-row">
             <div class="monitor-hero__copy">
-                <p class="site-mark monitor-site-mark"><a href="/">news48 monitor</a></p>
+                <p class="site-mark monitor-site-mark"><a href="/live">news48 monitor</a></p>
                 <h1 class="monitor-hero__title">Pipeline health & throughput, live.</h1>
                 <p class="monitor-hero__lede">Real-time numbers from every feed crawl, parse run, and retention sweep —
                     no caching, no staging.</p>

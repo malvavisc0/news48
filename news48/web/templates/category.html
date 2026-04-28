@@ -13,10 +13,10 @@
 {% block body_class %}page-category{% endblock %}
 
 {% block content %}
-<a class="back-link" href="/">← back to all stories</a>
+<a class="back-link" href="/all">← back to all stories</a>
 
 <header class="page-hero">
-    <h1 class="page-title">{% if fact_check_status %}{{ fact_check_status | title }} — {{ category_name }}{% else %}{{
+    <h1 class="page-heading">{% if fact_check_status %}{{ fact_check_status | title }} — {{ category_name }}{% else %}{{
         category_name }}{% endif %}</h1>
     <div class="tagline">{{ total }} stories{% if fact_check_status %}, verification: {{ fact_check_status }}{% else %}
         in {{ category_name }}, refreshed every 48 hours{% endif %}.</div>

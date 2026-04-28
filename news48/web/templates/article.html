@@ -13,10 +13,10 @@
 {% endblock %}
 
 {% block content %}
-<a class="back-link" href="/">← back to live feed</a>
+<a class="back-link" href="/live">← back to live feed</a>
 <article class="article-shell">
     <header class="page-hero page-hero--article">
-        <h2 class="headline">{{ article.title }}</h2>
+        <h1 class="headline">{{ article.title }}</h1>
         {% if article.summary %}
         <p class="standfirst">{{ article.summary }}</p>
         {% endif %}
