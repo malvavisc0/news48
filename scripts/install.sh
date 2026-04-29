@@ -179,13 +179,12 @@ else
     warn "Failed to download .env.example (optional)"
 fi
 
-# Download searxng/settings.yml (required)
-printf "  ⏳ ${BOLD}searxng/settings.yml${RESET} ... "
-if mkdir -p "$INSTALL_DIR/searxng" && curl -fsSL -o "$INSTALL_DIR/searxng/settings.yml" "$REPO_URL/searxng/settings.yml"; then
+# Download seed.txt (required — populates initial feeds)
+printf "  ⏳ ${BOLD}seed.txt${RESET} ... "
+if curl -fsSL -o "$INSTALL_DIR/seed.txt" "$REPO_URL/seed.txt"; then
     success "Downloaded"
 else
-    error "Failed to download searxng/settings.yml (required)"
-    exit 1
+    warn "Failed to download seed.txt (optional — feeds must be added manually)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -266,10 +265,23 @@ printf "  ${BOLD}Monitor API:${RESET}  http://localhost:8000/live/monitor\n"
 printf "  ${BOLD}Docker logs:${RESET}  docker compose logs -f\n"
 printf "  ${BOLD}Update:${RESET}       cd $INSTALL_DIR && docker compose pull && docker compose up -d\n"
 
+# Seed the database if seed.txt was downloaded
+if [[ -f "$INSTALL_DIR/seed.txt" ]]; then
+    printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
+    printf "${BOLD}🌱  Seeding database${RESET}\n"
+    printf "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n\n"
+    info "Seeding database with initial feeds from seed.txt..."
+    cd "$INSTALL_DIR"
+    if docker compose exec -T web news48 seed < seed.txt; then
+        success "Database seeded successfully"
+    else
+        warn "Database seeding failed (feeds can be added manually later)"
+    fi
+fi
+
 printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
 printf "${BOLD}Next steps:${RESET}\n"
 printf "  1. Open http://localhost:8000 in your browser\n"
-printf "  2. Configure your feeds: docker compose exec web news48 feeds add <url>\n"
-printf "  3. Start fetching: docker compose exec web news48 fetch\n"
-printf "  4. Monitor: docker compose logs -f\n"
+printf "  2. Start fetching: docker compose exec web news48 fetch\n"
+printf "  3. Monitor: docker compose logs -f\n"
 printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
