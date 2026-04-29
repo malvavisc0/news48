@@ -1,10 +1,10 @@
+https://api.axios.com/feed/
 https://feeds.bbci.co.uk/news/world/rss.xml
-https://www.theguardian.com/world/rss
-https://www.aljazeera.com/xml/rss/all.xml
-https://thenextweb.com/feed
-https://warontherocks.com/feed/
-https://feeds.feedburner.com/TheHackersNews
 https://huggingface.co/blog/feed.xml
+https://news.antiwar.com/feed/
 https://rss.dw.com/rdf/rss-en-all
 https://thefederalist.com/feed/
-https://news.antiwar.com/feed/
+https://thenextweb.com/feed
+https://warontherocks.com/feed/
+https://www.aljazeera.com/xml/rss/all.xml
+https://www.theguardian.com/world/rss
