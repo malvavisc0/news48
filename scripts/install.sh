@@ -270,6 +270,16 @@ else
     exit 1
 fi
 
+# Create docker-compose.override.yml to expose the web port on the host
+printf "  ⏳ ${BOLD}docker-compose.override.yml (port mapping)${RESET} ... "
+cat > "$INSTALL_DIR/docker-compose.override.yml" <<'OVERRIDE'
+services:
+  web:
+    ports:
+      - "8000:8000"
+OVERRIDE
+success "Created (web on port 8000)"
+
 # ---------------------------------------------------------------------------
 # Configure .env
 # ---------------------------------------------------------------------------
@@ -411,4 +421,13 @@ else
     printf "  5. Start fetching: docker compose exec web news48 fetch\n"
     printf "  6. Monitor: docker compose logs -f\n"
 fi
+printf "\n"
+printf "${BOLD}Port mapping:${RESET}\n"
+printf "  The web UI is exposed on port 8000 via docker-compose.override.yml.\n"
+printf "  To change the port, edit $INSTALL_DIR/docker-compose.override.yml:\n"
+printf "    services:\n"
+printf "      web:\n"
+printf "        ports:\n"
+printf "          - \"YOUR_PORT:8000\"\n"
+printf "  Then restart: cd $INSTALL_DIR && docker compose up -d\n"
 printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
