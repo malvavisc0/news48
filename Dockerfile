@@ -11,9 +11,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Copy dependency files for layer caching
 COPY pyproject.toml uv.lock ./
 
-# Install web + cli extra dependencies (no dev, no project install)
-# cli extra needed because web app imports parser module for stats/monitor
-RUN uv sync --frozen --no-dev --extra all --no-install-project
+# Install web extra dependencies (no dev, no project install)
+RUN uv sync --frozen --no-dev --extra web --no-install-project
 
 # =============================================================================
 # Stage 2: worker-builder — Install ALL project dependencies (no dev)

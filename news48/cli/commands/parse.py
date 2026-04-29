@@ -6,8 +6,8 @@ import os
 
 import typer
 
-from news48.core.agents import run_parser
 from news48.core.agents.parser import _get_temp_file_path
+from news48.core.agents.parser import run as run_parser
 from news48.core.database import (
     claim_articles_for_processing,
     clear_article_processing_claim,
@@ -51,7 +51,8 @@ async def _parse(article_id: int, *, force: bool = False) -> dict:
         return {
             "id": article_id,
             "success": False,
-            "error": f"Article {article_id} has no content. " "Download it first.",
+            "error": f"Article {article_id} has no content. "
+            "Download it first.",
         }
     if article.get("parsed_at") and not force:
         return {
@@ -130,7 +131,9 @@ async def _parse(article_id: int, *, force: bool = False) -> dict:
             }
 
         # Agent truly did nothing — no update, no explicit failure
-        error = (agent_response or "").strip() or "Agent did not update article"
+        error = (
+            agent_response or ""
+        ).strip() or "Agent did not update article"
         status_msg(f"  Parse failed: {error}")
         mark_article_parse_failed(article["id"], error)
         return {
