@@ -1,0 +1,198 @@
+# =============================================================================
+# Production deployment — external LLM (no GPU needed)
+# =============================================================================
+# Use this instead of docker-compose.yml when deploying with an external LLM
+# API (OpenAI, Groq, Ollama, etc.). No llamacpp/GPU services are included.
+#
+# Usage:
+#   cp docker-compose.no-llamacpp.yml docker-compose.yml
+#   docker compose up -d
+#
+# Set API_BASE in .env to point to your LLM endpoint:
+#   API_BASE=http://host:7070/v1          # host llama.cpp
+#   API_BASE=https://api.openai.com/v1    # OpenAI
+#   API_BASE=https://api.groq.com/openai/v1  # Groq
+#   API_BASE=http://host:11434/v1         # Ollama
+# =============================================================================
+
+services:
+  web:
+    restart: unless-stopped
+    image: ghcr.io/malvavisc0/news48:latest-web
+    entrypoint: [ "/app/scripts/docker-entrypoint.sh" ]
+    command: [ "uvicorn", "news48.web.app:app", "--host", "0.0.0.0", "--port", "8000" ]
+    volumes:
+      - ./data:/data
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      DATABASE_URL: mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
+      DATA_DIR: /data
+      REDIS_URL: redis://redis:6379/0
+      WEB_HOST: ${WEB_HOST:-0.0.0.0}
+      WEB_PORT: ${WEB_PORT:-8000}
+      WEB_WORKERS: ${WEB_WORKERS:-1}
+      WEB_LOG_LEVEL: ${WEB_LOG_LEVEL:-info}
+      WEB_RELOAD: ${WEB_RELOAD:-0}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    networks:
+      - news48-net
+
+  mysql:
+    restart: unless-stopped
+    image: mysql:8.0
+    volumes:
+      - mysql-data:/var/lib/mysql
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-news48}
+      MYSQL_USER: ${MYSQL_USER:-news48}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-news48}
+    command: >
+      --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --innodb-ft-min-token-size=2
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - news48-net
+
+  # One-shot init container that runs Alembic migrations exactly once.
+  db-migrate:
+    image: ghcr.io/malvavisc0/news48:latest-worker
+    entrypoint: [ "/app/scripts/docker-entrypoint.sh" ]
+    command: [ "alembic", "upgrade", "head" ]
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      DATABASE_URL: mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - news48-net
+
+  searxng:
+    restart: unless-stopped
+    image: searxng/searxng:latest
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-changeme}
+      SEARXNG_BASE_URL: http://searxng:8080/
+    networks:
+      - news48-net
+
+  byparr:
+    restart: unless-stopped
+    image: ghcr.io/thephaseless/byparr:main
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+    networks:
+      - news48-net
+
+  dozzle:
+    restart: unless-stopped
+    image: amir20/dozzle:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dozzle-data:/data
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      DOZZLE_ENABLE_ACTIONS: "false"
+      DOZZLE_ENABLE_SHELL: "false"
+    networks:
+      - news48-net
+
+  redis:
+    restart: unless-stopped
+    image: redis/redis-stack:latest
+    volumes:
+      - redis-data:/data
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      REDIS_ARGS: --save 60 1000 --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - news48-net
+
+  # Dramatiq worker — consumes task queues and executes agents.
+  dramatiq-worker:
+    restart: unless-stopped
+    image: ghcr.io/malvavisc0/news48:latest-worker
+    entrypoint: [ "/app/scripts/docker-entrypoint.sh" ]
+    command: [ "dramatiq", "news48.core.agents.actors", "--processes", "1", "--threads", "8" ]
+    volumes:
+      - ./data:/data
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      DATABASE_URL: mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
+      DATA_DIR: /data
+      REDIS_URL: redis://redis:6379/0
+      API_BASE: ${API_BASE}
+      API_KEY: ${API_KEY}
+      MODEL: ${MODEL}
+      CONTEXT_WINDOW: ${CONTEXT_WINDOW:-131072}
+      BYPARR_API_URL: ${BYPARR_API_URL:-http://byparr:8191/v1}
+      SEARXNG_URL: ${SEARXNG_URL:-http://searxng:8080}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM}
+      MONITOR_EMAIL_TO: ${MONITOR_EMAIL_TO}
+      PARSER_CONCURRENCY: ${PARSER_CONCURRENCY:-2}
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    networks:
+      - news48-net
+
+  # Periodiq scheduler — enqueues periodic tasks to Redis queues.
+  periodiq-scheduler:
+    restart: unless-stopped
+    image: ghcr.io/malvavisc0/news48:latest-worker
+    entrypoint: [ "/app/scripts/docker-entrypoint.sh" ]
+    command: [ "periodiq", "news48.core.agents.actors" ]
+    volumes:
+      - ./data:/data
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      DATABASE_URL: mysql+mysqlconnector://${MYSQL_USER:-news48}:${MYSQL_PASSWORD:-news48}@mysql:3306/${MYSQL_DATABASE:-news48}
+      DATA_DIR: /data
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    networks:
+      - news48-net
+
+volumes:
+  mysql-data:
+  dozzle-data:
+  redis-data:
+
+networks:
+  news48-net:
+    driver: bridge

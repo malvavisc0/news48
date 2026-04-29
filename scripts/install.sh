@@ -161,51 +161,8 @@ else
     mkdir -p "$INSTALL_DIR"
 fi
 
-# Download docker-compose.yml
-printf "\n${BOLD}Downloading files...${RESET}\n"
-printf "  ⏳ ${BOLD}docker-compose.yml${RESET} ... "
-if curl -fsSL -o "$INSTALL_DIR/docker-compose.yml" "$REPO_URL/docker-compose.yml"; then
-    success "Downloaded"
-else
-    error "Failed to download docker-compose.yml"
-    exit 1
-fi
-
-# Download .env.example
-printf "  ⏳ ${BOLD}.env.example${RESET} ... "
-if curl -fsSL -o "$INSTALL_DIR/.env.example" "$REPO_URL/.env.example"; then
-    success "Downloaded"
-else
-    warn "Failed to download .env.example (optional)"
-fi
-
-# Download docker-compose.external-llm.yml (required for external LLM deployments)
-printf "  ⏳ ${BOLD}docker-compose.external-llm.yml${RESET} ... "
-if curl -fsSL -o "$INSTALL_DIR/docker-compose.external-llm.yml" "$REPO_URL/docker-compose.external-llm.yml"; then
-    success "Downloaded"
-else
-    warn "Failed to download external LLM override (optional)"
-fi
-
-# Download seed.txt (required — populates initial feeds)
-printf "  ⏳ ${BOLD}seed.txt${RESET} ... "
-if curl -fsSL -o "$INSTALL_DIR/seed.txt" "$REPO_URL/seed.txt"; then
-    success "Downloaded"
-else
-    warn "Failed to download seed.txt (optional — feeds must be added manually)"
-fi
-
-# Download searxng/settings.yml (required)
-printf "  ⏳ ${BOLD}searxng/settings.yml${RESET} ... "
-if mkdir -p "$INSTALL_DIR/searxng" && curl -fsSL -o "$INSTALL_DIR/searxng/settings.yml" "$REPO_URL/searxng/settings.yml"; then
-    success "Downloaded"
-else
-    error "Failed to download searxng/settings.yml (required)"
-    exit 1
-fi
-
 # ---------------------------------------------------------------------------
-# Choose LLM deployment mode
+# Choose LLM deployment mode (MUST come before docker-compose.yml download)
 # ---------------------------------------------------------------------------
 printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
 printf "${BOLD}🤖  LLM Deployment Mode${RESET}\n"
@@ -232,6 +189,51 @@ fi
 # Save mode to .deploy file for update.sh to read
 printf "%s\n" "$LLM_MODE" > "$INSTALL_DIR/.deploy"
 info "LLM mode: $LLM_MODE (saved to .deploy)"
+
+# Download the right docker-compose.yml for the chosen mode
+printf "\n${BOLD}Downloading files...${RESET}\n"
+if [[ "$LLM_MODE" == "external" ]]; then
+    info "Using external LLM mode (llamacpp services excluded)"
+    printf "  ⏳ ${BOLD}docker-compose.yml (no-llamacpp version)${RESET} ... "
+    if curl -fsSL -o "$INSTALL_DIR/docker-compose.yml" "$REPO_URL/docker-compose.no-llamacpp.yml"; then
+        success "Downloaded"
+    else
+        error "Failed to download docker-compose.no-llamacpp.yml"
+        exit 1
+    fi
+else
+    info "Using local LLM mode (llamacpp services included, requires GPU)"
+    printf "  ⏳ ${BOLD}docker-compose.yml (with llamacpp)${RESET} ... "
+    if curl -fsSL -o "$INSTALL_DIR/docker-compose.yml" "$REPO_URL/docker-compose.yml"; then
+        success "Downloaded"
+    else
+        error "Failed to download docker-compose.yml"
+        exit 1
+    fi
+fi
+
+# Download remaining files
+printf "  ⏳ ${BOLD}.env.example${RESET} ... "
+if curl -fsSL -o "$INSTALL_DIR/.env.example" "$REPO_URL/.env.example"; then
+    success "Downloaded"
+else
+    warn "Failed to download .env.example (optional)"
+fi
+
+printf "  ⏳ ${BOLD}seed.txt${RESET} ... "
+if curl -fsSL -o "$INSTALL_DIR/seed.txt" "$REPO_URL/seed.txt"; then
+    success "Downloaded"
+else
+    warn "Failed to download seed.txt (optional — feeds must be added manually)"
+fi
+
+printf "  ⏳ ${BOLD}searxng/settings.yml${RESET} ... "
+if mkdir -p "$INSTALL_DIR/searxng" && curl -fsSL -o "$INSTALL_DIR/searxng/settings.yml" "$REPO_URL/searxng/settings.yml"; then
+    success "Downloaded"
+else
+    error "Failed to download searxng/settings.yml (required)"
+    exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # Configure .env
@@ -291,21 +293,12 @@ printf "${BOLD}━━━━━━━━━━━━━━━━━━━━━�
 
 cd "$INSTALL_DIR"
 
-# Build docker compose command based on LLM mode
-if [[ "$LLM_MODE" == "external" ]]; then
-    info "Using external LLM mode (llamacpp skipped)"
-    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.external-llm.yml"
-else
-    info "Using local LLM mode (llamacpp will download model)"
-    COMPOSE_FILES="-f docker-compose.yml"
-fi
-
 printf "  ⏳ ${BOLD}Pulling Docker images...${RESET}\n"
-docker compose $COMPOSE_FILES pull
+docker compose pull
 success "Images pulled"
 
 printf "\n  ⏳ ${BOLD}Starting services...${RESET}\n"
-docker compose $COMPOSE_FILES up -d
+docker compose up -d
 success "Services started"
 
 # ---------------------------------------------------------------------------
@@ -320,12 +313,7 @@ printf "  ${BOLD}LLM mode:${RESET}      $LLM_MODE\n"
 printf "  ${BOLD}Web UI:${RESET}         http://localhost:8000\n"
 printf "  ${BOLD}Monitor API:${RESET}    http://localhost:8000/live/monitor\n"
 printf "  ${BOLD}Docker logs:${RESET}    docker compose logs -f\n"
-
-if [[ "$LLM_MODE" == "external" ]]; then
-    printf "  ${BOLD}Update:${RESET}         cd $INSTALL_DIR && docker compose -f docker-compose.yml -f docker-compose.external-llm.yml pull && docker compose -f docker-compose.yml -f docker-compose.external-llm.yml up -d\n"
-else
-    printf "  ${BOLD}Update:${RESET}         cd $INSTALL_DIR && docker compose pull && docker compose up -d\n"
-fi
+printf "  ${BOLD}Update:${RESET}         cd $INSTALL_DIR && ./scripts/update.sh\n"
 
 # Seed the database if seed.txt was downloaded
 if [[ -f "$INSTALL_DIR/seed.txt" ]]; then
@@ -350,9 +338,8 @@ printf "${BOLD}Next steps:${RESET}\n"
 if [[ "$LLM_MODE" == "external" ]]; then
     printf "  1. Open http://localhost:8000 in your browser\n"
     printf "  2. Set API_BASE in .env to your LLM endpoint\n"
-    printf "  3. Restart workers: docker compose -f docker-compose.yml -f docker-compose.external-llm.yml restart\n"
-    printf "  4. Start fetching: docker compose exec web news48 fetch\n"
-    printf "  5. Monitor: docker compose logs -f\n"
+    printf "  3. Start fetching: docker compose exec web news48 fetch\n"
+    printf "  4. Monitor: docker compose logs -f\n"
 else
     printf "  1. Wait for model download to complete (may take minutes)\n"
     printf "  2. Open http://localhost:8000 in your browser\n"
