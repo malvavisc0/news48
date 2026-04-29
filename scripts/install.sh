@@ -370,17 +370,29 @@ if [[ -f "$INSTALL_DIR/seed.txt" ]]; then
     printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
     printf "${BOLD}🌱  Seeding database${RESET}\n"
     printf "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n\n"
-    info "Seeding database with initial feeds from seed.txt..."
-    cd "$INSTALL_DIR"
-    # Copy seed.txt into the web container for the seed command
-    if docker cp seed.txt web:/tmp/seed.txt && \
-       docker compose exec -T web news48 seed /tmp/seed.txt; then
-        success "Database seeded successfully"
+
+    info "Waiting for web service to be ready..."
+    SEED_READY=false
+    for i in $(seq 1 30); do
+        if docker compose exec -T web true 2>/dev/null; then
+            SEED_READY=true
+            break
+        fi
+        sleep 2
+    done
+
+    if [[ "$SEED_READY" == "true" ]]; then
+        info "Seeding database with initial feeds from seed.txt..."
+        docker compose cp seed.txt web:/tmp/seed.txt
+        if docker compose exec -T web news48 seed /tmp/seed.txt; then
+            success "Database seeded successfully"
+        else
+            warn "Database seeding failed (feeds can be added manually later)"
+        fi
+        docker compose exec -T web rm -f /tmp/seed.txt 2>/dev/null || true
     else
-        warn "Database seeding failed (feeds can be added manually later)"
+        warn "Web service not ready after 60s — skipping seeding (run manually later)"
     fi
-    # Clean up the file inside the container
-    docker exec web rm -f /tmp/seed.txt 2>/dev/null || true
 fi
 
 printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
