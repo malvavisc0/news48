@@ -303,8 +303,8 @@ if grep -q "^MYSQL_ROOT_PASSWORD=CHANGE_ME" "$ENV_FILE" 2>/dev/null; then
     info "Generating random MySQL password..."
     MYSQL_PASS=$(openssl rand -base64 24)
     MYSQL_ROOT_PASS=$(openssl rand -base64 24)
-    sed -i "s/^MYSQL_ROOT_PASSWORD=.*/MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASS/" "$ENV_FILE"
-    sed -i "s/^MYSQL_PASSWORD=.*/MYSQL_PASSWORD=$MYSQL_PASS/" "$ENV_FILE"
+    sed -i "s|^MYSQL_ROOT_PASSWORD=.*|MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASS|" "$ENV_FILE"
+    sed -i "s|^MYSQL_PASSWORD=.*|MYSQL_PASSWORD=$MYSQL_PASS|" "$ENV_FILE"
     # Also update DATABASE_URL if it still contains the placeholder password
     sed -i "s|CHANGE_ME_mysql_password|$MYSQL_PASS|" "$ENV_FILE"
     success "MySQL credentials generated"
