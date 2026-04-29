@@ -272,11 +272,15 @@ if [[ -f "$INSTALL_DIR/seed.txt" ]]; then
     printf "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n\n"
     info "Seeding database with initial feeds from seed.txt..."
     cd "$INSTALL_DIR"
-    if docker compose exec -T web news48 seed < seed.txt; then
+    # Copy seed.txt into the web container for the seed command
+    if docker cp seed.txt web:/tmp/seed.txt && \
+       docker compose exec -T web news48 seed /tmp/seed.txt; then
         success "Database seeded successfully"
     else
         warn "Database seeding failed (feeds can be added manually later)"
     fi
+    # Clean up the file inside the container
+    docker exec web rm -f /tmp/seed.txt 2>/dev/null || true
 fi
 
 printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
