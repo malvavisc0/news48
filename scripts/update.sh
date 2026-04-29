@@ -3,6 +3,7 @@
 # news48 — Update script for existing installations
 # =============================================================================
 # Pulls the latest Docker images from ghcr.io and restarts affected services.
+# No source code is needed — images are pre-built by GitHub Actions.
 #
 # Usage:
 #   ./scripts/update.sh              # Update all services

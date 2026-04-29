@@ -1,10 +1,14 @@
+# =============================================================================
+# Production deployment — pulls pre-built images from ghcr.io
+# =============================================================================
+# For local development, use: docker compose -f docker-compose.yml -f docker-compose.override.yml up
+# This automatically applies build: overrides from docker-compose.override.yml
+# =============================================================================
+
 services:
   web:
     restart: unless-stopped
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: web
+    image: ghcr.io/malvavisc0/news48:latest-web
     entrypoint: [ "/app/scripts/docker-entrypoint.sh" ]
     command: [ "uvicorn", "news48.web.app:app", "--host", "0.0.0.0", "--port", "8000" ]
     volumes:
@@ -61,10 +65,7 @@ services:
   # One-shot init container that runs Alembic migrations exactly once.
   # Prevents race conditions when multiple services start concurrently.
   db-migrate:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: worker
+    image: ghcr.io/malvavisc0/news48:latest-worker
     entrypoint: [ "/app/scripts/docker-entrypoint.sh" ]
     command: [ "alembic", "upgrade", "head" ]
     environment:
@@ -198,10 +199,7 @@ services:
   # Dramatiq worker — consumes task queues and executes agents.
   dramatiq-worker:
     restart: unless-stopped
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: worker
+    image: ghcr.io/malvavisc0/news48:latest-worker
     entrypoint: [ "/app/scripts/docker-entrypoint.sh" ]
     command: [ "dramatiq", "news48.core.agents.actors", "--processes", "1", "--threads", "8" ]
     volumes:
@@ -239,10 +237,7 @@ services:
   # Periodiq scheduler — enqueues periodic tasks to Redis queues.
   periodiq-scheduler:
     restart: unless-stopped
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: worker
+    image: ghcr.io/malvavisc0/news48:latest-worker
     entrypoint: [ "/app/scripts/docker-entrypoint.sh" ]
     command: [ "periodiq", "news48.core.agents.actors" ]
     volumes:
