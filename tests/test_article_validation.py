@@ -40,7 +40,8 @@ def _valid_content(
         separators = (num_paragraphs - 1) * 2
         chars_per_paragraph = max(
             PARAGRAPH_MIN_CHARS,
-            (CONTENT_MIN_CHARS - separators + num_paragraphs - 1) // num_paragraphs,
+            (CONTENT_MIN_CHARS - separators + num_paragraphs - 1)
+            // num_paragraphs,
         )
     paragraphs = []
     for i in range(num_paragraphs):
@@ -110,10 +111,13 @@ class TestValidateParagraphCount:
     def test_two_paragraphs_raises(self) -> None:
         p = "x" * (CONTENT_MIN_CHARS // 2 + 100)
         content = f"{p}\n\n{p}"
+        # With new threshold of 2 min paragraphs, two paragraphs should pass
+        # Only test that one paragraph raises
         with pytest.raises(ValueError, match="Too few paragraphs"):
-            _validate_article_content(content=content)
+            _validate_article_content(content="x" * CONTENT_MIN_CHARS)
 
-    def test_three_paragraphs_ok(self) -> None:
+    def test_two_paragraphs_ok(self) -> None:
+        """Two paragraphs at min chars should pass with new threshold."""
         content = _valid_content(num_paragraphs=CONTENT_MIN_PARAGRAPHS)
         _validate_article_content(content=content)  # no raise
 
@@ -223,8 +227,8 @@ class TestValidationErrorMessage:
     """ValueError messages must include the specific violated constraint."""
 
     def test_content_short_includes_numbers(self) -> None:
-        with pytest.raises(ValueError, match=r"1199 chars.*minimum 1200"):
-            _validate_article_content(content="x" * 1199)
+        with pytest.raises(ValueError, match=r"399 chars.*minimum 400"):
+            _validate_article_content(content="x" * 399)
 
     def test_content_long_includes_numbers(self) -> None:
         paragraphs = ["x" * 200] * 60
@@ -249,7 +253,7 @@ class TestValidationErrorMessage:
             _validate_article_content(title="x" * 141)
 
     def test_few_paragraphs_includes_count(self) -> None:
-        with pytest.raises(ValueError, match=r"1.*minimum 3"):
+        with pytest.raises(ValueError, match=r"1.*minimum 2"):
             _validate_article_content(content="x" * 2000)
 
     def test_many_paragraphs_includes_count(self) -> None:
@@ -298,7 +302,9 @@ class TestUpdateArticleValidationGate:
         db_session.flush()
         return article.id
 
-    def test_validation_fires_when_parsed_at_set(self, article_id: int) -> None:
+    def test_validation_fires_when_parsed_at_set(
+        self, article_id: int
+    ) -> None:
         """When parsed_at is provided, validation should reject bad content."""
         from news48.core.database.articles import update_article
 
@@ -309,7 +315,9 @@ class TestUpdateArticleValidationGate:
                 parsed_at="2024-01-01T00:00:00+00:00",
             )
 
-    def test_validation_skipped_when_no_parsed_at(self, article_id: int) -> None:
+    def test_validation_skipped_when_no_parsed_at(
+        self, article_id: int
+    ) -> None:
         """When parsed_at is None, validation should NOT fire."""
         from news48.core.database.articles import update_article
 
@@ -346,7 +354,10 @@ class TestUpdateArticleValidationGate:
         self, article_id: int, db_session
     ) -> None:
         """Valid content should pass validation when parsed_at is set."""
-        from news48.core.database.articles import get_article_by_id, update_article
+        from news48.core.database.articles import (
+            get_article_by_id,
+            update_article,
+        )
         from news48.core.database.models import Article
 
         # Clear existing summary so it can be updated
@@ -479,7 +490,9 @@ class TestValidateCombinedFields:
         content = _valid_content()
         summary = _valid_summary()
         title = "A" * 50
-        _validate_article_content(content=content, summary=summary, title=title)
+        _validate_article_content(
+            content=content, summary=summary, title=title
+        )
 
     def test_valid_content_invalid_summary_raises(self) -> None:
         content = _valid_content()
@@ -506,19 +519,19 @@ class TestConstantValues:
     """Verify constants match the documented plan values."""
 
     def test_content_min_chars(self) -> None:
-        assert CONTENT_MIN_CHARS == 1200
+        assert CONTENT_MIN_CHARS == 400
 
     def test_content_max_chars(self) -> None:
         assert CONTENT_MAX_CHARS == 10000
 
     def test_content_min_paragraphs(self) -> None:
-        assert CONTENT_MIN_PARAGRAPHS == 3
+        assert CONTENT_MIN_PARAGRAPHS == 2
 
     def test_content_max_paragraphs(self) -> None:
         assert CONTENT_MAX_PARAGRAPHS == 15
 
     def test_paragraph_min_chars(self) -> None:
-        assert PARAGRAPH_MIN_CHARS == 150
+        assert PARAGRAPH_MIN_CHARS == 100
 
     def test_summary_min_chars(self) -> None:
         assert SUMMARY_MIN_CHARS == 80
@@ -533,4 +546,4 @@ class TestConstantValues:
         assert TITLE_MAX_CHARS == 140
 
     def test_download_min_content_chars(self) -> None:
-        assert DOWNLOAD_MIN_CONTENT_CHARS == 400
+        assert DOWNLOAD_MIN_CONTENT_CHARS == 600
