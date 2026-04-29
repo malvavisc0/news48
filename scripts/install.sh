@@ -161,6 +161,11 @@ else
     mkdir -p "$INSTALL_DIR"
 fi
 
+# Create data directory for persistent storage
+printf "  ⏳ ${BOLD}data/ (persistent storage)${RESET} ... "
+mkdir -p "$INSTALL_DIR/data"
+success "Created"
+
 # ---------------------------------------------------------------------------
 # Choose LLM deployment mode (MUST come before docker-compose.yml download)
 # ---------------------------------------------------------------------------
