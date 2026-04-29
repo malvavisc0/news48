@@ -11,8 +11,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Copy dependency files for layer caching
 COPY pyproject.toml uv.lock ./
 
-# Install web extra dependencies (no dev, no project install)
-RUN uv sync --frozen --no-dev --extra web --no-install-project
+# Install ALL dependencies — web app imports agents/tools which needs markdownify,
+# llama_index, and other cli extras. Clean web/worker split not feasible.
+RUN uv sync --frozen --no-dev --extra all --no-install-project
 
 # =============================================================================
 # Stage 2: worker-builder — Install ALL project dependencies (no dev)
