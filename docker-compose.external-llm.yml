@@ -9,20 +9,28 @@
 #   API_BASE=https://api.openai.com/v1    # OpenAI
 #   API_BASE=https://api.groq.com/openai/v1  # Groq
 #   API_BASE=http://host:11434/v1         # Ollama
+#
+# IMPORTANT: This override REPLACES llamacpp-init and llamacpp with no-op
+# containers. The deploy.resources.reservations.devices array must be
+# explicitly emptied because Docker Compose deep-merges nested objects
+# (deploy: {} alone does NOT clear nested GPU reservations).
 
 services:
   # No-op: skip model download (model is managed externally)
   llamacpp-init:
     image: busybox
-    entrypoint: [ "sh", "-c", "echo 'Skipping model download — using external LLM' && exit 0" ]
+    entrypoint: [ "sh", "-c", "echo 'Skipping model download — using external LLM'" ]
     volumes: []
     environment: []
-    deploy: {} # clear GPU reservation from base compose
+    deploy:
+      resources:
+        reservations:
+          devices: []
 
   # No-op: skip Docker llama.cpp server (using external LLM endpoint)
   llamacpp:
     image: busybox
-    entrypoint: [ "sh", "-c", "echo 'Skipping Docker llamacpp — using external LLM' && sleep infinity" ]
+    entrypoint: [ "sh", "-c", "sleep infinity" ]
     healthcheck:
       test: [ "CMD", "true" ]
       interval: 5s
@@ -31,7 +39,10 @@ services:
       start_period: 1s
     volumes: []
     environment: []
-    deploy: {} # clear GPU reservation from base compose
+    deploy:
+      resources:
+        reservations:
+          devices: []
     depends_on:
       llamacpp-init:
         condition: service_completed_successfully
