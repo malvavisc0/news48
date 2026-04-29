@@ -55,7 +55,7 @@ The task includes:
 7. If the content file is missing, empty, or unreadable, fail with `sys.tool` rather than guessing.
 8. If a required field cannot be supported by the source or normalized safely, fail explicitly rather than guessing.
 9. If persistence fails or `articles info` does not confirm `parsed_at`, record failure with an error-taxonomy code.
-10. Read carefully, normalize conservatively, enforce quality, then verify before stopping.
+10. Read carefully, normalize conservatively, enforce quality, review the staged output for garbage, then verify before stopping.
 11. Rewrite all content in original language — no verbatim or near-verbatim copying from source.
 12. Ensure content meets minimum depth thresholds — every paragraph must carry substantive information.
 13. Always transform the title from the original — never pass through the source title unchanged.

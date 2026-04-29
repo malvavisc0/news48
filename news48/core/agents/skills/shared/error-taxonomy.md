@@ -33,6 +33,9 @@ Error codes follow the pattern `category.detail` — a category prefix, a dot, a
 | `parse.verbatim_copy` | Verbatim copy | Content contains verbatim or near-verbatim passages from source |
 | `parse.shallow_content` | Shallow content | Content is too brief or lacks substantive depth (below 1200 chars or fewer than 3 substantive paragraphs) |
 | `parse.unchanged_title` | Unchanged title | Output title is identical or near-identical to source title |
+| `parse.meta_summary` | Meta summary | Summary starts with meta-references instead of substantive content |
+| `parse.navigation_artifacts` | Navigation artifacts | Summary or content contains UI/navigation prompts like "Continue reading", "Read more", etc. |
+| `parse.garbage_content` | Garbage content | Content contained embedded non-article garbage (menus, related articles, navigation, ads) and cleanup reduced it below quality thresholds |
 | `sys` | System | Infrastructure or tool failures |
 | `sys.db` | Database error | SQLite write contention, connection failure |
 | `sys.plan` | Plan error | Plan claim failure, stale plan, step transition error |
@@ -54,3 +57,6 @@ Error codes follow the pattern `category.detail` — a category prefix, a dot, a
 - `parse.shallow_content` — content below 1200 chars or fewer than 3 substantive paragraphs.
 - `parse.unchanged_title` — output title matches source title verbatim or with only trivial changes.
 - `parse.markdown_in_output` — markdown syntax detected in title, summary, or content.
+- `parse.garbage_content` — content contained embedded non-article garbage (menus, related articles, navigation, ads) that reduced content below quality thresholds after cleanup.
+- `parse.navigation_artifacts` — UI/navigation prompts detected in summary or content.
+- `parse.meta_summary` — summary starts with meta-references ("This article...", "This story...") instead of substantive content.

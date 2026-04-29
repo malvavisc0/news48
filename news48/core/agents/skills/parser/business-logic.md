@@ -19,8 +19,14 @@ flowchart TD
     TitleCheck -->|Yes| QualityGate{Quality gate<br/>checks pass?}
     QualityGate -->|No| Fail[/Emit PARSE_FAIL<br/>reason_code/]
     QualityGate -->|Yes| Stage[Write to /tmp/parsed_ID.txt]
-    Stage --> Update[news48 articles update<br/>--content-file]
+    Stage --> Review[Re-read staged file<br/>scan for garbage,<br/>verify all fields]
+    Review -->|garbage found| Clean[Strip garbage,<br/>re-check lengths]
+    Clean -->|below thresholds| FailGarbage[/Emit PARSE_FAIL<br/>parse.garbage_content/]
+    Clean -->|ok| ReStage[Re-stage cleaned<br/>content to /tmp]
+    ReStage --> Review
+    Review -->|clean| Update[news48 articles update<br/>--content-file]
     Update --> Success[/Emit PARSE_OK<br/>fields list/]
+    FailGarbage --> Stop
     Success --> Stop([Stop])
     FailCopy --> Stop
     FailDepth --> Stop
@@ -38,6 +44,7 @@ flowchart TD
 | `rewrite-content` | Fully original rewrite, 3+ paragraphs, 1200+ chars, no verbatim copying |
 | `enforce-quality` | Quality gate before update — originality, depth, title-change, fidelity checks |
 | `stage-file` | Write to /tmp, use --content-file |
+| `review-output` | Re-read staged file, scan for garbage (menus, related articles, navigation), verify all fields before persisting |
 | `verify-result` | Emit PARSE_OK or PARSE_FAIL, caller detects via parsed_at |
 
 ## Conditional Skills

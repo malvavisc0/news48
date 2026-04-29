@@ -70,6 +70,12 @@ If any quality gate or fidelity check fails:
 news48 articles fail ARTICLEID --error "parse.<reason_code>: Failed parser quality gate: <reason>" --json
 ```
 
+## Post-Write Review (Mandatory)
+
+After staging content to the temp file, the parser **must** re-read the staged file and actively scan for garbage before persisting. See `review-output` skill for the full procedure. This catches non-article content (menus, "related articles", navigation, ads, author bios, etc.) that may have slipped through the rewrite.
+
+The review pass is not optional — it is a mandatory quality gate between staging and persistence.
+
 ## Failure Reason Codes
 Must use codes from the canonical error taxonomy:
 
@@ -87,3 +93,4 @@ Must use codes from the canonical error taxonomy:
 | `parse.meta_summary` | Summary starts with meta-references instead of substantive content |
 | `parse.navigation_artifacts` | Summary or content contains UI/navigation prompts like "Continue reading", "Read more", etc. |
 | `parse.markdown_in_output` | Markdown syntax found in title, summary, or content (bold, italic, headings, lists, code, links, etc.) |
+| `parse.garbage_content` | Content contained embedded non-article garbage (menus, related articles, navigation, ads) and cleanup reduced it below quality thresholds |

@@ -42,6 +42,7 @@ files before an agent starts running.
     │   ├── rewrite-content.md
     │   ├── enforce-quality.md
     │   ├── stage-file.md
+    │   ├── review-output.md
     │   ├── verify-result.md
     │   ├── adapt-to-type.md
     │   └── report-failure.md
@@ -265,6 +266,12 @@ SKILL_REGISTRY: dict[str, SkillDef] = {
         agents=("parser",),
         always=True,
     ),
+    "review-output": SkillDef(
+        id="review-output",
+        file="parser/review-output.md",
+        agents=("parser",),
+        always=True,
+    ),
     "verify-result": SkillDef(
         id="verify-result",
         file="parser/verify-result.md",
@@ -453,7 +460,9 @@ def compose_agent_instructions(
     if base_prompt_path.exists():
         base_prompt = base_prompt_path.read_text(encoding="utf-8")
     else:
-        base_prompt = f"# {agent_name.capitalize()} Agent\n\n(No base prompt found.)"
+        base_prompt = (
+            f"# {agent_name.capitalize()} Agent\n\n(No base prompt found.)"
+        )
 
     if agent_name == "sentinel":
         if ctx.get("email_configured"):
