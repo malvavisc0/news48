@@ -23,6 +23,8 @@ services:
       dockerfile: Dockerfile
       target: web
     image: ""
+    ports:
+      - "8765:8000"
 
   db-migrate:
     build:

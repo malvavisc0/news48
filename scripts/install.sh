@@ -276,9 +276,9 @@ cat > "$INSTALL_DIR/docker-compose.override.yml" <<'OVERRIDE'
 services:
   web:
     ports:
-      - "8000:8000"
+      - "8765:8000"
 OVERRIDE
-success "Created (web on port 8000)"
+success "Created (web on port 8765)"
 
 # ---------------------------------------------------------------------------
 # Configure .env
@@ -370,8 +370,8 @@ printf "${BOLD}━━━━━━━━━━━━━━━━━━━━━�
 
 printf "  ${BOLD}Installed to:${RESET}  $INSTALL_DIR\n"
 printf "  ${BOLD}LLM mode:${RESET}      $LLM_MODE\n"
-printf "  ${BOLD}Web UI:${RESET}         http://localhost:8000\n"
-printf "  ${BOLD}Monitor API:${RESET}    http://localhost:8000/live/monitor\n"
+printf "  ${BOLD}Web UI:${RESET}         http://localhost:8765\n"
+printf "  ${BOLD}Monitor API:${RESET}    http://localhost:8765/live/monitor\n"
 printf "  ${BOLD}Docker logs:${RESET}    docker compose logs -f\n"
 printf "  ${BOLD}Update:${RESET}         cd $INSTALL_DIR && ./scripts/update.sh\n"
 
@@ -408,14 +408,14 @@ fi
 printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
 printf "${BOLD}Next steps:${RESET}\n"
 if [[ "$LLM_MODE" == "external" ]]; then
-    printf "  1. Open http://localhost:8000 in your browser\n"
+    printf "  1. Open http://localhost:8765 in your browser\n"
     printf "  2. Configure SMTP in .env for email alerts (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM)\n"
     printf "  3. Set MONITOR_EMAIL_TO in .env to receive alert notifications\n"
     printf "  4. Start fetching: docker compose exec web news48 fetch\n"
     printf "  5. Monitor: docker compose logs -f\n"
 else
     printf "  1. Wait for model download to complete (may take minutes)\n"
-    printf "  2. Open http://localhost:8000 in your browser\n"
+    printf "  2. Open http://localhost:8765 in your browser\n"
     printf "  3. Configure SMTP in .env for email alerts (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM)\n"
     printf "  4. Set MONITOR_EMAIL_TO in .env to receive alert notifications\n"
     printf "  5. Start fetching: docker compose exec web news48 fetch\n"
@@ -423,7 +423,7 @@ else
 fi
 printf "\n"
 printf "${BOLD}Port mapping:${RESET}\n"
-printf "  The web UI is exposed on port 8000 via docker-compose.override.yml.\n"
+printf "  The web UI is exposed on port 8765 via docker-compose.override.yml.\n"
 printf "  To change the port, edit $INSTALL_DIR/docker-compose.override.yml:\n"
 printf "    services:\n"
 printf "      web:\n"
