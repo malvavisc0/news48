@@ -89,10 +89,10 @@ printf "  ⏳ ${BOLD}curl${RESET} ... "
 if command -v curl &>/dev/null; then
     CURL_VERSION=$(curl --version 2>/dev/null | head -1)
     printf "${GREEN}✓${RESET} %s\n" "$CURL_VERSION"
-    ((CHECKS_PASSED++))
+    CHECKS_PASSED=$((CHECKS_PASSED + 1))
 else
     printf "${RED}✗${RESET} Not found\n"
-    ((CHECKS_FAILED++))
+    CHECKS_FAILED=$((CHECKS_FAILED + 1))
 fi
 
 # Check openssl
@@ -100,10 +100,10 @@ printf "  ⏳ ${BOLD}openssl${RESET} ... "
 if command -v openssl &>/dev/null; then
     OPENSSL_VERSION=$(openssl version 2>/dev/null | head -1)
     printf "${GREEN}✓${RESET} %s\n" "$OPENSSL_VERSION"
-    ((CHECKS_PASSED++))
+    CHECKS_PASSED=$((CHECKS_PASSED + 1))
 else
     printf "${RED}✗${RESET} Not found\n"
-    ((CHECKS_FAILED++))
+    CHECKS_FAILED=$((CHECKS_FAILED + 1))
 fi
 
 # Check git (optional but useful)
@@ -111,10 +111,10 @@ printf "  ⏳ ${BOLD}git${RESET} (optional) ... "
 if command -v git &>/dev/null; then
     GIT_VERSION=$(git --version 2>/dev/null)
     printf "${GREEN}✓${RESET} %s\n" "$GIT_VERSION"
-    ((CHECKS_PASSED++))
+    CHECKS_PASSED=$((CHECKS_PASSED + 1))
 else
     printf "${YELLOW}⊘${RESET} Not found (optional, not required)\n"
-    ((CHECKS_SKIPPED++))
+    CHECKS_SKIPPED=$((CHECKS_SKIPPED + 1))
 fi
 
 # Check Docker
@@ -122,7 +122,7 @@ printf "  ⏳ ${BOLD}docker${RESET} ... "
 if command -v docker &>/dev/null; then
     DOCKER_VERSION=$(docker --version 2>/dev/null)
     printf "${GREEN}✓${RESET} %s\n" "$DOCKER_VERSION"
-    ((CHECKS_PASSED++))
+    CHECKS_PASSED=$((CHECKS_PASSED + 1))
 else
     printf "${RED}✗${RESET} Not found\n"
     warn "Docker is required for news48."
@@ -135,8 +135,8 @@ else
         printf "  ⏳ ${BOLD}docker${RESET} ... "
         DOCKER_VERSION=$(docker --version 2>/dev/null)
         printf "${GREEN}✓${RESET} %s\n" "$DOCKER_VERSION"
-        ((CHECKS_PASSED++))
-        ((CHECKS_FAILED--))
+        CHECKS_PASSED=$((CHECKS_PASSED + 1))
+        CHECKS_FAILED=$((CHECKS_FAILED - 1))
     else
         error "Docker is required. Aborting."
         exit 1
@@ -147,10 +147,10 @@ fi
 printf "  ⏳ ${BOLD}docker daemon${RESET} ... "
 if docker info &>/dev/null; then
     printf "${GREEN}✓${RESET} Running\n"
-    ((CHECKS_PASSED++))
+    CHECKS_PASSED=$((CHECKS_PASSED + 1))
 else
     printf "${RED}✗${RESET} Not running\n"
-    ((CHECKS_FAILED++))
+    CHECKS_FAILED=$((CHECKS_FAILED + 1))
 fi
 
 # Check Docker Compose v2
@@ -158,10 +158,10 @@ printf "  ⏳ ${BOLD}docker compose${RESET} ... "
 if docker compose version &>/dev/null; then
     COMPOSE_VERSION=$(docker compose version --short 2>/dev/null || echo "unknown")
     printf "${GREEN}✓${RESET} v2 (version $COMPOSE_VERSION)\n"
-    ((CHECKS_PASSED++))
+    CHECKS_PASSED=$((CHECKS_PASSED + 1))
 else
     printf "${RED}✗${RESET} Not available\n"
-    ((CHECKS_FAILED++))
+    CHECKS_FAILED=$((CHECKS_FAILED + 1))
 fi
 
 printf "\n${BOLD}Requirements Summary:${RESET}\n"
