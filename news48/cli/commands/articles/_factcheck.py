@@ -143,8 +143,7 @@ def check_article(
             if article_url and article_url in sources:
                 sources = [s for s in sources if s != article_url]
                 logger.warning(
-                    "Filtered article's own URL from claim "
-                    "sources for article %s",
+                    "Filtered article's own URL from claim " "sources for article %s",
                     article["id"],
                 )
             # Accept multiple key names for claim text — LLMs
@@ -159,17 +158,13 @@ def check_article(
             normalized = {
                 "claim_text": claim_text,
                 "verdict": c.get("verdict", "unverifiable"),
-                "evidence_summary": c.get(
-                    "evidence_summary", c.get("evidence", "")
-                ),
+                "evidence_summary": c.get("evidence_summary", c.get("evidence", "")),
                 "sources": sources,
             }
             normalized_claims.append(normalized)
 
         # Filter out claims with empty text.
-        normalized_claims = [
-            c for c in normalized_claims if c["claim_text"].strip()
-        ]
+        normalized_claims = [c for c in normalized_claims if c["claim_text"].strip()]
         if not normalized_claims:
             clear_article_processing_claim(article["id"], owner=claim_owner)
             emit_error(
@@ -214,9 +209,7 @@ def check_article(
             return
 
         final_status = (
-            status.lower()
-            if status
-            else compute_overall_verdict(normalized_claims)
+            status.lower() if status else compute_overall_verdict(normalized_claims)
         )
     else:
         final_status = status.lower()
@@ -304,9 +297,7 @@ def article_claims(
         print(f"  ID: {article['id']}")
         print(f"  Total claims: {len(claims)}")
         if verdict_counts:
-            counts = ", ".join(
-                f"{v}: {c}" for v, c in sorted(verdict_counts.items())
-            )
+            counts = ", ".join(f"{v}: {c}" for v, c in sorted(verdict_counts.items()))
             print(f"  Verdicts: {counts}")
         print()
         for c in claims:

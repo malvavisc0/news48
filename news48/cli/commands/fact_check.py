@@ -14,9 +14,7 @@ fact_check_app = typer.Typer(help="Fact-check articles and view status.")
 
 @fact_check_app.command(name="run")
 def fact_check_run(
-    limit: int = typer.Option(
-        10, "--limit", "-l", help="Maximum articles to check"
-    ),
+    limit: int = typer.Option(10, "--limit", "-l", help="Maximum articles to check"),
     output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Fact-check articles that haven't been verified.
@@ -61,12 +59,8 @@ def fact_check_status(
     unchecked, unchecked_total = get_articles_paginated(
         limit=1, status="fact-unchecked"
     )
-    checked, checked_total = get_articles_paginated(
-        limit=1, status="fact-checked"
-    )
-    errors, errors_total = get_articles_paginated(
-        limit=1, status="fact-check-error"
-    )
+    checked, checked_total = get_articles_paginated(limit=1, status="fact-checked")
+    errors, errors_total = get_articles_paginated(limit=1, status="fact-check-error")
 
     # Per-verdict breakdown (only for actual verdicts, not errors)
     from news48.core.database.connection import SessionLocal

@@ -6,15 +6,15 @@ articles_app = typer.Typer(help="Manage articles in the database.")
 
 # Import sub-modules to register commands on articles_app
 from ._browse import article_countries  # noqa: E402
-from ._browse import (  # noqa: E402
+from ._browse import (
     article_categories,
-    article_related,
+    article_related,  # noqa: E402
     patch_missing_cmd,
 )
 from ._crud import article_info  # noqa: E402
-from ._crud import (  # noqa: E402
+from ._crud import (
     article_content,
-    delete_article_cmd,
+    delete_article_cmd,  # noqa: E402
     fail_article_cmd,
     list_articles,
     reset_article_cmd,

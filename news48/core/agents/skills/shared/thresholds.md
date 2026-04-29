@@ -15,6 +15,9 @@ Always active for sentinel agent — single source of truth for all health thres
 | Parse failure rate | 10% | 25% |
 | Malformed parsed articles | ≥ 1 | ≥ 10 |
 | Articles with missing fields | ≥ 5 | ≥ 20 |
+| Content validation violations (last 24h) | ≥ 3 | ≥ 10 |
+| Summary out-of-bounds rate (last 24h) | 5% | 15% |
+| Content out-of-bounds rate (last 24h) | 5% | 15% |
 | Articles older than 48h | present | 100+ |
 | Fact-check completions (24h) | 0 | 0 for >1 hour |
 | Oldest fact-unchecked article | >30 minutes | >2 hours |

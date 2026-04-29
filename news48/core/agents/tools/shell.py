@@ -180,9 +180,7 @@ def _prepare_shell_command(command: str) -> tuple[list[str], str]:
     return ["/bin/bash", "-lc", resolved_command], resolved_command
 
 
-def run_shell_command(
-    reason: str, command: str, timeout: Optional[int] = 120
-) -> str:
+def run_shell_command(reason: str, command: str, timeout: Optional[int] = 120) -> str:
     """Execute a shell command and return its output.
 
     ## When to Use
@@ -219,9 +217,7 @@ def run_shell_command(
     # Validate command before execution
     validation_error = _validate_command(command)
     if validation_error:
-        logger.warning(
-            "Blocked shell command: %s — %s", command, validation_error
-        )
+        logger.warning("Blocked shell command: %s — %s", command, validation_error)
         return _safe_json({"result": "", "error": validation_error})
 
     env_vars = dict(os.environ)

@@ -49,7 +49,7 @@ The following are proper nouns and must always be capitalized in titles, regardl
 
 ### Size Bounds
 - Title: 8-140 characters
-- Summary: 40-420 characters, 1-3 sentences, not duplicate of title
+- Summary: 80-420 characters, 1-3 sentences, not duplicate of title
 
 ### Summary Style
 - Summaries must never start with meta-references about the article itself

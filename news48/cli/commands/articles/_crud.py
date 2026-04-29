@@ -438,20 +438,26 @@ def update_article_cmd(
 
         normalized_published_at = normalize_published_date(published_at)
 
-    update_article(
-        article_id=article_id,
-        content=actual_content or article.get("content", ""),
-        title=title,
-        categories=categories,
-        tags=tags,
-        summary=summary,
-        countries=countries,
-        sentiment=sentiment,
-        image_url=image_url,
-        language=language,
-        published_at=normalized_published_at,
-        parsed_at=parsed_at,
-    )
+    try:
+        update_article(
+            article_id=article_id,
+            content=actual_content or article.get("content", ""),
+            title=title,
+            categories=categories,
+            tags=tags,
+            summary=summary,
+            countries=countries,
+            sentiment=sentiment,
+            image_url=image_url,
+            language=language,
+            published_at=normalized_published_at,
+            parsed_at=parsed_at,
+        )
+    except ValueError as exc:
+        emit_error(
+            f"Validation failed for article {article_id}: {exc}",
+            as_json=output_json,
+        )
 
     data = {
         "updated": True,

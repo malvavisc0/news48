@@ -11,14 +11,110 @@ from news48.core.helpers.text import strip_markdown as _strip_markdown
 
 from ..connection import SessionLocal, _utcnow
 from ..models import Article
+from ._constants import (
+    CONTENT_MAX_CHARS,
+    CONTENT_MAX_PARAGRAPHS,
+    CONTENT_MIN_CHARS,
+    CONTENT_MIN_PARAGRAPHS,
+    PARAGRAPH_MIN_CHARS,
+    SUMMARY_MAX_CHARS,
+    SUMMARY_MIN_CHARS,
+    TITLE_MAX_CHARS,
+    TITLE_MIN_CHARS,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _split_paragraphs(text: str) -> list[str]:
+    """Split text into paragraphs using the system-wide ``\\n\\n`` convention.
+
+    Returns only non-empty paragraphs.
+    """
+    return [p for p in text.split("\n\n") if p.strip()]
+
+
+def _validate_article_content(
+    content: str | None = None,
+    summary: str | None = None,
+    title: str | None = None,
+) -> None:
+    """Validate article content against quality constraints.
+
+    Args:
+        content: Article content to validate.
+        summary: Article summary to validate.
+        title: Article title to validate.
+
+    Raises:
+        ValueError: If any constraint is violated. The message includes
+            the specific constraint that failed.
+    """
+    # Content validation
+    if content:
+        content_len = len(content)
+        if content_len < CONTENT_MIN_CHARS:
+            raise ValueError(
+                f"Content too short: {content_len} chars "
+                f"(minimum {CONTENT_MIN_CHARS})"
+            )
+        if content_len > CONTENT_MAX_CHARS:
+            raise ValueError(
+                f"Content too long: {content_len} chars "
+                f"(maximum {CONTENT_MAX_CHARS})"
+            )
+
+        paragraphs = _split_paragraphs(content)
+        para_count = len(paragraphs)
+        if para_count < CONTENT_MIN_PARAGRAPHS:
+            raise ValueError(
+                f"Too few paragraphs: {para_count} "
+                f"(minimum {CONTENT_MIN_PARAGRAPHS})"
+            )
+        if para_count > CONTENT_MAX_PARAGRAPHS:
+            raise ValueError(
+                f"Too many paragraphs: {para_count} "
+                f"(maximum {CONTENT_MAX_PARAGRAPHS})"
+            )
+
+        for i, para in enumerate(paragraphs):
+            if len(para.strip()) < PARAGRAPH_MIN_CHARS:
+                raise ValueError(
+                    f"Paragraph {i + 1} too short: {len(para.strip())} chars "
+                    f"(minimum {PARAGRAPH_MIN_CHARS})"
+                )
+
+    # Summary validation
+    if summary:
+        summary_len = len(summary)
+        if summary_len < SUMMARY_MIN_CHARS:
+            raise ValueError(
+                f"Summary too short: {summary_len} chars "
+                f"(minimum {SUMMARY_MIN_CHARS})"
+            )
+        if summary_len > SUMMARY_MAX_CHARS:
+            raise ValueError(
+                f"Summary too long: {summary_len} chars "
+                f"(maximum {SUMMARY_MAX_CHARS})"
+            )
+
+    # Title validation
+    if title:
+        title_len = len(title)
+        if title_len < TITLE_MIN_CHARS:
+            raise ValueError(
+                f"Title too short: {title_len} chars " f"(minimum {TITLE_MIN_CHARS})"
+            )
+        if title_len > TITLE_MAX_CHARS:
+            raise ValueError(
+                f"Title too long: {title_len} chars " f"(maximum {TITLE_MAX_CHARS})"
+            )
+
 
 # Matches currency ($400,000, €5B), percentages (38%), and plain
 # numbers with optional magnitude suffixes (12K, 1.5M, etc.).
 _NUMBER_RE = re.compile(
-    r"[\$€£]?\d[\d,.]*\s*[KkMmBbTt]?(?:\s*(?:million|billion|trillion))?"
-    r"|\d+%"
+    r"[\$€£]?\d[\d,.]*\s*[KkMmBbTt]?(?:\s*(?:million|billion|trillion))?" r"|\d+%"
 )
 
 
@@ -106,8 +202,7 @@ def insert_articles(
 
         if entries:
             _log.info(
-                "insert_articles: %d entries, %d new, "
-                "%d duplicates, %d no-url",
+                "insert_articles: %d entries, %d new, " "%d duplicates, %d no-url",
                 len(entries),
                 count,
                 duplicates,
@@ -155,14 +250,25 @@ def update_article(
     with SessionLocal() as session:
         article = session.get(Article, article_id)
         if article:
+            # Validate parsed content when parsed_at is being set.
+            # Only validate when parsed_at is provided to avoid rejecting
+            # non-parse updates (e.g. number-drop fallback uses original
+            # content which may exceed limits).
+            if parsed_at:
+                try:
+                    _validate_article_content(content, summary, title)
+                except ValueError as exc:
+                    logger.warning(
+                        "Article %d: content validation failed — %s",
+                        article_id,
+                        exc,
+                    )
+                    raise
+
             # Guard against LLM number-drop: if the rewrite lost
             # significant digit sequences (e.g. "$400,000" → "00K"),
             # fall back to the original text for that field.
-            if (
-                title
-                and article.title
-                and not _numbers_ok(article.title, title)
-            ):
+            if title and article.title and not _numbers_ok(article.title, title):
                 logger.error(
                     "Article %d: title rewrite dropped numbers — "
                     "keeping original. original=%r rewritten=%r",
@@ -261,7 +367,9 @@ def patch_article_fields(
         if not article:
             return
         if summary:
-            article.summary = _strip_markdown(_strip_html_tags(summary))
+            cleaned_summary = _strip_markdown(_strip_html_tags(summary))
+            _validate_article_content(summary=cleaned_summary)
+            article.summary = cleaned_summary
         if categories:
             article.categories = categories.lower()
         if sentiment:
@@ -345,10 +453,7 @@ def increment_view_count(article_id: int) -> None:
     """Atomically increment the view count for an article."""
     with SessionLocal() as session:
         session.execute(
-            text(
-                "UPDATE articles SET view_count = view_count + 1"
-                " WHERE id = :id"
-            ),
+            text("UPDATE articles SET view_count = view_count + 1" " WHERE id = :id"),
             {"id": article_id},
         )
         session.commit()

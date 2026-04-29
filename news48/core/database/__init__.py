@@ -1,6 +1,16 @@
 """Database package — re-exports public functions used across the project."""
 
 from .articles import (
+    CONTENT_MAX_CHARS,
+    CONTENT_MAX_PARAGRAPHS,
+    CONTENT_MIN_CHARS,
+    CONTENT_MIN_PARAGRAPHS,
+    DOWNLOAD_MIN_CONTENT_CHARS,
+    PARAGRAPH_MIN_CHARS,
+    SUMMARY_MAX_CHARS,
+    SUMMARY_MIN_CHARS,
+    TITLE_MAX_CHARS,
+    TITLE_MIN_CHARS,
     claim_articles_for_processing,
     clear_article_processing_claim,
     delete_article,
@@ -26,6 +36,7 @@ from .articles import (
     insert_articles,
     mark_article_download_failed,
     mark_article_parse_failed,
+    patch_article_fields,
     reset_article_download,
     reset_article_parse,
     search_articles,
@@ -60,6 +71,17 @@ from .retention import (
 from .stats import collect_stats
 
 __all__ = [
+    # article constants
+    "CONTENT_MAX_CHARS",
+    "CONTENT_MAX_PARAGRAPHS",
+    "CONTENT_MIN_CHARS",
+    "CONTENT_MIN_PARAGRAPHS",
+    "DOWNLOAD_MIN_CONTENT_CHARS",
+    "PARAGRAPH_MIN_CHARS",
+    "SUMMARY_MAX_CHARS",
+    "SUMMARY_MIN_CHARS",
+    "TITLE_MAX_CHARS",
+    "TITLE_MIN_CHARS",
     # articles
     "claim_articles_for_processing",
     "clear_article_processing_claim",
@@ -86,6 +108,7 @@ __all__ = [
     "insert_articles",
     "mark_article_download_failed",
     "mark_article_parse_failed",
+    "patch_article_fields",
     "reset_article_download",
     "reset_article_parse",
     "search_articles",

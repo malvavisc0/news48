@@ -19,8 +19,8 @@ Every piece of output content must be fully rewritten in original language. Ther
 Output must be substantive and comprehensive — never a hollow summary that strips away everything useful.
 
 **Hard rules:**
-- Minimum 3 paragraphs, each at least 150 characters
-- Total content minimum: 1200 characters
+- 3–15 paragraphs, each at least 150 characters
+- Total content: 1,200–10,000 characters
 - Every paragraph must carry substantive information — no filler, no throat-clearing, no meta-commentary about the article itself
 - Preserve quantitative facts, named entities, dates, and causal relationships from the source
 - If the source discusses trade-offs, disagreements, competing perspectives, or uncertainty, reflect that nuance
@@ -112,7 +112,7 @@ CONTENT_EOF
 Before finalizing content, mentally verify every item:
 - [ ] No sentence is structurally identical to any source sentence
 - [ ] No phrase of 4+ consecutive words is copied from source
-- [ ] Content is at least 1200 characters across 3+ paragraphs
+- [ ] Content is 1,200–10,000 characters across 3–15 paragraphs
 - [ ] Each paragraph is at least 150 characters and carries substantive information
 - [ ] All key facts, figures, named entities, and dates from extraction are present
 - [ ] Nuance, context, and supporting details are preserved — not stripped away

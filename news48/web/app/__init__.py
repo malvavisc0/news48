@@ -68,10 +68,7 @@ class _MCPRewriter:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if (
-            scope["type"] == "http"
-            and scope.get("path", "").rstrip("/") == "/mcp"
-        ):
+        if scope["type"] == "http" and scope.get("path", "").rstrip("/") == "/mcp":
             scope["path"] = "/mcp/"
             scope["raw_path"] = b"/mcp/"
             await mcp_endpoint(scope, receive, send)
@@ -123,9 +120,7 @@ async def landing_page_route(request: Request):
 @app.get("/live")
 async def homepage_route(
     request: Request,
-    sentiment: str | None = Query(
-        None, pattern="^(positive|negative|neutral)$"
-    ),
+    sentiment: str | None = Query(None, pattern="^(positive|negative|neutral)$"),
 ):
     return await homepage(request, templates, filters, sentiment)
 
@@ -143,9 +138,7 @@ async def cluster_detail_route(request: Request, cluster_slug: str):
 @app.get("/all")
 async def all_stories_route(
     request: Request,
-    sentiment: str | None = Query(
-        None, pattern="^(positive|negative|neutral)$"
-    ),
+    sentiment: str | None = Query(None, pattern="^(positive|negative|neutral)$"),
     fact_check_status: str | None = Query(
         None,
         pattern="^(verified|disputed|mixed|unverifiable)$",
@@ -158,9 +151,7 @@ async def all_stories_route(
 async def category_detail_route(
     request: Request,
     category_slug: str,
-    sentiment: str | None = Query(
-        None, pattern="^(positive|negative|neutral)$"
-    ),
+    sentiment: str | None = Query(None, pattern="^(positive|negative|neutral)$"),
     fact_check_status: str | None = Query(
         None,
         pattern="^(verified|disputed|mixed|unverifiable)$",

@@ -23,9 +23,9 @@ def _is_binary(sample: bytes) -> bool:
 
     if sample:
         printable_bytes = set(printable.encode("utf-8"))
-        non_printable_ratio = sum(
-            byte not in printable_bytes for byte in sample
-        ) / len(sample)
+        non_printable_ratio = sum(byte not in printable_bytes for byte in sample) / len(
+            sample
+        )
         if non_printable_ratio > 0.30:
             return True
 
@@ -57,9 +57,7 @@ def _clean_text(text: str) -> str:
     # Remove phonetic transcriptions: /…/ possibly
     # followed by a pronunciation guide
     text = re.sub(r"\s*\([^)]*\)\s*", " ", text)
-    text = re.sub(
-        r"/[^/]{2,}/\s*[A-Z]+-[a-z]+;?\s*", " ", text
-    )  # /ˈiːlɒn/ EE-lon;
+    text = re.sub(r"/[^/]{2,}/\s*[A-Z]+-[a-z]+;?\s*", " ", text)  # /ˈiːlɒn/ EE-lon;
 
     # Remove social-media metric clusters
     # e.g. "· 4.5K · 11K · 100K · 13K"
@@ -173,6 +171,4 @@ def _safe_json(
             ensure_ascii=ensure_ascii,
         )
     except (TypeError, ValueError) as exc:
-        return json.dumps(
-            {"error": "Serialization failed", "details": str(exc)}
-        )
+        return json.dumps({"error": "Serialization failed", "details": str(exc)})

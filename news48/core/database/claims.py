@@ -121,9 +121,7 @@ def delete_claims_for_article(article_id: int) -> int:
         Number of claims deleted.
     """
     with SessionLocal() as session:
-        count = (
-            session.query(Claim).filter(Claim.article_id == article_id).count()
-        )
+        count = session.query(Claim).filter(Claim.article_id == article_id).count()
 
         session.query(Claim).filter(Claim.article_id == article_id).delete()
         session.commit()

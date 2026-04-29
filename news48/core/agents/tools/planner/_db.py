@@ -89,9 +89,7 @@ def _get_conn() -> sqlite3.Connection:
 
         db_path = config.PLANS_DB
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(
-            str(db_path), timeout=10, check_same_thread=False
-        )
+        conn = sqlite3.connect(str(db_path), timeout=10, check_same_thread=False)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=5000")
         conn.execute("PRAGMA foreign_keys=ON")
@@ -105,16 +103,12 @@ def _get_conn() -> sqlite3.Connection:
         try:
             result = conn.execute("PRAGMA integrity_check").fetchone()
             if result and result[0] != "ok":
-                raise sqlite3.DatabaseError(
-                    f"integrity_check failed: {result[0]}"
-                )
+                raise sqlite3.DatabaseError(f"integrity_check failed: {result[0]}")
         except (sqlite3.DatabaseError, sqlite3.OperationalError) as exc:
             logger.warning("plans.db is corrupted (%s), rebuilding", exc)
             conn.close()
             _rebuild_corrupt_db(db_path)
-            conn = sqlite3.connect(
-                str(db_path), timeout=10, check_same_thread=False
-            )
+            conn = sqlite3.connect(str(db_path), timeout=10, check_same_thread=False)
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA busy_timeout=5000")
             conn.execute("PRAGMA foreign_keys=ON")
@@ -159,9 +153,7 @@ def _rebuild_corrupt_db(db_path: Path) -> None:
 def _row_to_plan(row: sqlite3.Row, conn: sqlite3.Connection) -> dict:
     """Convert a plan Row + its steps into the canonical plan dict."""
     plan = dict(row)
-    plan["success_conditions"] = json.loads(
-        plan.get("success_conditions") or "[]"
-    )
+    plan["success_conditions"] = json.loads(plan.get("success_conditions") or "[]")
     try:
         step_rows = conn.execute(
             "SELECT step_id, description, status, result, "
@@ -195,9 +187,7 @@ def db_read_plan(plan_id: str) -> dict | None:
     """Read a plan by ID. Returns None if not found."""
     with _lock:
         conn = _get_conn()
-        row = conn.execute(
-            "SELECT * FROM plans WHERE id = ?", (plan_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM plans WHERE id = ?", (plan_id,)).fetchone()
         if row is None:
             return None
         return _row_to_plan(row, conn)
@@ -244,9 +234,7 @@ def db_write_plan(plan: dict) -> None:
                 ),
             )
             # Replace all steps
-            conn.execute(
-                "DELETE FROM plan_steps WHERE plan_id = ?", (plan_id,)
-            )
+            conn.execute("DELETE FROM plan_steps WHERE plan_id = ?", (plan_id,))
             for step in plan.get("steps", []):
                 conn.execute(
                     "INSERT INTO plan_steps ("
@@ -277,9 +265,7 @@ def db_iter_plans(status: str | set[str] | None = None) -> list[dict]:
     with _lock:
         conn = _get_conn()
         if status is None:
-            rows = conn.execute(
-                "SELECT * FROM plans ORDER BY created_at"
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM plans ORDER BY created_at").fetchall()
         elif isinstance(status, str):
             rows = conn.execute(
                 "SELECT * FROM plans WHERE status = ? ORDER BY created_at",
@@ -509,8 +495,7 @@ def db_archive_cleanup(cutoff: str) -> int:
     with _lock:
         conn = _get_conn()
         cursor = conn.execute(
-            "DELETE FROM plans WHERE status = 'archived' "
-            "AND updated_at < ?",
+            "DELETE FROM plans WHERE status = 'archived' " "AND updated_at < ?",
             (cutoff,),
         )
         conn.commit()

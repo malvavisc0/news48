@@ -19,7 +19,7 @@ Ensure ALL are true before writing content:
 - [ ] Rewrite titles to include the actual subject and event
 
 ### Summary Checks
-- [ ] Summary is 1-3 sentences, 40-420 characters
+- [ ] Summary is 1-3 sentences, 80-420 characters
 - [ ] Summary is not equal to title
 - [ ] Summary is not equal to the first sentence of the content
 - [ ] Summary does not start with meta-references ("This article...", "This story...", "The article...", "In this article...", "This report...", etc.) — must start directly with substantive content
@@ -29,8 +29,8 @@ Ensure ALL are true before writing content:
 - [ ] **No HTML tags** in title, summary, or content — all output must be plain text. Strip HTML entities and tags completely.
 - [ ] **No markdown syntax** in title, summary, or content — all output must be plain text prose. No `**bold**`, `*italic*`, `# headings`, `---` horizontal rules, `>` blockquotes, `- bullet lists`, `` `backticks` ``, or `[text](url)` link syntax. Write prose paragraphs only.
 - [ ] **No navigation/UI artifacts** in title, summary, or content — strip phrases like "Continue reading", "Continue reading on the website", "Read more", "Read the full article", "Full story", "Click here to read", "Subscribe to read", "Sign in to continue", "Keep reading", "Read on", "More on this story", "Related stories"
-- [ ] **Content is at least 1200 characters** (sources genuinely brief may have 400+ chars — below 400 chars is unacceptable regardless of source)
-- [ ] **Content has 3+ substantive paragraphs, each at least 150 characters**
+- [ ] **Content is 1,200–10,000 characters** (below 1,200 is too brief; above 10,000 is excessive token usage with diminishing returns)
+- [ ] **Content has 3–15 substantive paragraphs, each at least 150 characters** (above 15 paragraphs suggests sentence-level paragraphing which is poor structure)
 - [ ] **No verbatim or near-verbatim passages from source** — no phrase of 4+ consecutive words may match the source
 
 ### Field Checks

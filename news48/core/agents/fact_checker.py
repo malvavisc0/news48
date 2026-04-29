@@ -129,9 +129,7 @@ async def _fact_check_article(article: dict, owner: str) -> dict:
             try:
                 os.unlink(content_path)
             except OSError:
-                logger.debug(
-                    "Failed to delete temp fact-check file: %s", content_path
-                )
+                logger.debug("Failed to delete temp fact-check file: %s", content_path)
 
 
 def _record_failure(article_id: int, error: str) -> None:
@@ -149,9 +147,7 @@ def _record_failure(article_id: int, error: str) -> None:
             force=True,
         )
     except Exception:
-        logger.warning(
-            "Failed to record fact-check failure for article %s", article_id
-        )
+        logger.warning("Failed to record fact-check failure for article %s", article_id)
 
 
 async def run_cycle(limit: int = 10) -> dict:
@@ -160,12 +156,8 @@ async def run_cycle(limit: int = 10) -> dict:
     Also includes articles with ``fact_check_error`` status so they
     can be retried after a transient failure.
     """
-    articles_unchecked, _ = get_articles_paginated(
-        limit=limit, status="fact-unchecked"
-    )
-    articles_error, _ = get_articles_paginated(
-        limit=limit, status="fact-check-error"
-    )
+    articles_unchecked, _ = get_articles_paginated(limit=limit, status="fact-unchecked")
+    articles_error, _ = get_articles_paginated(limit=limit, status="fact-check-error")
 
     # Merge and deduplicate by article ID
     seen = set()
@@ -186,9 +178,7 @@ async def run_cycle(limit: int = 10) -> dict:
 
     # Claim articles to prevent duplicate work across concurrent workers
     candidate_ids = [int(a["id"]) for a in articles]
-    claimed_ids = claim_articles_for_processing(
-        candidate_ids, "fact_check", owner
-    )
+    claimed_ids = claim_articles_for_processing(candidate_ids, "fact_check", owner)
     claimed_articles = [a for a in articles if int(a["id"]) in claimed_ids]
 
     if not claimed_articles:
@@ -215,9 +205,7 @@ def _make_filtered_search(article_url: str):
     def perform_web_search(
         reason: str,
         query: str,
-        category: Literal[
-            "general", "files", "news", "videos", "images"
-        ] = "general",
+        category: Literal["general", "files", "news", "videos", "images"] = "general",
         time_range: Literal["", "day", "week", "month", "year"] = "",
         pages: int = 3,
     ) -> str:
@@ -230,9 +218,7 @@ def _make_filtered_search(article_url: str):
         findings = data.get("result", {}).get("findings", [])
         before = len(findings)
         findings = [
-            f
-            for f in findings
-            if not urls_match(f.get("url", ""), article_url)
+            f for f in findings if not urls_match(f.get("url", ""), article_url)
         ]
         removed = before - len(findings)
         data["result"]["findings"] = findings
@@ -249,7 +235,9 @@ def _make_filtered_fetch(article_url: str):
     from .tools import fetch_webpage_content as _raw_fetch
     from .tools._helpers import urls_match
 
-    _BLOCK_MSG = "Blocked: this is the article being fact-checked (circular verification)."
+    _BLOCK_MSG = (
+        "Blocked: this is the article being fact-checked (circular verification)."
+    )
 
     async def fetch_webpage_content(
         reason: str, urls: list[str], markdown: bool = True
@@ -266,9 +254,7 @@ def _make_filtered_fetch(article_url: str):
                 {
                     "result": {
                         "results": [],
-                        "errors": [
-                            {"url": u, "error": _BLOCK_MSG} for u in blocked
-                        ],
+                        "errors": [{"url": u, "error": _BLOCK_MSG} for u in blocked],
                         "requested": len(blocked),
                         "succeeded": 0,
                         "failed": len(blocked),
@@ -287,12 +273,8 @@ def _make_filtered_fetch(article_url: str):
             data["result"].setdefault("errors", []).append(
                 {"url": u, "error": _BLOCK_MSG}
             )
-        data["result"]["failed"] = data["result"].get("failed", 0) + len(
-            blocked
-        )
-        data["result"]["requested"] = data["result"].get("requested", 0) + len(
-            blocked
-        )
+        data["result"]["failed"] = data["result"].get("failed", 0) + len(blocked)
+        data["result"]["requested"] = data["result"].get("requested", 0) + len(blocked)
         return json.dumps(data, indent=2, ensure_ascii=True)
 
     return FunctionTool.from_defaults(async_fn=fetch_webpage_content)
@@ -320,8 +302,7 @@ def get_agent(task_context: dict | None = None) -> FunctionAgent:
     return FunctionAgent(
         name="FactChecker",
         description=(
-            "Fact-checks articles by searching for evidence and "
-            "recording verdicts."
+            "Fact-checks articles by searching for evidence and " "recording verdicts."
         ),
         tools=[
             _make_filtered_search(article_url),

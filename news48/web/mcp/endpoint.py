@@ -109,9 +109,7 @@ class MCPEndpoint:
 
     # -- ASGI handler --------------------------------------------------------
 
-    async def __call__(
-        self, scope: Scope, receive: Receive, send: Send
-    ) -> None:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """ASGI entry point — validate auth then delegate to transport."""
         if scope["type"] != "http":
             return

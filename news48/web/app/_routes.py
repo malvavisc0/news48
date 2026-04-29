@@ -22,9 +22,7 @@ def _site_url(request: Request) -> str:
     return str(request.base_url).rstrip("/")
 
 
-def _default_meta(
-    request: Request, templates: Jinja2Templates
-) -> dict[str, object]:
+def _default_meta(request: Request, templates: Jinja2Templates) -> dict[str, object]:
     site_url = _site_url(request)
     canonical_url = build_canonical_url(site_url, str(request.url.path))
     seo = build_seo_meta(
@@ -141,9 +139,7 @@ async def homepage(
                     "title": story.get("title"),
                     "canonical_url": build_canonical_url(
                         site_url,
-                        "/article/{}/{}".format(
-                            story["id"], story.get("slug") or ""
-                        ),
+                        "/article/{}/{}".format(story["id"], story.get("slug") or ""),
                     ),
                 }
                 for story in stories
@@ -253,10 +249,7 @@ async def cluster_detail(
     request: Request, templates: Jinja2Templates, cluster_slug: str
 ):
     """Cluster detail page showing all articles matching a tag."""
-    from news48.core.database.articles import (
-        get_all_categories,
-        get_articles_by_tag,
-    )
+    from news48.core.database.articles import get_all_categories, get_articles_by_tag
 
     articles, total = get_articles_by_tag(
         cluster_slug, hours=48, limit=None, parsed=True
@@ -287,9 +280,7 @@ async def cluster_detail(
                     "title": item.get("title"),
                     "canonical_url": build_canonical_url(
                         site_url,
-                        "/article/{}/{}".format(
-                            item["id"], item.get("slug") or ""
-                        ),
+                        "/article/{}/{}".format(item["id"], item.get("slug") or ""),
                     ),
                 }
                 for item in articles
@@ -364,9 +355,7 @@ async def all_stories(
                     "title": item.get("title"),
                     "canonical_url": build_canonical_url(
                         site_url,
-                        "/article/{}/{}".format(
-                            item["id"], item.get("slug") or ""
-                        ),
+                        "/article/{}/{}".format(item["id"], item.get("slug") or ""),
                     ),
                 }
                 for item in articles
@@ -429,18 +418,13 @@ async def category_detail(
     categories = get_all_categories(hours=48, parsed=True)
     stats = get_web_stats(hours=48, parsed=True)
 
-    cat_match = next(
-        (c for c in categories if c["slug"] == category_slug), None
-    )
-    raw_name = (
-        cat_match["name"] if cat_match else category_slug.replace("-", " ")
-    )
+    cat_match = next((c for c in categories if c["slug"] == category_slug), None)
+    raw_name = cat_match["name"] if cat_match else category_slug.replace("-", " ")
     category_name = filters.format_category_name(raw_name)
     site_url = _site_url(request)
     canonical_url = build_canonical_url(site_url, f"/category/{category_slug}")
     category_title = (
-        f"{category_name} News Today | Live Verified Stories "
-        "in the Last 48 Hours"
+        f"{category_name} News Today | Live Verified Stories " "in the Last 48 Hours"
     )
     category_description = (
         f"The latest {category_name} news from the last 48 hours — "
@@ -461,9 +445,7 @@ async def category_detail(
                     "title": item.get("title"),
                     "canonical_url": build_canonical_url(
                         site_url,
-                        "/article/{}/{}".format(
-                            item["id"], item.get("slug") or ""
-                        ),
+                        "/article/{}/{}".format(item["id"], item.get("slug") or ""),
                     ),
                 }
                 for item in articles

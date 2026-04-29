@@ -22,7 +22,20 @@ from ._claims import (
     clear_article_processing_claim,
     release_stale_article_claims,
 )
-from ._constants import _CLAIM_TIMEOUT_MINUTES, _VALID_PROCESSING_ACTIONS
+from ._constants import (
+    _CLAIM_TIMEOUT_MINUTES,
+    _VALID_PROCESSING_ACTIONS,
+    CONTENT_MAX_CHARS,
+    CONTENT_MAX_PARAGRAPHS,
+    CONTENT_MIN_CHARS,
+    CONTENT_MIN_PARAGRAPHS,
+    DOWNLOAD_MIN_CONTENT_CHARS,
+    PARAGRAPH_MIN_CHARS,
+    SUMMARY_MAX_CHARS,
+    SUMMARY_MIN_CHARS,
+    TITLE_MAX_CHARS,
+    TITLE_MIN_CHARS,
+)
 from ._mutations import (
     delete_article,
     increment_view_count,
@@ -56,6 +69,16 @@ __all__ = [
     # _constants
     "_CLAIM_TIMEOUT_MINUTES",
     "_VALID_PROCESSING_ACTIONS",
+    "CONTENT_MAX_CHARS",
+    "CONTENT_MAX_PARAGRAPHS",
+    "CONTENT_MIN_CHARS",
+    "CONTENT_MIN_PARAGRAPHS",
+    "DOWNLOAD_MIN_CONTENT_CHARS",
+    "PARAGRAPH_MIN_CHARS",
+    "SUMMARY_MAX_CHARS",
+    "SUMMARY_MIN_CHARS",
+    "TITLE_MAX_CHARS",
+    "TITLE_MIN_CHARS",
     # _browsing
     "claim_articles_for_processing",
     "clear_article_processing_claim",
