@@ -123,6 +123,20 @@ else
     CHECKS_FAILED=$((CHECKS_FAILED + 1))
 fi
 
+# Check GPU (optional — required for local LLM, not for external API)
+printf "  ⏳ ${BOLD}GPU / NVIDIA Container Toolkit${RESET} (optional) ... "
+if docker run --rm --gpus=all nvidia/cuda:12.8.0-base-ubuntu22.04 nvidia-smi &>/dev/null 2>&1; then
+    success "GPU detected — local LLM available"
+    HAS_GPU=true
+    CHECKS_PASSED=$((CHECKS_PASSED + 1))
+else
+    warn "No GPU detected — using external LLM API (recommended for production)"
+    warn "    Set API_BASE in .env to your LLM endpoint (OpenAI, Groq, Ollama, etc.)"
+    warn "    Or use: docker compose -f docker-compose.yml -f docker-compose.external-llm.yml up -d"
+    HAS_GPU=false
+    CHECKS_SKIPPED=$((CHECKS_SKIPPED + 1))
+fi
+
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
@@ -171,12 +185,12 @@ else
     exit 1
 fi
 
-# Download .env.example
-printf "  ⏳ ${BOLD}.env.example${RESET} ... "
-if curl -fsSL -o "$INSTALL_DIR/.env.example" "$REPO_URL/.env.example"; then
+# Download docker-compose.external-llm.yml (required for no-GPU deployments)
+printf "  ⏳ ${BOLD}docker-compose.external-llm.yml${RESET} ... "
+if curl -fsSL -o "$INSTALL_DIR/docker-compose.external-llm.yml" "$REPO_URL/docker-compose.external-llm.yml"; then
     success "Downloaded"
 else
-    warn "Failed to download .env.example (optional)"
+    warn "Failed to download external LLM override (optional)"
 fi
 
 # Download seed.txt (required — populates initial feeds)
@@ -185,6 +199,15 @@ if curl -fsSL -o "$INSTALL_DIR/seed.txt" "$REPO_URL/seed.txt"; then
     success "Downloaded"
 else
     warn "Failed to download seed.txt (optional — feeds must be added manually)"
+fi
+
+# Download searxng/settings.yml (required)
+printf "  ⏳ ${BOLD}searxng/settings.yml${RESET} ... "
+if mkdir -p "$INSTALL_DIR/searxng" && curl -fsSL -o "$INSTALL_DIR/searxng/settings.yml" "$REPO_URL/searxng/settings.yml"; then
+    success "Downloaded"
+else
+    error "Failed to download searxng/settings.yml (required)"
+    exit 1
 fi
 
 # ---------------------------------------------------------------------------
@@ -243,13 +266,25 @@ printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━
 printf "${BOLD}🚀  Starting news48${RESET}\n"
 printf "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n\n"
 
-printf "  ⏳ ${BOLD}Pulling Docker images...${RESET}\n"
 cd "$INSTALL_DIR"
-docker compose pull
+
+# Use external LLM override if no GPU detected
+if ! $HAS_GPU; then
+    info "No GPU detected — using external LLM API (llamacpp skipped)"
+    printf "  ⏳ ${BOLD}Pulling Docker images (with external LLM override)...${RESET}\n"
+    docker compose -f docker-compose.yml -f docker-compose.external-llm.yml pull
+else
+    printf "  ⏳ ${BOLD}Pulling Docker images...${RESET}\n"
+    docker compose pull
+fi
 success "Images pulled"
 
 printf "\n  ⏳ ${BOLD}Starting services...${RESET}\n"
-docker compose up -d
+if ! $HAS_GPU; then
+    docker compose -f docker-compose.yml -f docker-compose.external-llm.yml up -d
+else
+    docker compose up -d
+fi
 success "Services started"
 
 # ---------------------------------------------------------------------------
@@ -263,7 +298,11 @@ printf "  ${BOLD}Installed to:${RESET} $INSTALL_DIR\n"
 printf "  ${BOLD}Web UI:${RESET}     http://localhost:8000\n"
 printf "  ${BOLD}Monitor API:${RESET}  http://localhost:8000/live/monitor\n"
 printf "  ${BOLD}Docker logs:${RESET}  docker compose logs -f\n"
-printf "  ${BOLD}Update:${RESET}       cd $INSTALL_DIR && docker compose pull && docker compose up -d\n"
+if $HAS_GPU; then
+    printf "  ${BOLD}Update:${RESET}       cd $INSTALL_DIR && docker compose pull && docker compose up -d\n"
+else
+    printf "  ${BOLD}Update:${RESET}       cd $INSTALL_DIR && docker compose -f docker-compose.yml -f docker-compose.external-llm.yml pull && docker compose -f docker-compose.yml -f docker-compose.external-llm.yml up -d\n"
+fi
 
 # Seed the database if seed.txt was downloaded
 if [[ -f "$INSTALL_DIR/seed.txt" ]]; then

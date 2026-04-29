@@ -77,9 +77,11 @@ services:
     networks:
       - news48-net
 
-  # One-shot init container that downloads the GGUF model before the server starts.
-  # Stores models in the host data directory (./data/models) so they persist across rebuilds.
+  # Local LLM server (optional, requires GPU + NVIDIA Container Toolkit).
+  # For external LLM API, use: docker compose -f docker-compose.yml -f docker-compose.external-llm.yml up -d
+  # When llamacpp is skipped, set API_BASE/.env to point to your LLM endpoint.
   llamacpp-init:
+    restart: "no"
     image: ghcr.io/ggml-org/llama.cpp:server-cuda13
     entrypoint: [ "bash", "/app/download-model.sh" ]
     volumes:
