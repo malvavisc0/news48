@@ -85,7 +85,7 @@ if command -v docker &>/dev/null; then
 else
     error "Not found"
     warn "Docker is required for news48."
-    read -rp "Install Docker now? (y/N): " install_docker <&3
+    read -rp "Install Docker now? (y/N): " install_docker < /dev/tty
     if [[ "$install_docker" =~ ^[Yy]$ ]]; then
         info "Installing Docker..."
         curl -fsSL https://get.docker.com | sh
@@ -151,7 +151,7 @@ fi
 # Create directory
 if [[ -d "$INSTALL_DIR" ]]; then
     warn "Directory $INSTALL_DIR already exists"
-    read -rp "Continue? This will overwrite docker-compose.yml and .env (y/N): " confirm
+    read -rp "Continue? This will overwrite docker-compose.yml and .env (y/N): " confirm < /dev/tty
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
         info "Aborted."
         exit 0
@@ -178,7 +178,7 @@ echo ""
 echo "  [1] Local LLM     — Run llama.cpp on your GPU (requires NVIDIA GPU + CUDA)"
 echo "  [2] External API  — Use OpenAI, Groq, Ollama, etc. (recommended for production)"
 echo ""
-read -rp "Select (1-2, default=2): " LLM_MODE_CHOICE
+read -rp "Select (1-2, default=2): " LLM_MODE_CHOICE < /dev/tty
 
 LLM_MODE="external"
 if [[ "$LLM_MODE_CHOICE" == "1" ]]; then
@@ -194,6 +194,36 @@ fi
 # Save mode to .deploy file for update.sh to read
 printf "%s\n" "$LLM_MODE" > "$INSTALL_DIR/.deploy"
 info "LLM mode: $LLM_MODE (saved to .deploy)"
+
+# Collect external LLM credentials if needed
+LLM_MODEL=""
+LLM_API_BASE=""
+LLM_API_KEY=""
+if [[ "$LLM_MODE" == "external" ]]; then
+    printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
+    printf "${BOLD}🔑  External LLM Configuration${RESET}\n"
+    printf "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n\n"
+
+    read -rp "Model name (e.g. gpt-4o, llama-3.3-70b-versatile, qwen/qwen3-32b): " LLM_MODEL < /dev/tty
+    while [[ -z "$LLM_MODEL" ]]; do
+        warn "Model name cannot be empty."
+        read -rp "Model name: " LLM_MODEL < /dev/tty
+    done
+
+    read -rp "API base URL (e.g. https://api.openai.com/v1): " LLM_API_BASE < /dev/tty
+    while [[ -z "$LLM_API_BASE" ]]; do
+        warn "API base URL cannot be empty."
+        read -rp "API base URL: " LLM_API_BASE < /dev/tty
+    done
+
+    read -rp "API key: " LLM_API_KEY < /dev/tty
+    while [[ -z "$LLM_API_KEY" ]]; do
+        warn "API key cannot be empty."
+        read -rp "API key: " LLM_API_KEY < /dev/tty
+    done
+
+    success "External LLM credentials collected"
+fi
 
 # Download the right docker-compose.yml for the chosen mode
 printf "\n${BOLD}Downloading files...${RESET}\n"
@@ -251,7 +281,7 @@ ENV_FILE="$INSTALL_DIR/.env"
 
 if [[ -f "$ENV_FILE" ]]; then
     warn "$ENV_FILE already exists"
-    read -rp "Overwrite? (y/N): " confirm
+    read -rp "Overwrite? (y/N): " confirm < /dev/tty
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
         info "Keeping existing .env"
     else
@@ -269,24 +299,39 @@ else
 fi
 
 # Generate secrets if not set
-if grep -q "MYSQL_ROOT_PASSWORD=" "$ENV_FILE" 2>/dev/null; then
-    if ! grep -q "^MYSQL_ROOT_PASSWORD=" "$ENV_FILE" 2>/dev/null || grep -q "rootpassword" "$ENV_FILE"; then
-        info "Generating random MySQL password..."
-        MYSQL_PASS=$(openssl rand -base64 24)
-        MYSQL_ROOT_PASS=$(openssl rand -base64 24)
-        sed -i "s/^MYSQL_ROOT_PASSWORD=.*/MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASS/" "$ENV_FILE"
-        sed -i "s/^MYSQL_PASSWORD=.*/MYSQL_PASSWORD=$MYSQL_PASS/" "$ENV_FILE"
-        success "MySQL credentials generated"
-    fi
+if grep -q "^MYSQL_ROOT_PASSWORD=CHANGE_ME" "$ENV_FILE" 2>/dev/null; then
+    info "Generating random MySQL password..."
+    MYSQL_PASS=$(openssl rand -base64 24)
+    MYSQL_ROOT_PASS=$(openssl rand -base64 24)
+    sed -i "s/^MYSQL_ROOT_PASSWORD=.*/MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASS/" "$ENV_FILE"
+    sed -i "s/^MYSQL_PASSWORD=.*/MYSQL_PASSWORD=$MYSQL_PASS/" "$ENV_FILE"
+    # Also update DATABASE_URL if it still contains the placeholder password
+    sed -i "s|CHANGE_ME_mysql_password|$MYSQL_PASS|" "$ENV_FILE"
+    success "MySQL credentials generated"
 fi
 
-if grep -q "SEARXNG_SECRET=" "$ENV_FILE" 2>/dev/null; then
-    if ! grep -q "^SEARXNG_SECRET=" "$ENV_FILE" 2>/dev/null || grep -q "changeme" "$ENV_FILE"; then
+# Generate SEARXNG_SECRET if placeholder or missing
+if grep -q "^SEARXNG_SECRET=" "$ENV_FILE" 2>/dev/null; then
+    if grep -q "^SEARXNG_SECRET=CHANGE_ME\|^SEARXNG_SECRET=$" "$ENV_FILE"; then
         info "Generating random SearXNG secret..."
         SEARXNG_SECRET=$(openssl rand -hex 32)
         sed -i "s/^SEARXNG_SECRET=.*/SEARXNG_SECRET=$SEARXNG_SECRET/" "$ENV_FILE"
         success "SearXNG secret generated"
     fi
+else
+    info "Adding SearXNG secret to .env..."
+    SEARXNG_SECRET=$(openssl rand -hex 32)
+    echo "SEARXNG_SECRET=$SEARXNG_SECRET" >> "$ENV_FILE"
+    success "SearXNG secret generated and added"
+fi
+
+# Write external LLM config to .env
+if [[ "$LLM_MODE" == "external" ]] && [[ -n "$LLM_MODEL" ]]; then
+    info "Writing external LLM configuration to .env..."
+    sed -i "s|^MODEL=.*|MODEL=$LLM_MODEL|" "$ENV_FILE"
+    sed -i "s|^API_BASE=.*|API_BASE=$LLM_API_BASE|" "$ENV_FILE"
+    sed -i "s|^API_KEY=.*|API_KEY=$LLM_API_KEY|" "$ENV_FILE"
+    success "External LLM config written (MODEL, API_BASE, API_KEY)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -342,13 +387,16 @@ printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━
 printf "${BOLD}Next steps:${RESET}\n"
 if [[ "$LLM_MODE" == "external" ]]; then
     printf "  1. Open http://localhost:8000 in your browser\n"
-    printf "  2. Set API_BASE in .env to your LLM endpoint\n"
-    printf "  3. Start fetching: docker compose exec web news48 fetch\n"
-    printf "  4. Monitor: docker compose logs -f\n"
+    printf "  2. Configure SMTP in .env for email alerts (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM)\n"
+    printf "  3. Set MONITOR_EMAIL_TO in .env to receive alert notifications\n"
+    printf "  4. Start fetching: docker compose exec web news48 fetch\n"
+    printf "  5. Monitor: docker compose logs -f\n"
 else
     printf "  1. Wait for model download to complete (may take minutes)\n"
     printf "  2. Open http://localhost:8000 in your browser\n"
-    printf "  3. Start fetching: docker compose exec web news48 fetch\n"
-    printf "  4. Monitor: docker compose logs -f\n"
+    printf "  3. Configure SMTP in .env for email alerts (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM)\n"
+    printf "  4. Set MONITOR_EMAIL_TO in .env to receive alert notifications\n"
+    printf "  5. Start fetching: docker compose exec web news48 fetch\n"
+    printf "  6. Monitor: docker compose logs -f\n"
 fi
 printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
