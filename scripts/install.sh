@@ -123,20 +123,6 @@ else
     CHECKS_FAILED=$((CHECKS_FAILED + 1))
 fi
 
-# Check GPU (optional — required for local LLM, not for external API)
-printf "  ⏳ ${BOLD}GPU / NVIDIA Container Toolkit${RESET} (optional) ... "
-if docker run --rm --gpus=all nvidia/cuda:12.8.0-base-ubuntu22.04 nvidia-smi &>/dev/null 2>&1; then
-    success "GPU detected — local LLM available"
-    HAS_GPU=true
-    CHECKS_PASSED=$((CHECKS_PASSED + 1))
-else
-    warn "No GPU detected — using external LLM API (recommended for production)"
-    warn "    Set API_BASE in .env to your LLM endpoint (OpenAI, Groq, Ollama, etc.)"
-    warn "    Or use: docker compose -f docker-compose.yml -f docker-compose.external-llm.yml up -d"
-    HAS_GPU=false
-    CHECKS_SKIPPED=$((CHECKS_SKIPPED + 1))
-fi
-
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
@@ -185,7 +171,15 @@ else
     exit 1
 fi
 
-# Download docker-compose.external-llm.yml (required for no-GPU deployments)
+# Download .env.example
+printf "  ⏳ ${BOLD}.env.example${RESET} ... "
+if curl -fsSL -o "$INSTALL_DIR/.env.example" "$REPO_URL/.env.example"; then
+    success "Downloaded"
+else
+    warn "Failed to download .env.example (optional)"
+fi
+
+# Download docker-compose.external-llm.yml (required for external LLM deployments)
 printf "  ⏳ ${BOLD}docker-compose.external-llm.yml${RESET} ... "
 if curl -fsSL -o "$INSTALL_DIR/docker-compose.external-llm.yml" "$REPO_URL/docker-compose.external-llm.yml"; then
     success "Downloaded"
@@ -209,6 +203,35 @@ else
     error "Failed to download searxng/settings.yml (required)"
     exit 1
 fi
+
+# ---------------------------------------------------------------------------
+# Choose LLM deployment mode
+# ---------------------------------------------------------------------------
+printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
+printf "${BOLD}🤖  LLM Deployment Mode${RESET}\n"
+printf "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n\n"
+
+echo "Choose your LLM deployment mode:"
+echo ""
+echo "  [1] Local LLM     — Run llama.cpp on your GPU (requires NVIDIA GPU + CUDA)"
+echo "  [2] External API  — Use OpenAI, Groq, Ollama, etc. (recommended for production)"
+echo ""
+read -rp "Select (1-2, default=2): " LLM_MODE_CHOICE
+
+LLM_MODE="external"
+if [[ "$LLM_MODE_CHOICE" == "1" ]]; then
+    # Check GPU availability
+    if docker run --rm --gpus=all nvidia/cuda:12.8.0-base-ubuntu22.04 nvidia-smi &>/dev/null 2>&1; then
+        LLM_MODE="local"
+    else
+        warn "No GPU detected — falling back to External API"
+        LLM_MODE="external"
+    fi
+fi
+
+# Save mode to .deploy file for update.sh to read
+printf "%s\n" "$LLM_MODE" > "$INSTALL_DIR/.deploy"
+info "LLM mode: $LLM_MODE (saved to .deploy)"
 
 # ---------------------------------------------------------------------------
 # Configure .env
@@ -268,23 +291,21 @@ printf "${BOLD}━━━━━━━━━━━━━━━━━━━━━�
 
 cd "$INSTALL_DIR"
 
-# Use external LLM override if no GPU detected
-if ! $HAS_GPU; then
-    info "No GPU detected — using external LLM API (llamacpp skipped)"
-    printf "  ⏳ ${BOLD}Pulling Docker images (with external LLM override)...${RESET}\n"
-    docker compose -f docker-compose.yml -f docker-compose.external-llm.yml pull
+# Build docker compose command based on LLM mode
+if [[ "$LLM_MODE" == "external" ]]; then
+    info "Using external LLM mode (llamacpp skipped)"
+    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.external-llm.yml"
 else
-    printf "  ⏳ ${BOLD}Pulling Docker images...${RESET}\n"
-    docker compose pull
+    info "Using local LLM mode (llamacpp will download model)"
+    COMPOSE_FILES="-f docker-compose.yml"
 fi
+
+printf "  ⏳ ${BOLD}Pulling Docker images...${RESET}\n"
+docker compose $COMPOSE_FILES pull
 success "Images pulled"
 
 printf "\n  ⏳ ${BOLD}Starting services...${RESET}\n"
-if ! $HAS_GPU; then
-    docker compose -f docker-compose.yml -f docker-compose.external-llm.yml up -d
-else
-    docker compose up -d
-fi
+docker compose $COMPOSE_FILES up -d
 success "Services started"
 
 # ---------------------------------------------------------------------------
@@ -294,14 +315,16 @@ printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━
 printf "${BOLD}🎉  Installation complete!${RESET}\n"
 printf "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n\n"
 
-printf "  ${BOLD}Installed to:${RESET} $INSTALL_DIR\n"
-printf "  ${BOLD}Web UI:${RESET}     http://localhost:8000\n"
-printf "  ${BOLD}Monitor API:${RESET}  http://localhost:8000/live/monitor\n"
-printf "  ${BOLD}Docker logs:${RESET}  docker compose logs -f\n"
-if $HAS_GPU; then
-    printf "  ${BOLD}Update:${RESET}       cd $INSTALL_DIR && docker compose pull && docker compose up -d\n"
+printf "  ${BOLD}Installed to:${RESET}  $INSTALL_DIR\n"
+printf "  ${BOLD}LLM mode:${RESET}      $LLM_MODE\n"
+printf "  ${BOLD}Web UI:${RESET}         http://localhost:8000\n"
+printf "  ${BOLD}Monitor API:${RESET}    http://localhost:8000/live/monitor\n"
+printf "  ${BOLD}Docker logs:${RESET}    docker compose logs -f\n"
+
+if [[ "$LLM_MODE" == "external" ]]; then
+    printf "  ${BOLD}Update:${RESET}         cd $INSTALL_DIR && docker compose -f docker-compose.yml -f docker-compose.external-llm.yml pull && docker compose -f docker-compose.yml -f docker-compose.external-llm.yml up -d\n"
 else
-    printf "  ${BOLD}Update:${RESET}       cd $INSTALL_DIR && docker compose -f docker-compose.yml -f docker-compose.external-llm.yml pull && docker compose -f docker-compose.yml -f docker-compose.external-llm.yml up -d\n"
+    printf "  ${BOLD}Update:${RESET}         cd $INSTALL_DIR && docker compose pull && docker compose up -d\n"
 fi
 
 # Seed the database if seed.txt was downloaded
@@ -324,7 +347,16 @@ fi
 
 printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
 printf "${BOLD}Next steps:${RESET}\n"
-printf "  1. Open http://localhost:8000 in your browser\n"
-printf "  2. Start fetching: docker compose exec web news48 fetch\n"
-printf "  3. Monitor: docker compose logs -f\n"
+if [[ "$LLM_MODE" == "external" ]]; then
+    printf "  1. Open http://localhost:8000 in your browser\n"
+    printf "  2. Set API_BASE in .env to your LLM endpoint\n"
+    printf "  3. Restart workers: docker compose -f docker-compose.yml -f docker-compose.external-llm.yml restart\n"
+    printf "  4. Start fetching: docker compose exec web news48 fetch\n"
+    printf "  5. Monitor: docker compose logs -f\n"
+else
+    printf "  1. Wait for model download to complete (may take minutes)\n"
+    printf "  2. Open http://localhost:8000 in your browser\n"
+    printf "  3. Start fetching: docker compose exec web news48 fetch\n"
+    printf "  4. Monitor: docker compose logs -f\n"
+fi
 printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"

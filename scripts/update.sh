@@ -3,7 +3,7 @@
 # news48 — Update script for existing installations
 # =============================================================================
 # Pulls the latest Docker images from ghcr.io and restarts affected services.
-# No source code is needed — images are pre-built by GitHub Actions.
+# Reads .deploy file to determine LLM mode (set during install).
 #
 # Usage:
 #   ./scripts/update.sh              # Update all services
@@ -103,14 +103,33 @@ fi
 success "Environment ready"
 
 # ---------------------------------------------------------------------------
+# Read LLM mode from .deploy
+# ---------------------------------------------------------------------------
+DEPLOY_FILE="$PROJECT_DIR/.deploy"
+if [[ -f "$DEPLOY_FILE" ]]; then
+    LLM_MODE=$(cat "$DEPLOY_FILE" | tr -d '[:space:]')
+else
+    LLM_MODE="external"
+    warn "No .deploy file found — defaulting to external LLM mode"
+fi
+
+info "LLM mode: $LLM_MODE"
+
+# Build docker compose command based on LLM mode
+if [[ "$LLM_MODE" == "external" ]]; then
+    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.external-llm.yml"
+else
+    COMPOSE_FILES="-f docker-compose.yml"
+fi
+
+# ---------------------------------------------------------------------------
 # Step 1: Pull latest images
 # ---------------------------------------------------------------------------
 if $NO_PULL; then
     warn "Skipping image pull (--no-pull)"
 else
     printf "\n${BOLD}Step 1/3: Pulling latest images${RESET}\n"
-    info "Pulling from ghcr.io/malvavisc0/news48..."
-    run docker compose pull
+    run docker compose $COMPOSE_FILES pull
     success "Images up to date"
 fi
 
@@ -120,7 +139,7 @@ fi
 printf "\n${BOLD}Step 2/3: Restarting services${RESET}\n"
 info "Restarting: web, dramatiq-worker, periodiq-scheduler, db-migrate"
 
-run docker compose up -d web dramatiq-worker periodiq-scheduler db-migrate
+run docker compose $COMPOSE_FILES up -d web dramatiq-worker periodiq-scheduler db-migrate
 success "Services restarted"
 
 # ---------------------------------------------------------------------------
@@ -130,7 +149,7 @@ printf "\n${BOLD}Step 3/3: Verifying${RESET}\n"
 sleep 3
 
 # Check that services are running
-RUNNING=$(run docker compose ps --format "{{.Name}}: {{.Status}}" | grep -c "Up" || true)
+RUNNING=$(run docker compose $COMPOSE_FILES ps --format "{{.Name}}: {{.Status}}" | grep -c "Up" || true)
 TOTAL=4
 
 if [[ "$RUNNING" -ge "$TOTAL" ]]; then
@@ -145,7 +164,7 @@ fi
 # ---------------------------------------------------------------------------
 printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
 info "Service status:"
-run docker compose ps
+run docker compose $COMPOSE_FILES ps
 
 printf "\n${GREEN}${BOLD}Update complete!${RESET}\n\n"
 
@@ -153,6 +172,6 @@ printf "\n${GREEN}${BOLD}Update complete!${RESET}\n\n"
 if ! $DRY_RUN; then
     read -rp "Show recent logs? (y/N): " show_logs
     if [[ "$show_logs" =~ ^[Yy]$ ]]; then
-        run docker compose logs --tail=30 web dramatiq-worker
+        run docker compose $COMPOSE_FILES logs --tail=30 web dramatiq-worker
     fi
 fi
