@@ -5,11 +5,15 @@
 # instead of pulling from ghcr.io. Docker Compose automatically merges
 # override files when running `docker compose up`.
 #
-# To use for local development:
-#   docker compose up   # (override is applied automatically)
+# Local development:
+#   # With llamacpp (requires GPU):
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml up -d
 #
-# For production (pull from ghcr.io):
-#   docker compose -f docker-compose.yml up
+#   # Without llamacpp (no GPU needed):
+#   docker compose -f docker-compose.no-llamacpp.yml -f docker-compose.override.yml up -d
+#
+# Production (pull from ghcr.io):
+#   docker compose -f docker-compose.yml up -d
 # =============================================================================
 
 services:
@@ -18,7 +22,6 @@ services:
       context: .
       dockerfile: Dockerfile
       target: web
-    # Remove image directive for local builds
     image: ""
 
   db-migrate:
