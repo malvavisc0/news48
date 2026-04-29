@@ -393,16 +393,38 @@ if [[ -f "$INSTALL_DIR/seed.txt" ]]; then
 
     if [[ "$SEED_READY" == "true" ]]; then
         info "Seeding database with initial feeds from seed.txt..."
-        docker compose cp seed.txt web:/tmp/seed.txt
-        if docker compose exec -T web news48 seed /tmp/seed.txt; then
+        docker compose cp seed.txt dramatiq-worker:/tmp/seed.txt
+        if docker compose exec -T dramatiq-worker news48 seed /tmp/seed.txt; then
             success "Database seeded successfully"
         else
             warn "Database seeding failed (feeds can be added manually later)"
         fi
-        docker compose exec -T web rm -f /tmp/seed.txt 2>/dev/null || true
+        docker compose exec -T dramatiq-worker rm -f /tmp/seed.txt 2>/dev/null || true
     else
         warn "Web service not ready after 60s — skipping seeding (run manually later)"
     fi
+fi
+
+# Install news48 CLI wrapper
+printf "\n"
+info "Installing news48 CLI wrapper..."
+WRAPPER_DIR="$HOME/.local/bin"
+mkdir -p "$WRAPPER_DIR"
+cat > "$WRAPPER_DIR/news48" <<WRAPPER
+#!/usr/bin/env bash
+# news48 CLI — installed by the news48 Docker installer.
+# Runs commands inside the dramatiq-worker container.
+cd "$INSTALL_DIR" || { echo "news48: cannot cd to $INSTALL_DIR" >&2; exit 1; }
+exec docker compose exec -T dramatiq-worker news48 "\$@"
+WRAPPER
+chmod +x "$WRAPPER_DIR/news48"
+success "news48 CLI installed to $WRAPPER_DIR/news48"
+
+# Ensure ~/.local/bin is in PATH
+if [[ ":$PATH:" != *":$WRAPPER_DIR:"* ]]; then
+    warn "$WRAPPER_DIR is not in PATH."
+    printf "  Add it to your shell profile:\n"
+    printf "    echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc\n"
 fi
 
 printf "\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
@@ -411,14 +433,14 @@ if [[ "$LLM_MODE" == "external" ]]; then
     printf "  1. Open http://localhost:8765 in your browser\n"
     printf "  2. Configure SMTP in .env for email alerts (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM)\n"
     printf "  3. Set MONITOR_EMAIL_TO in .env to receive alert notifications\n"
-    printf "  4. Start fetching: docker compose exec web news48 fetch\n"
+    printf "  4. Start fetching: news48 fetch\n"
     printf "  5. Monitor: docker compose logs -f\n"
 else
     printf "  1. Wait for model download to complete (may take minutes)\n"
     printf "  2. Open http://localhost:8765 in your browser\n"
     printf "  3. Configure SMTP in .env for email alerts (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM)\n"
     printf "  4. Set MONITOR_EMAIL_TO in .env to receive alert notifications\n"
-    printf "  5. Start fetching: docker compose exec web news48 fetch\n"
+    printf "  5. Start fetching: news48 fetch\n"
     printf "  6. Monitor: docker compose logs -f\n"
 fi
 printf "\n"
