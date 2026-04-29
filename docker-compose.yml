@@ -196,7 +196,6 @@ services:
       - news48-net
 
   # Dramatiq worker — consumes task queues and executes agents.
-  # Uses the same worker image but overrides the command.
   dramatiq-worker:
     restart: unless-stopped
     build:
