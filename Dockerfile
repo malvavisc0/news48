@@ -91,6 +91,10 @@ RUN chmod +x /app/scripts/docker-entrypoint.sh
 # Set PATH to include venv bin
 ENV PATH="/app/.venv/bin:$PATH"
 
+# Web server defaults (overridable at runtime)
+ENV WEB_HOST=0.0.0.0
+ENV WEB_PORT=8000
+
 # Ensure data directory exists
 RUN mkdir -p /data && chown news48:news48 /data
 
@@ -102,10 +106,10 @@ EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+    CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ[\"WEB_PORT\"]}/health')" || exit 1
 
 # Default command (overridden by compose)
-CMD ["uvicorn", "news48.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn news48.web.app:app --host ${WEB_HOST} --port ${WEB_PORT}"]
 
 # =============================================================================
 # Stage 4: worker — Production worker image (full stack)
