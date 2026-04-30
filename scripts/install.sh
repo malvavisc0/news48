@@ -262,11 +262,11 @@ else
     warn "Failed to download seed.txt (optional — feeds must be added manually)"
 fi
 
-printf "  ⏳ ${BOLD}searxng/settings.yml${RESET} ... "
-if mkdir -p "$INSTALL_DIR/searxng" && curl -fsSL -o "$INSTALL_DIR/searxng/settings.yml" "$REPO_URL/searxng/settings.yml"; then
+printf "  ⏳ ${BOLD}data/searxng/settings.yml${RESET} ... "
+if mkdir -p "$INSTALL_DIR/data/searxng" && curl -fsSL -o "$INSTALL_DIR/data/searxng/settings.yml" "$REPO_URL/searxng/settings.yml"; then
     success "Downloaded"
 else
-    error "Failed to download searxng/settings.yml (required)"
+    error "Failed to download data/searxng/settings.yml (required)"
     exit 1
 fi
 

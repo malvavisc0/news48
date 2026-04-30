@@ -36,7 +36,6 @@ wheels/
 Dockerfile
 docker-compose*.yml
 .dockerignore
-searxng/
 
 # Plans (instance-specific, runtime plans go to data/plans/)
 plans/

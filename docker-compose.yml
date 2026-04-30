@@ -143,7 +143,7 @@ services:
     restart: unless-stopped
     image: searxng/searxng:latest
     volumes:
-      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+      - ./data/searxng/settings.yml:/etc/searxng/settings.yml:ro
     environment:
       TZ: ${TZ:-Europe/Berlin}
       SEARXNG_SECRET: ${SEARXNG_SECRET:-changeme}
