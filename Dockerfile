@@ -102,10 +102,10 @@ EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+    CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"WEB_PORT\", \"8000\")}/health')" || exit 1
 
 # Default command (overridden by compose)
-CMD ["uvicorn", "news48.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn news48.web.app:app --host ${WEB_HOST:-0.0.0.0} --port ${WEB_PORT:-8000}"]
 
 # =============================================================================
 # Stage 4: worker — Production worker image (full stack)
