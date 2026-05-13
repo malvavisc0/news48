@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>news48 — Verified News That Disappears in 48 Hours</title>
+    <meta name="description"
+        content="Autonomous news ingestion & verification pipeline with self-learning AI agents. Collect, download, parse, fact-check — on repeat.">
+    <meta name="theme-color" content="#1A1C1E">
+    <link rel="canonical" href="https://malvavisc0.github.io/news48/">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="news48 — Verified News That Disappears in 48 Hours">
+    <meta property="og:description"
+        content="Autonomous news ingestion & verification pipeline with self-learning AI agents.">
+    <meta property="og:url" content="https://malvavisc0.github.io/news48/">
+
+    <!-- Favicon -->
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='12' fill='%231A1C1E'/><text x='50' y='68' font-family='Georgia,serif' font-size='60' font-weight='700' fill='%23F7F5F2' text-anchor='middle'>48</text></svg>">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,700&family=Public+Sans:wght@400;500;600&family=Space+Grotesk:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1A1C1E;
+            --secondary: #6C7278;
+            --tertiary: #B8422E;
+            --neutral: #F7F5F2;
+            --surface: #FFFFFF;
+            --on-primary: #FFFFFF;
+
+            --ink: var(--primary);
+            --ink-light: var(--secondary);
+            --ink-faint: #9CA0A6;
+            --rule: #D6D3D0;
+            --action: var(--tertiary);
+            --action-hover: #9A3522;
+            --paper: var(--neutral);
+
+            --rule-soft: rgba(214, 211, 208, 0.9);
+            --surface-hover: rgba(255, 255, 255, 0.55);
+            --surface-sunken: rgba(255, 255, 255, 0.6);
+
+            --font-display: 'Fraunces', Georgia, serif;
+            --font-body: 'Public Sans', -apple-system, sans-serif;
+            --font-label: 'Space Grotesk', 'Inter', sans-serif;
+
+            --text-2xs: 12px;
+            --text-xs: 14px;
+            --text-sm: 17px;
+            --text-md: 22px;
+            --text-lg: 27px;
+            --text-xl: 34px;
+
+            --leading-display: 1.02;
+            --leading-heading: 1.18;
+            --leading-body: 1.6;
+            --leading-relaxed: 1.72;
+            --leading-meta: 1.4;
+
+            --rounded-sm: 2px;
+            --rounded-md: 4px;
+            --rounded-lg: 8px;
+
+            --space-sm: 8px;
+            --space-md: 16px;
+            --space-lg: 32px;
+            --space-xl: 48px;
+            --space-2xl: 72px;
+
+            --shadow-soft: 0 18px 40px rgba(26, 28, 30, 0.06);
+            --shadow-card: 0 14px 36px rgba(26, 28, 30, 0.055);
+            --shadow-button: 0 8px 18px rgba(26, 28, 30, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--paper);
+            color: var(--ink);
+            font-family: var(--font-body);
+            font-size: var(--text-sm);
+            line-height: var(--leading-body);
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
+        }
+
+        a {
+            color: var(--action);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+            text-underline-offset: 0.18em;
+        }
+
+        a:focus-visible {
+            outline: 2px solid var(--action);
+            outline-offset: 2px;
+            text-decoration: none;
+        }
+
+        /* === Page layout === */
+        .page {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 64px 16px 96px;
+        }
+
+        /* === Heading === */
+        .page-heading {
+            margin: 0;
+            font-family: var(--font-display);
+            font-size: clamp(38px, 6.5vw, 56px);
+            line-height: var(--leading-display);
+            font-weight: 500;
+            letter-spacing: -0.02em;
+            color: var(--primary);
+            max-width: 18ch;
+        }
+
+        /* === Tagline === */
+        .tagline {
+            margin: 16px 0 0;
+            font-family: var(--font-label);
+            font-size: var(--text-xs);
+            color: var(--secondary);
+            letter-spacing: 0.04em;
+            max-width: 56ch;
+            line-height: 1.8;
+        }
+
+        /* === Hero === */
+        .landing-hero {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 40px 16px;
+            margin: 0 -16px;
+            background: linear-gradient(135deg, rgba(250, 248, 245, 0.5) 0%, rgba(255, 255, 255, 0.3) 100%);
+            border-radius: var(--rounded-lg);
+        }
+
+        /* === Badges === */
+        .badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: var(--space-md);
+        }
+
+        .badges img {
+            height: 22px;
+        }
+
+        /* === CTA buttons === */
+        .landing-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: var(--space-lg);
+        }
+
+        .landing-cta {
+            display: inline-flex;
+            align-items: center;
+            padding: 12px 24px;
+            background: var(--action);
+            color: var(--on-primary);
+            font-family: var(--font-label);
+            font-size: var(--text-xs);
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            border-radius: var(--rounded-md);
+            box-shadow: var(--shadow-button);
+            transition: transform 0.2s ease, background 0.2s ease;
+        }
+
+        .landing-cta:hover {
+            background: var(--action-hover);
+            color: var(--on-primary);
+            text-decoration: none;
+            transform: translateY(-2px);
+        }
+
+        .landing-secondary-cta {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 18px;
+            border: 1px solid var(--rule);
+            border-radius: var(--rounded-md);
+            font-family: var(--font-label);
+            font-size: var(--text-xs);
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--ink);
+            background: var(--surface);
+        }
+
+        .landing-secondary-cta:hover {
+            text-decoration: none;
+            background: var(--surface-hover);
+        }
+
+        /* === Section === */
+        .section {
+            margin-top: 56px;
+        }
+
+        .section-label {
+            margin: 0 0 20px;
+            font-family: var(--font-label);
+            font-size: var(--text-2xs);
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--ink-light);
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .section-label::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--rule);
+        }
+
+        /* === Feature cards === */
+        .landing-features__grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 32px;
+            margin-top: var(--space-lg);
+        }
+
+        .landing-feature {
+            padding: 32px 0 32px 24px;
+            border-left: 3px solid var(--action);
+        }
+
+        .landing-feature__title {
+            margin: 0 0 16px;
+            font-family: var(--font-display);
+            font-size: var(--text-md);
+            line-height: var(--leading-heading);
+            color: var(--primary);
+            font-weight: 500;
+        }
+
+        .landing-feature__copy {
+            margin: 0;
+            font-size: var(--text-sm);
+            line-height: 1.7;
+            color: var(--secondary);
+            max-width: 65ch;
+        }
+
+        /* === Pipeline === */
+        .pipeline-flow {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin-top: var(--space-lg);
+            padding: var(--space-lg);
+            background: var(--surface);
+            border: 1px solid var(--rule-soft);
+            border-radius: var(--rounded-lg);
+            box-shadow: var(--shadow-card);
+        }
+
+        .pipeline-step {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-family: var(--font-label);
+            font-size: var(--text-xs);
+            font-weight: 500;
+            color: var(--primary);
+            white-space: nowrap;
+        }
+
+        .pipeline-step .step-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: var(--on-primary);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .pipeline-arrow {
+            color: var(--ink-faint);
+            font-size: var(--text-xs);
+            font-family: var(--font-label);
+        }
+
+        .pipeline-desc {
+            margin: var(--space-md) 0 0;
+            font-size: var(--text-xs);
+            color: var(--secondary);
+            line-height: var(--leading-relaxed);
+            max-width: 62ch;
+        }
+
+        /* === Agents grid === */
+        .agents-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            margin-top: var(--space-lg);
+        }
+
+        .agent-card {
+            padding: 24px;
+            background: var(--surface);
+            border: 1px solid var(--rule-soft);
+            border-radius: var(--rounded-lg);
+            box-shadow: var(--shadow-card);
+        }
+
+        .agent-card__header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .agent-card__icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--action);
+            color: var(--on-primary);
+            font-family: var(--font-label);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .agent-card__name {
+            margin: 0;
+            font-family: var(--font-display);
+            font-size: var(--text-sm);
+            font-weight: 500;
+            color: var(--primary);
+        }
+
+        .agent-card__schedule {
+            font-family: var(--font-label);
+            font-size: var(--text-2xs);
+            color: var(--ink-faint);
+            letter-spacing: 0.02em;
+            margin-bottom: 8px;
+        }
+
+        .agent-card__desc {
+            margin: 0;
+            font-size: var(--text-xs);
+            line-height: var(--leading-relaxed);
+            color: var(--secondary);
+        }
+
+        /* === Score === */
+        .score-banner {
+            display: flex;
+            align-items: center;
+            gap: var(--space-lg);
+            margin-top: var(--space-lg);
+            padding: var(--space-lg);
+            background: var(--surface);
+            border: 1px solid var(--rule-soft);
+            border-radius: var(--rounded-lg);
+            box-shadow: var(--shadow-card);
+        }
+
+        .score-number {
+            font-family: var(--font-display);
+            font-size: 48px;
+            font-weight: 700;
+            color: var(--action);
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .score-number small {
+            font-size: 24px;
+            color: var(--ink-faint);
+            font-weight: 400;
+        }
+
+        .score-detail h3 {
+            margin: 0 0 6px;
+            font-family: var(--font-label);
+            font-size: var(--text-xs);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--primary);
+        }
+
+        .score-detail p {
+            margin: 0;
+            font-size: var(--text-xs);
+            color: var(--secondary);
+            line-height: var(--leading-relaxed);
+        }
+
+        .score-dimensions {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-top: var(--space-md);
+        }
+
+        .score-dim {
+            padding: 12px;
+            background: var(--surface-sunken);
+            border: 1px solid var(--rule-soft);
+            border-radius: var(--rounded-md);
+            text-align: center;
+        }
+
+        .score-dim__label {
+            font-family: var(--font-label);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--ink-faint);
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .score-dim__value {
+            font-family: var(--font-display);
+            font-size: var(--text-md);
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        /* === Learning loop === */
+        .learning-loop {
+            margin-top: var(--space-lg);
+            padding: var(--space-lg);
+            background: var(--primary);
+            color: var(--neutral);
+            border-radius: var(--rounded-lg);
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: var(--text-xs);
+            line-height: var(--leading-body);
+            overflow-x: auto;
+        }
+
+        .learning-loop .comment {
+            color: #7C8A96;
+        }
+
+        .learning-loop .highlight {
+            color: #F7C948;
+        }
+
+        /* === Code block === */
+        .landing-code-block {
+            margin: var(--space-lg) 0;
+            padding: var(--space-lg);
+            overflow-x: auto;
+            background: var(--primary);
+            color: var(--neutral);
+            border-radius: var(--rounded-lg);
+        }
+
+        .landing-code-block code {
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: var(--text-xs);
+            line-height: var(--leading-body);
+        }
+
+        .landing-setup__copy {
+            margin: 0;
+            font-size: var(--text-xs);
+            color: var(--secondary);
+        }
+
+        .landing-code-block+.landing-setup__copy {
+            margin-top: var(--space-md);
+        }
+
+        /* === Tech stack === */
+        .tech-stack {
+            margin-top: var(--space-lg);
+            font-family: var(--font-label);
+            font-size: var(--text-xs);
+            color: var(--ink-faint);
+            letter-spacing: 0.02em;
+        }
+
+        .tech-stack span {
+            color: var(--ink-light);
+        }
+
+        /* === Footer === */
+        .site-footer {
+            margin-top: 12px;
+            padding: 0 var(--space-md) 40px;
+        }
+
+        .site-footer__inner {
+            max-width: 720px;
+            margin: 0 auto;
+            padding-top: var(--space-md);
+            border-top: 1px solid var(--rule);
+        }
+
+        .site-footer__content {
+            margin: 0;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-sm);
+            font-family: var(--font-label);
+            font-size: var(--text-xs);
+            line-height: var(--leading-meta);
+            color: var(--ink-faint);
+            text-align: center;
+        }
+
+        .site-footer a {
+            color: var(--action);
+            text-decoration: none;
+            border-bottom: 1px dotted var(--ink-faint);
+            padding-bottom: 1px;
+        }
+
+        .site-footer a:hover {
+            border-bottom-style: solid;
+            border-bottom-color: var(--action);
+            text-decoration: none;
+        }
+
+        /* === Responsive === */
+        @media (max-width: 720px) {
+            .page {
+                padding: 36px 16px 88px;
+            }
+
+            .landing-hero {
+                padding-top: var(--space-xl);
+            }
+
+            .page-heading {
+                font-size: clamp(28px, 6vw, 42px);
+            }
+
+            .agents-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .score-banner {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: var(--space-md);
+            }
+
+            .score-dimensions {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .score-dimensions {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .pipeline-flow {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="page">
+        <!-- Hero -->
+        <header class="landing-hero" aria-labelledby="landing-title">
+            <h1 class="page-heading" id="landing-title">Fact-checked news, refreshed every 48 hours</h1>
+            <p class="tagline">news48 fetches your feeds, rewrites stories for clarity, checks claims against live
+                evidence, and removes everything after 48 hours. No subscription, no archives. Just relevant
+                information, verified and ready.</p>
+            <div class="badges">
+                <img src="https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white"
+                    alt="Python 3.12+">
+                <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License">
+                <img src="https://img.shields.io/badge/autonomous-4.9%2F5.0-B8422E" alt="Autonomous Score 4.9/5.0">
+                <img src="https://img.shields.io/badge/pkg-uv-DE5FE9?logo=uv&logoColor=white" alt="uv">
+            </div>
+            <div class="landing-actions">
+                <a href="#landing-setup-label" class="landing-cta">Get Started</a>
+                <a href="https://github.com/malvavisc0/news48" class="landing-secondary-cta">View on GitHub</a>
+            </div>
+        </header>
+
+        <!-- Why It Matters -->
+        <section class="section" aria-labelledby="landing-features-label">
+            <h2 class="section-label" id="landing-features-label">why it matters</h2>
+            <div class="landing-features__grid">
+                <div class="landing-feature">
+                    <h3 class="landing-feature__title">Noise Reduction</h3>
+                    <p class="landing-feature__copy">Similar stories grouped together. No duplicate headlines pretending
+                        to be news. Just the core topics people are talking about.</p>
+                </div>
+                <div class="landing-feature">
+                    <h3 class="landing-feature__title">Signal Boost</h3>
+                    <p class="landing-feature__copy">Every claim linked to its sources. You see exactly why news48
+                        verified or disputed something. No black box decisions.</p>
+                </div>
+                <div class="landing-feature">
+                    <h3 class="landing-feature__title">Fresh Start Daily</h3>
+                    <p class="landing-feature__copy">Stories vanish after 48 hours. No endless archive of old noise.
+                        Just what's happening now, when you need to know it.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pipeline -->
+        <section class="section" aria-labelledby="landing-pipeline-label">
+            <h2 class="section-label" id="landing-pipeline-label">pipeline</h2>
+            <div class="pipeline-flow">
+                <div class="pipeline-step"><span class="step-num">1</span> Seed</div>
+                <span class="pipeline-arrow">→</span>
+                <div class="pipeline-step"><span class="step-num">2</span> Fetch</div>
+                <span class="pipeline-arrow">→</span>
+                <div class="pipeline-step"><span class="step-num">3</span> Download</div>
+                <span class="pipeline-arrow">→</span>
+                <div class="pipeline-step"><span class="step-num">4</span> Parse</div>
+                <span class="pipeline-arrow">→</span>
+                <div class="pipeline-step"><span class="step-num">5</span> Fact-check</div>
+                <span class="pipeline-arrow">→</span>
+                <div class="pipeline-step"><span class="step-num">6</span> Purge</div>
+            </div>
+            <p class="pipeline-desc">
+                Feed URLs are loaded once. From there, autonomous agents take over — pulling RSS entries, downloading
+                full content, parsing via LLM into structured data, verifying claims against live evidence, and purging
+                everything older than 48 hours. The cycle repeats indefinitely.
+            </p>
+        </section>
+
+        <!-- AI Agents -->
+        <section class="section" aria-labelledby="landing-agents-label">
+            <h2 class="section-label" id="landing-agents-label">ai agents</h2>
+            <div class="agents-grid">
+                <div class="agent-card">
+                    <div class="agent-card__header">
+                        <span class="agent-card__icon">S</span>
+                        <h3 class="agent-card__name">Sentinel</h3>
+                    </div>
+                    <div class="agent-card__schedule">every 5 min</div>
+                    <p class="agent-card__desc">Monitors pipeline health, creates fix plans, removes broken feeds.</p>
+                </div>
+                <div class="agent-card">
+                    <div class="agent-card__header">
+                        <span class="agent-card__icon">E</span>
+                        <h3 class="agent-card__name">Executor</h3>
+                    </div>
+                    <div class="agent-card__schedule">every 1 min</div>
+                    <p class="agent-card__desc">Claims plans from queue, runs steps, verifies outcomes.</p>
+                </div>
+                <div class="agent-card">
+                    <div class="agent-card__header">
+                        <span class="agent-card__icon">P</span>
+                        <h3 class="agent-card__name">Parser</h3>
+                    </div>
+                    <div class="agent-card__schedule">every 1 min</div>
+                    <p class="agent-card__desc">Claims downloaded articles, extracts structured data via LLM.</p>
+                </div>
+                <div class="agent-card">
+                    <div class="agent-card__header">
+                        <span class="agent-card__icon">F</span>
+                        <h3 class="agent-card__name">Fact-checker</h3>
+                    </div>
+                    <div class="agent-card__schedule">every 10 min</div>
+                    <p class="agent-card__desc">Extracts claims, searches evidence, records verdicts.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Self-Learning -->
+        <section class="section" aria-labelledby="landing-learning-label">
+            <h2 class="section-label" id="landing-learning-label">self-learning</h2>
+            <div class="learning-loop">
+                <span class="comment"># Run 1</span><br>
+                Executor fails → timeout too short<br>
+                <span class="highlight">→ saves lesson: "use 600s timeout for fact-checks"</span><br>
+                <br>
+                <span class="comment"># Run 2</span><br>
+                Executor starts with lesson already loaded<br>
+                <span class="highlight">→ applies 600s timeout → succeeds</span>
+            </div>
+            <p class="pipeline-desc">
+                Agents save lessons when they discover something useful. On the next run, all accumulated lessons are
+                injected into every agent's context. They get smarter over time — stored in SQLite, cross-pollinated
+                across agents, and human-auditable.
+            </p>
+        </section>
+
+        <!-- Autonomous Score -->
+        <section class="section" aria-labelledby="landing-score-label">
+            <h2 class="section-label" id="landing-score-label">autonomous operation</h2>
+            <div class="score-banner">
+                <div class="score-number">4.9 <small>/ 5.0</small></div>
+                <div class="score-detail">
+                    <h3>Autonomous Level</h3>
+                    <p>Runs unattended for extended periods. Human involvement only for strategic decisions.</p>
+                </div>
+            </div>
+            <div class="score-dimensions">
+                <div class="score-dim">
+                    <span class="score-dim__label">Self-starting</span>
+                    <span class="score-dim__value">5.0</span>
+                </div>
+                <div class="score-dim">
+                    <span class="score-dim__label">Monitoring</span>
+                    <span class="score-dim__value">4.7</span>
+                </div>
+                <div class="score-dim">
+                    <span class="score-dim__label">Self-healing</span>
+                    <span class="score-dim__value">5.0</span>
+                </div>
+                <div class="score-dim">
+                    <span class="score-dim__label">Scaling</span>
+                    <span class="score-dim__value">5.0</span>
+                </div>
+                <div class="score-dim">
+                    <span class="score-dim__label">Optimizing</span>
+                    <span class="score-dim__value">5.0</span>
+                </div>
+                <div class="score-dim">
+                    <span class="score-dim__label">Error Containment</span>
+                    <span class="score-dim__value">5.0</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Get Started -->
+        <section class="section" aria-labelledby="landing-setup-label">
+            <h2 class="section-label" id="landing-setup-label">get started</h2>
+            <p class="landing-setup__copy">
+                Deploy your own news pipeline in minutes. No vendor lock-in, no data sent to third parties, no limits.
+                The system starts, schedules itself, and runs indefinitely on your hardware.
+            </p>
+            <pre class="landing-code-block"><code># One-line install
+curl -fsSL https://raw.githubusercontent.com/malvavisc0/news48/master/scripts/install.sh | bash
+
+# Or with Docker
+git clone https://github.com/malvavisc0/news48 && cd news48
+docker compose up -d</code></pre>
+            <p class="landing-setup__copy">
+                The installer adds a <code>news48</code> CLI to your PATH. After installation, try
+                <code>news48 stats</code>, <code>news48 feeds list</code>, or <code>news48 briefing</code>.
+            </p>
+            <div class="tech-stack">
+                Powered by <span>OpenAI Agents SDK</span> · <span>Dramatiq</span> · <span>FastAPI</span> ·
+                <span>SearXNG</span> · <span>Redis</span> · <span>SQLite/MySQL</span>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="site-footer__inner">
+            <p class="site-footer__content">
+                <span>news48</span>
+                <span>&middot;</span>
+                <a href="https://github.com/malvavisc0/news48">GitHub</a>
+                <span>&middot;</span>
+                <a href="https://github.com/malvavisc0/news48#readme">Documentation</a>
+                <span>&middot;</span>
+                <span>MIT License</span>
+            </p>
+        </div>
+    </footer>
+</body>
+
+</html>
